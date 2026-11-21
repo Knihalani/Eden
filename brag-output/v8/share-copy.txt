@@ -1,12 +1,14 @@
 Eden — launch film (22.4 s, 16:9, 2560x1440)
 
 X / Threads
-Your agent missed something.
-Eden reads your mail, calendar, docs, CRM and chat, and hands your agent what matters before it knows to ask.
+Introducing Eden, the context partner for your agent.
+Your agent only sees what you ask for. Eden reads your mail, calendar, docs and CRM, and puts what matters in front of it before it knows to ask.
+Try it: bun run demo
 
 LinkedIn
-Agents only see what you ask them for. Everything else stays dark.
-Eden runs beside your agent, reads the sources you've connected, and puts the context it needs in front of it before it knows to ask. Most of the time it stays quiet.
+Introducing Eden.
+Agents fail less from weak reasoning than from missing context. Eden runs beside your agent, reads the sources you've connected, and speaks first when something matters. Otherwise it stays quiet. Most turns need no model call. It is read-only, per user, and redacts secrets before anything is stored.
+Try it in one command: bun run demo
 
 Short caption
 Context, before they ask.

@@ -1,0 +1,113 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Eden — launch cut</title>
+<style>
+@font-face{font-family:Book;src:url(fonts/instrument-serif-latin-400-normal.woff2)}
+@font-face{font-family:Mono;font-weight:400;src:url(fonts/jetbrains-mono-latin-400-normal.woff2)}
+@font-face{font-family:Mono;font-weight:500;src:url(fonts/jetbrains-mono-latin-500-normal.woff2)}
+:root{--cream:#efe9de;--paper:#eeede5;--ink:#14222b;--mint:#5ec0ac;--indigo:#2c2f86;--deep:#07081a}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--deep)}
+.L{position:absolute;inset:0;display:none;overflow:hidden}
+.plate{position:absolute;background-size:cover;background-position:center}
+.t{position:absolute;font-family:Book;font-weight:400;color:var(--cream);letter-spacing:-.005em;line-height:1.02;font-kerning:normal;white-space:nowrap}
+.sh{text-shadow:0 1px 20px rgba(0,0,0,.45)}
+.ink{color:var(--ink)}
+.num{position:absolute;font-family:Mono;font-weight:500;font-size:20px;letter-spacing:.08em}
+.rule{position:absolute;height:2px}
+.grain{position:absolute;left:0;top:0;width:1920px;height:1080px;pointer-events:none;opacity:.10;mix-blend-mode:overlay}
+/* product beat */
+.card{position:absolute;left:330px;width:1260px;background:#fbfaf6;border-radius:22px;box-shadow:0 30px 80px rgba(20,34,43,.18),0 4px 14px rgba(20,34,43,.08)}
+.lbl{font-family:Mono;font-weight:500;font-size:19px;letter-spacing:.09em;color:#6b7a80}
+</style></head><body>
+<!-- full-bleed 3D -->
+<div class="L" id="Lfull"><div class="plate" id="pFull" style="inset:0"></div></div>
+<!-- 01 Mail: indigo panel left, plate right -->
+<div class="L" id="L1"><div class="plate" id="p1" style="left:700px;top:0;width:1220px;height:1080px"></div>
+  <div style="position:absolute;left:0;top:0;width:700px;height:1080px;background:#2c2f86"></div>
+  <div class="num" style="left:96px;top:92px;color:#9fd9c6">01</div><div class="rule" style="left:96px;top:134px;width:508px;background:rgba(159,217,198,.4)"></div>
+  <div class="t" id="w1" style="left:90px;top:760px;font-size:220px">Mail.</div></div>
+<!-- 02 Calendar: paper field, plate in a hex -->
+<div class="L" id="L2" style="background:var(--paper)"><div class="plate" id="p2" style="left:900px;top:-40px;width:1040px;height:1160px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)"></div>
+  <div class="num ink" style="left:96px;top:92px">02</div><div class="rule" style="left:96px;top:134px;width:640px;background:rgba(20,34,43,.25)"></div>
+  <div class="t ink" id="w2" style="left:88px;top:760px;font-size:220px">Calendar.</div></div>
+<!-- 03 Docs: plate top, mint band below -->
+<div class="L" id="L3"><div class="plate" id="p3" style="left:0;top:0;width:1920px;height:690px"></div>
+  <div style="position:absolute;left:0;top:690px;width:1920px;height:390px;background:#5ec0ac"></div>
+  <div class="num ink" style="right:96px;top:740px">03</div>
+  <div class="t ink" id="w3" style="left:88px;top:752px;font-size:220px">Docs.</div></div>
+<!-- 04 CRM: deep field, the four sources stacked, plate in a hex -->
+<div class="L" id="L4" style="background:linear-gradient(180deg,#3951ae 0%,#353796 55%,#2a2a78 100%)"><div class="plate" id="p4" style="left:960px;top:60px;width:830px;height:960px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)"></div>
+  <div class="num" style="left:96px;top:92px;color:#9fd9c6">04</div><div class="rule" style="left:96px;top:134px;width:640px;background:rgba(159,217,198,.4)"></div>
+  <div class="t" style="left:90px;top:250px;font-size:150px;opacity:.28">Mail.</div><div class="t" style="left:90px;top:410px;font-size:150px;opacity:.28">Calendar.</div>
+  <div class="t" style="left:90px;top:570px;font-size:150px;opacity:.28">Docs.</div><div class="t" id="w4" style="left:90px;top:730px;font-size:150px">CRM.</div></div>
+<!-- product beat: the agent asks, Eden has already answered -->
+<div class="L" id="Lui"><div class="plate" id="pUi" style="inset:-60px;filter:blur(26px) saturate(.9) brightness(1.04)"></div><div style="position:absolute;inset:0;background:rgba(238,237,229,.42)"></div>
+  <div class="card" id="eden" style="top:300px;padding:40px 52px 44px">
+    <div style="display:flex;align-items:center;gap:16px"><img src="assets/mark.png" style="height:34px"><span class="lbl">EDEN</span><span class="lbl" style="margin-left:auto;color:#3a9c86">CONTEXT</span></div>
+    <div style="font-family:Book;font-size:56px;line-height:1.1;white-space:nowrap;color:var(--ink);margin-top:22px;letter-spacing:-.005em">Prices changed this month. Use the new rate card.</div>
+    <div style="margin-top:24px;display:inline-flex;gap:12px;align-items:center;font-family:Mono;font-size:19px;color:#41545c;background:#eef1ec;border-radius:10px;padding:10px 16px"><span style="width:9px;height:9px;border-radius:50%;background:#5ec0ac"></span>docs / rate-card.pdf &nbsp;·&nbsp; updated 3 days ago</div></div>
+  <div class="card" id="ask" style="top:740px;height:128px;display:flex;align-items:center;padding:0 52px;gap:30px">
+    <span class="lbl">AGENT</span><span id="typed" style="font-family:Mono;font-size:33px;color:var(--ink)"></span><span id="caret" style="display:inline-block;width:3px;height:36px;background:var(--ink);margin-left:-26px"></span></div></div>
+<!-- launch: introducing -->
+<div class="L" id="Lin"><div class="plate" id="pIn" style="inset:0"></div><div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 52% at 50% 50%,rgba(5,7,20,.78) 0%,rgba(5,7,20,.38) 60%,rgba(5,7,20,0) 100%)"></div>
+  <div id="inLbl" class="num" style="left:0;right:0;text-align:center;top:305px;font-size:30px;letter-spacing:.34em;color:#a9e6d2">INTRODUCING</div>
+  <div id="inName" style="position:absolute;left:0;right:0;top:360px;display:flex;justify-content:center;align-items:center;gap:40px"><img src="assets/mark.png" style="height:190px"><span class="t" style="position:static;font-size:250px;text-shadow:0 2px 40px rgba(0,0,0,.5)">Eden</span></div>
+  <div id="inSub" class="t" style="left:0;right:0;text-align:center;top:650px;font-size:58px;text-shadow:0 1px 24px rgba(0,0,0,.6)">The context partner for your agent.</div></div>
+<!-- launch: claims -->
+<div class="L" id="Lft"><div class="plate" id="pFt" style="inset:0"></div><div id="ftShade" style="position:absolute;inset:0"></div>
+  <div id="ftNum" class="num" style="left:0;right:0;text-align:center;top:372px;font-size:22px;letter-spacing:.3em"></div>
+  <div id="ftTxt" class="t" style="left:0;right:0;text-align:center;top:420px;font-size:150px;line-height:1.04"></div></div>
+<!-- launch: call to action -->
+<div class="L" id="Lcta"><div class="plate" id="pCta" style="inset:-40px;filter:blur(18px) brightness(.55)"></div><div style="position:absolute;inset:0;background:rgba(7,8,26,.45)"></div>
+  <div style="position:absolute;left:0;right:0;top:250px;display:flex;justify-content:center;align-items:center;gap:30px"><img src="assets/mark.png" style="height:130px"><span class="t" style="position:static;font-size:170px">Eden</span></div>
+  <div id="ctaA" class="t" style="left:0;right:0;text-align:center;top:505px;font-size:64px">Try it today.</div>
+  <div id="ctaB" style="position:absolute;left:50%;top:640px;transform:translateX(-50%);font-family:Mono;font-size:38px;color:#e9f4ee;background:rgba(255,255,255,.07);border:1px solid rgba(159,217,198,.35);border-radius:16px;padding:22px 40px;white-space:nowrap"><span style="color:#5ec0ac">$</span> bun run demo</div>
+  <div id="ctaC" class="num" style="left:0;right:0;text-align:center;top:800px;font-size:22px;letter-spacing:.24em;color:#9fb6b0">ONE COMMAND · NO KEY · $0</div></div>
+<div id="cap"></div><canvas class="grain" id="g" width="960" height="540"></canvas>
+<script>
+const PB=0.41386, B=b=>b*PB, END=B(54), FPS=24;
+const cl=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)), eo=x=>1-Math.pow(1-cl(x),3), backOut=x=>{x=cl(x); const c=1.7; return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2);};
+const $=id=>document.getElementById(id);
+/* captions */
+const TL=[]; function cap(html,css,t0,t1){ const e=document.createElement('div'); e.className='t'; e.style.cssText=css; e.innerHTML=html; $('cap').appendChild(e); TL.push({e,t0,t1}); }
+const LOW='left:0;right:0;text-align:center;top:930px;font-size:52px', HIGH='left:0;right:0;text-align:center;top:104px;font-size:52px';
+const SH='text-shadow:0 1px 20px rgba(0,0,0,.45);', INK='color:#14222b;text-shadow:0 1px 18px rgba(255,255,255,.35);';
+cap('Your agent missed something.',LOW+';'+SH,-1,B(4)-.04);
+cap('It only sees what you ask for.',LOW+';'+SH,B(4.3),B(7.85)); cap('Everything else stays dark.',LOW+';'+SH,B(8.3),B(11.85));
+cap('Eden puts what matters in front of your agent',HIGH+';'+INK,B(24.2),B(26.9)); cap('before it knows to ask.',HIGH+';'+INK,B(27.1),B(29.95));
+cap('Eden','left:150px;top:790px;font-size:96px;'+SH,B(42.5),B(48)-.02); cap('Context, before they ask.','left:154px;top:905px;font-size:40px;opacity:.85;'+SH,B(43.6),B(48)-.02);
+function updText(t){ for(const c of TL){ const a=cl((t-c.t0)/.22), b=cl((c.t1-t)/.16); const o=Math.min(eo(a),b), y=(1-eo(a))*10, bl=(1-eo(a))*6;
+  c.e.style.opacity=o; c.e.style.transform=`translateY(${y.toFixed(2)}px)`; c.e.style.filter=bl>.05?`blur(${bl.toFixed(2)}px)`:'none'; } }
+/* film grain over the graphic layouts only (the 3D already carries its own) */
+const gx=$('g').getContext('2d'); function grain(seed){ const im=gx.createImageData(960,540); let s=seed*9301+49297; for(let i=0;i<im.data.length;i+=4){ s=(s*9301+49297)%233280; const v=s/233280*255; im.data[i]=im.data[i+1]=im.data[i+2]=v; im.data[i+3]=255; } gx.putImageData(im,0,0); }
+const pad=f=>'plates/'+String(f).padStart(4,'0')+'.png';
+function load(src){ return new Promise(res=>{ const im=new Image(); im.onload=()=>im.decode().then(()=>res(src)).catch(()=>res(src)); im.onerror=()=>res(null); im.src=src; }); }
+function show(id){ for(const e of document.querySelectorAll('.L')) e.style.display=e.id===id?'block':'none'; }
+function wordIn(el,t,b){ const a=(t-B(b))/.18; el.style.transform=`translateY(${((1-eo(a))*18).toFixed(1)}px)`; el.style.opacity=eo(a); }
+const REQ="Draft this quarter's renewal quote";
+const F0=b=>Math.ceil(B(b)*FPS-1e-9);
+const FEATS=[[30,32,298,'It speaks first.','ink','01'],[32,34,100,'Otherwise, it stays quiet.','cream','02'],[34,36,140,'Most turns,<br>no model call.','cream','03'],[36,39,266,'Read-only. Per user.<br>Redacted.','ink','04']];
+function inAt(el,t,t0,dy=16){ const a=(t-t0)/.2; el.style.opacity=eo(a); el.style.transform=(el.style.transform.includes('translateX')?'translateX(-50%) ':'')+`translateY(${((1-eo(a))*dy).toFixed(1)}px)`; el.style.filter=a<1?`blur(${((1-eo(a))*6).toFixed(1)}px)`:'none'; }
+window.renderAt=async f=>{ const t=f/FPS; let layout='Lfull', plate=f, pid='pFull', g=false;
+  if(t>=B(12)&&t<B(16)){ layout='Lin'; pid='pIn'; inAt($('inLbl'),t,B(12.15)); inAt($('inName'),t,B(12.4),26); inAt($('inSub'),t,B(13.6)); }
+  else if(t>=B(16)&&t<B(18)){ layout='L1'; pid='p1'; g=true; wordIn($('w1'),t,16); }
+  else if(t>=B(18)&&t<B(20)){ layout='L2'; pid='p2'; g=true; wordIn($('w2'),t,18); }
+  else if(t>=B(20)&&t<B(22)){ layout='L3'; pid='p3'; g=true; wordIn($('w3'),t,20); }
+  else if(t>=B(22)&&t<B(24)){ layout='L4'; pid='p4'; g=true; wordIn($('w4'),t,22); }
+  else if(t>=B(24)&&t<B(30)){ layout='Lui'; pid='pUi'; plate=297; g=true; const T=t-B(24)+B(34);
+    const n=Math.round(REQ.length*cl((T-B(34.15))/B(1.6))); $('typed').textContent=REQ.slice(0,n); $('caret').style.opacity=(Math.floor(t*3.2)%2||n<REQ.length)?1:0;
+    const a=(T-B(35.1))/.3; const e=$('eden'); e.style.opacity=cl(a*2.2); e.style.transform=`translateY(${((1-backOut(a))*40).toFixed(1)}px) scale(${(.965+.035*backOut(a)).toFixed(4)})`;
+    const k=(T-B(34))/.25; $('ask').style.opacity=cl(k*2); $('ask').style.transform=`translateY(${((1-eo(k))*30).toFixed(1)}px)`; }
+  else if(t>=B(30)&&t<B(39)){ const ft=FEATS.find(x=>t>=B(x[0])&&t<B(x[1])); layout='Lft'; pid='pFt'; plate=ft[2]+(f-F0(ft[0]));
+    const ink=ft[4]==='ink'; $('ftTxt').innerHTML=ft[3]; $('ftTxt').style.color=ink?'#14222b':'#efe9de'; $('ftTxt').style.textShadow=ink?'0 1px 30px rgba(255,255,255,.55)':'0 2px 36px rgba(0,0,0,.6)';
+    $('ftNum').textContent=ft[5]+' / 04'; $('ftNum').style.color=ink?'#2c6f62':'#9fd9c6';
+    $('ftShade').style.background=ink?'radial-gradient(ellipse 62% 46% at 50% 48%,rgba(240,240,232,.72),rgba(240,240,232,0))':'radial-gradient(ellipse 64% 50% at 50% 48%,rgba(5,7,20,.8),rgba(5,7,20,.1))';
+    const a=(t-B(ft[0]))/.16; $('ftTxt').style.transform=`translateY(${((1-eo(a))*22).toFixed(1)}px) scale(${(1.04-.04*eo(a)).toFixed(4)})`; $('ftTxt').style.opacity=eo(a); $('ftNum').style.opacity=eo(a); }
+  else if(t>=B(39)&&t<B(42)){ plate=398+(f-F0(39)); }
+  else if(t>=B(42)&&t<B(48)){ plate=438+(f-F0(42)); }
+  else if(t>=B(48)){ layout='Lcta'; pid='pCta'; plate=Math.min(536,498+(f-F0(48))); inAt($('ctaA'),t,B(48.6)); inAt($('ctaB'),t,B(49.4)); inAt($('ctaC'),t,B(50.2)); }
+  show(layout); const src=pad(plate); await load(src); $(pid).style.backgroundImage=`url(${src})`;
+  $('g').style.display=g?'block':'none'; if(g) grain(f+1);
+  updText(t); await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))); };
+window.READY=false; document.fonts.ready.then(()=>Promise.all(['20px Book','500 20px Mono','400 20px Mono'].map(x=>document.fonts.load(x)))).then(()=>{ window.READY=true; });
+</script></body></html>
