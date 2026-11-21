@@ -441,6 +441,29 @@ test("a follower router serves the leader's published placement (S1-P7)", async 
         .sort(),
     ).toEqual(["n1", "n2", "n3"]);
     expect(follower.rebalances).toHaveLength(0);
+    // A doc not signed with the cluster key — however new — is refused: the store alone cannot steer traffic.
+    const owners = [0, 100, 1234, 33333, 65535].map((b) => follower.owner(b));
+    objects.set(
+      "frozen/cluster-membership",
+      new TextEncoder().encode(
+        JSON.stringify({
+          epoch: Date.now() + 1_000_000,
+          live: ["n1"],
+          all: ["n1"],
+          specs: [{ id: "n1", url: n1.url }],
+          moved: [],
+          at: Date.now(),
+        }),
+      ),
+    );
+    await Bun.sleep(150);
+    expect([0, 100, 1234, 33333, 65535].map((b) => follower.owner(b))).toEqual(owners);
+    expect(
+      follower.nodes
+        .filter((n) => n.up)
+        .map((n) => n.id)
+        .sort(),
+    ).toEqual(["n1", "n2", "n3"]);
   } finally {
     await leader.stop();
     await follower.stop();

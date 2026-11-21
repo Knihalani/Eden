@@ -24,6 +24,7 @@
  *                     re-read on SIGHUP and when it changes.
  *   EDEN_CLUSTER_KEY  the shared secret of the membership messages (24+ characters), the same on every node.
  */
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync, watch } from "node:fs";
 import { type BlobStore, ShardedBlobStore } from "@eden/engine";
 import { Gcra, OwnerTable, BUCKETS } from "@eden/primitives";
@@ -170,6 +171,8 @@ interface MembershipDoc {
   /** Buckets mid-move: a request for one gets the 503 retry, as on the leader. */
   moved: number[];
   at: number;
+  /** HMAC-SHA256 of the rest of the doc under EDEN_CLUSTER_KEY — a follower forwards tenant keys to these urls. */
+  sig: string;
 }
 
 const UNAVAILABLE = "temporarily unable to serve context";
@@ -301,7 +304,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
         const est = ((leaving.get(n.id) ?? 0) / owned) * (heldBy.get(n.id) ?? 0);
         return rebalanceMs + Math.round(est * releasePerUserMs);
       };
-      publish(e, movedBuckets);
+      publish(movedBuckets);
       const answers = await Promise.all(
         told.map((n) => tell(n, ids, mode, e, n.up || n.draining ? deadlineFor(n) : 2_000)),
       );
@@ -317,7 +320,7 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
       }
       table = next;
       for (const b of movedBuckets) moving[b] = 0;
-      publish(e, []);
+      publish([]);
       for (const n of told) if (n.draining && answers[told.indexOf(n)] !== null) n.draining = false;
       nodes = nodes.filter((n) => n.member || n.up || n.draining);
       const r: Rebalance = {
@@ -391,17 +394,25 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     return changed ? rebalance(changed, mode) : null;
   };
 
-  /** Writes the current membership for followers to adopt (S1-P7); failures log, never break the rebalance. */
-  const publish = (e: number, moved: number[]) => {
+  /**
+   * Writes the current membership for followers to adopt (S1-P7); failures log, never break the rebalance.
+   * Each publication takes its own epoch (the move's staging and its completion must both adopt) and is signed:
+   * a follower forwards tenant credentials to the urls it reads here, so an unsigned doc is refused.
+   */
+  const publish = (moved: number[]) => {
     const m = options.membership;
     if (!m || options.follow) return;
-    const doc: MembershipDoc = {
-      epoch: e,
-      live: nodes.filter((n) => n.up).map((n) => n.id),
+    const body = {
+      epoch: nextEpoch(),
+      live: nodes.filter((n) => n.member && n.up).map((n) => n.id),
       all: nodes.filter((n) => n.member).map((n) => n.id),
       specs: nodes.filter((n) => n.member).map((n) => ({ id: n.id, url: n.url })),
       moved,
       at: Date.now(),
+    };
+    const doc: MembershipDoc = {
+      ...body,
+      sig: createHmac("sha256", clusterKey).update(JSON.stringify(body)).digest("hex"),
     };
     void m.store
       .put(m.key, new TextEncoder().encode(JSON.stringify(doc)))
@@ -423,6 +434,12 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
       return; // A torn or malformed doc: the last good one stands.
     }
     if (typeof doc.epoch !== "number" || doc.epoch <= epoch || !Array.isArray(doc.live) || !Array.isArray(doc.all))
+      return;
+    // Only a doc signed with the cluster key may move the table: write access to the store alone must not hand
+    // a follower urls to forward tenant credentials to.
+    const { sig, ...body } = doc;
+    const want = createHmac("sha256", clusterKey).update(JSON.stringify(body)).digest("hex");
+    if (typeof sig !== "string" || sig.length !== want.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(want)))
       return;
     epoch = doc.epoch;
     const liveSet = new Set(doc.live);
