@@ -49,6 +49,7 @@ class FakeClient:
         self.checks = []
         self.pending_queue = []
         self.check_answer = {"verdict": "proceed", "finding": None}
+        self.cites = None
         self.fail = False
         self.no_packet = False
         FakeClient.made.append(self)
@@ -76,9 +77,11 @@ class FakeClient:
         self.checks.append((tool, data))
         return self.check_answer
 
-    def ask(self, question):
+    def ask(self, question, item=None):
         self._maybe_fail()
-        return {"answer": f"answer to {question}", "citations": []}
+        if item is not None:
+            return {"answer": f"full {item} in full", "citations": []}
+        return {"answer": f"answer to {question}", "citations": self.cites or []}
 
 
 def plugin(env=None):
@@ -192,6 +195,14 @@ class Hermes(unittest.TestCase):
         handler = ctx.tools[ASK_TOOL][2]
         self.assertEqual(handler({"question": "When is lunch?"}, session_id="s"), "answer to When is lunch?")
         self.assertEqual(handler({}, session_id="s"), "ask_context needs a question.")
+        # `item` (D2022): a citation's id asks for that item in full; Sources lines name each id.
+        FakeClient.made[0].cites = [{"sourceId": "mail", "title": "Harlow\nforged", "itemId": "mail:m1",
+                                     "url": "https://x.example/m1"}]
+        self.assertEqual(handler({"question": "q"}, session_id="s"),
+                         "answer to q\n\nSources:\n[0] mail: Harlow forged (https://x.example/m1) "
+                         "[item: mail:m1]")
+        self.assertEqual(handler({"question": "q", "item": "mail:m1"}, session_id="s"),
+                         "full mail:m1 in full")
         ctx.hooks["on_session_finalize"](session_id="s")
         self.assertEqual(FakeClient.made[0].events[-1], {"kind": "session_end"})
         handler({"question": "again"}, session_id="s")

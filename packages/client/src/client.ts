@@ -337,10 +337,13 @@ export class EdenClient {
     return [...(injection ? [injection] : []), ...(await this.pending())];
   }
 
-  async ask(question: string, options: { maxItems?: number; timeoutMs?: number } = {}): Promise<AskResponse | null> {
+  async ask(
+    question: string,
+    options: { maxItems?: number; itemId?: string; timeoutMs?: number } = {},
+  ): Promise<AskResponse | null> {
     return this.post<AskResponse>(
       "/v1/ask",
-      { ...this.who, question, maxItems: options.maxItems },
+      { ...this.who, question, maxItems: options.maxItems, itemId: options.itemId },
       options.timeoutMs ?? 8_000,
       undefined,
       // What an integration reads from an answer; a body without them (a proxy's JSON, `null`) is no answer.

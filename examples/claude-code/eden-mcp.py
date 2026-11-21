@@ -23,7 +23,12 @@ TOOLS = [
         "description": "Ask Eden what the user's sources know, in plain words.",
         "inputSchema": {
             "type": "object",
-            "properties": {"question": {"type": "string", "description": "The question, in plain words."}},
+            "properties": {
+                "question": {"type": "string", "description": "The question, in plain words."},
+                "item": {"type": "string",
+                         "description": "An item id from an earlier answer's Sources list ([item: ...]): "
+                                        "return that item's parts in full."},
+            },
             "required": ["question"],
         },
     },
@@ -89,8 +94,12 @@ def main() -> int:
                 if params.get("name") == "pending_context":
                     answer = _joined(client.pending()) if client is not None else None
                 elif params.get("name") == "ask_context":
-                    question = str((params.get("arguments") or {}).get("question") or "")
-                    answer = plugin.ask_context({"question": question}, session_id=sid)
+                    call_args = params.get("arguments") or {}
+                    question = str(call_args.get("question") or "")
+                    item = call_args.get("item")
+                    answer = plugin.ask_context(
+                        {"question": question, **({"item": item} if isinstance(item, str) else {})},
+                        session_id=sid)
                     # The queue's packets ride the reply: an MCP-only agent has no other channel.
                     pushed = _joined(client.pending()) if client is not None else None
                     answer = "\n\n".join(t for t in (answer, pushed) if t)

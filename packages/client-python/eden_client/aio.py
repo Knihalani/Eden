@@ -44,9 +44,10 @@ class AsyncEden:
         return await asyncio.to_thread(self._sync.collect, injection)
 
     async def ask(self, question: str, max_items: Optional[int] = None,
+                  item: Optional[str] = None,
                   timeout_s: Optional[float] = None) -> Optional[Dict[str, Any]]:
         """``EdenClient.ask`` in a worker thread."""
-        return await asyncio.to_thread(self._sync.ask, question, max_items, timeout_s)
+        return await asyncio.to_thread(self._sync.ask, question, max_items, item, timeout_s)
 
     async def check(self, tool: str, input: Any, timeout_s: Optional[float] = None) -> Dict[str, Any]:
         """``EdenClient.check`` in a worker thread."""
