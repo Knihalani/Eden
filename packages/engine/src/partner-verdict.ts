@@ -694,13 +694,14 @@ export const idNumbers = (text: string): Set<string> => {
  * earlier is last year's look-alike, not what the request means (D1970).
  */
 export function requestYear(cue: Cue): number | null {
-  // A 19xx/20xx number that prices something or speaks a time is no year the request names: "£1,950" is an
-  // amount, "at 1950" is a clock time — the same money/time context `idNumbers` drops.
+  // A 19xx/20xx number that prices something is no year the request names ("£1,950" is an amount — the same
+  // money context `idNumbers` drops). No preposition filter: "at 2023" and "by 2023" name years as readily as
+  // clock times, and a spurious year only weakens the floor where a dropped one loses records.
   const named: number[] = [];
   YEARS.lastIndex = 0;
   for (const m of cue.raw.matchAll(YEARS)) {
     const before = cue.raw.slice(Math.max(0, m.index - 8), m.index);
-    if (/[£$€]\s*$/.test(before) || /\b(?:GBP|USD|EUR|at|by)\s*$/i.test(before)) continue;
+    if (/[£$€]\s*$/.test(before) || /\b(?:GBP|USD|EUR)\s*$/i.test(before)) continue;
     named.push(Number(m[0]));
   }
   for (const d of cue.time?.days ?? []) {

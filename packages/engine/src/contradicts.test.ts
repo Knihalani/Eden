@@ -216,6 +216,11 @@ describe("fallback asks", () => {
     const priced = cue("Find my 2026 lease of £1950");
     expect(p.contradicts(lease25, priced)).toBe(true);
     expect(p.contradicts(lease26, priced)).toBe(false);
+    // "at" and "by" are year prepositions too: only the money context drops a number.
+    const conf = cue("Compare my talks at 2023 and 2024 conferences");
+    expect(p.contradicts(earlier, conf)).toBe(false);
+    expect(p.contradicts(later, conf)).toBe(false);
+    expect(p.contradicts(before, conf)).toBe(true);
   });
 
   test("a record that declares itself dead is dead beside a dated ask too (D2060)", () => {
