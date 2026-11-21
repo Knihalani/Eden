@@ -621,12 +621,15 @@ export abstract class PartnerDelivery extends PartnerCore {
    * `context_reset` (A3, D2006): the agent's transcript was compacted — the items this session showed it are gone
    * from its context. The delivery marks clear (the ledger's delivered/versions/shown, the near-duplicate
    * `delivered` list, `agentHas`, the party digests and shown words, the plan alerts already sent), so a later
-   * packet or answer may show the same items again. `outstanding` drops quietly — a compaction is no use-verdict
-   * on what was shown — while request state, cues, learned economy (`pushRead`/`pushChecks`/`checks`) and queued
-   * packets stand: they are not the agent's memory of a delivery.
+   * packet or answer may show the same items again. The cue cooldown goes too: it suppresses a repeated request's
+   * lookup as "already served", which the reset made false — an identical re-asked request must look up and deliver
+   * again. `outstanding` drops quietly — a compaction is no use-verdict on what was shown — while request numbering
+   * (`s.requests`), learned economy (`pushRead`/`pushChecks`/`checks`) and queued packets stand: they are not the
+   * agent's memory of a delivery.
    */
   protected resetContext(s: Session): void {
     s.ledger.reset();
+    s.cues.clear();
     s.delivered = [];
     s.agentHas = [];
     // Shown but judged by nothing: kept for a later correction, with no outcome recorded — a compaction is no

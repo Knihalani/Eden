@@ -467,22 +467,46 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
       // Score each delivered item against the turn that caused it, not the turn it arrived at: the slow path
       // may land one event late, and that must not change whether a delivery counts as a false fire. The engine's
       // traces say which turn (1-based, one per event) chose each item.
-      const origin = new Map<string, number>();
+      // A trace's `turn` is the engine's counter, which only the events it acts on move: a draft (D56) and a
+      // `context_reset` (D2006) return before the increment, so engine turn n is not scenario turn n-1 once a
+      // turn-consuming event is skipped. Map engine turn → scenario index over the turns the engine counts.
+      const engineTurnIdx: number[] = [];
+      session.turns.forEach((turn, i) => {
+        const e = turn.event;
+        if (e.kind === "context_reset" || (e.kind === "user_message" && e.draft === true)) return;
+        engineTurnIdx.push(i);
+      });
+      // One item may be delivered more than once (a context_reset frees it to arrive again): each delivery
+      // attributes to the trace that caused it, so per-item the origins queue in decision order and each arrival
+      // takes the next one — a single slot would credit both arrivals to the latest trace.
+      const origin = new Map<string, number[]>();
       for (const t of traces.slice(traceStart)) {
         if (t.sessionId !== session.id || !["fast", "sources", "model"].includes(t.decision)) continue;
-        for (const id of t.itemIds) origin.set(id, t.turn - 1);
+        for (const id of t.itemIds) {
+          const at = engineTurnIdx[t.turn - 1] ?? session.turns.length - 1;
+          const queue = origin.get(id);
+          if (queue) queue.push(at);
+          else origin.set(id, [at]);
+        }
       }
       const byOrigin: string[][] = session.turns.map(() => []);
       deliveries.forEach((ids, arrivedAt) => {
-        for (const id of ids) byOrigin[Math.min(origin.get(id) ?? arrivedAt, byOrigin.length - 1)]!.push(id);
+        for (const id of ids) {
+          const at = origin.get(id)?.shift() ?? arrivedAt;
+          byOrigin[Math.min(at, byOrigin.length - 1)]!.push(id);
+        }
       });
       // An expected item the agent already has (delivered earlier in the session) counts as met: delivering it again
-      // would be a repeat, which the engine rightly suppresses.
+      // would be a repeat, which the engine rightly suppresses — until a context_reset (D2006) drops the session's
+      // shown marks. `had` models that same memory — but by ARRIVAL (`deliveries` is take-indexed, unlike
+      // `byOrigin`'s cause-indexing): a packet decided pre-reset and taken after it is held after it, so a reset
+      // that falls between decision and take must not clear it; a pre-reset arrival clears as before.
       const had = new Set<string>();
       session.turns.forEach((turn, i) => {
+        if (turn.event.kind === "context_reset") had.clear();
+        for (const id of deliveries[i] ?? []) had.add(id);
         const got = byOrigin[i]!;
         const before = new Set(had);
-        for (const id of got) had.add(id);
         if (!turn.expect) return;
         // The acting suite's labels (D810) are scored apart, so the three headline numbers keep their meaning.
         if (turn.expect === "neutral") {
