@@ -125,7 +125,7 @@ export function aliasExpand(
     out.push(e);
     return "added";
   };
-  const own = entities.map((e) => e.toLowerCase().match(/\p{L}+/gu) ?? []);
+  const own: string[][] = entities.map((e) => e.toLowerCase().match(/\p{L}+/gu) ?? []);
   for (let i = 0; i < entities.length; i++) {
     const entity = entities[i]!;
     const ws = own[i]!;
