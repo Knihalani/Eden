@@ -71,15 +71,50 @@ def ensure_binary(root, work):
     return out
 
 
+def strip_jsonc(text):
+    """Drop // and /* */ comments outside strings: Gemini accepts commented settings.json
+    (JSONC) though `json.loads` does not."""
+    out, i, in_str, esc = [], 0, False, False
+    while i < len(text):
+        ch = text[i]
+        if in_str:
+            out.append(ch)
+            in_str = esc or ch != '"'
+            esc = not esc and ch == "\\"
+        elif ch == '"':
+            out.append(ch)
+            in_str = True
+        elif ch == "/" and i + 1 < len(text) and text[i + 1] == "/":
+            i = text.find("\n", i)
+            if i == -1:
+                break
+            out.append("\n")
+        elif ch == "/" and i + 1 < len(text) and text[i + 1] == "*":
+            end = text.find("*/", i + 2)
+            if end == -1:
+                break
+            i = end + 2
+            continue
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def read_json(path):
     """{} for a missing file; None for one that exists but isn't a JSON object (never clobbered)."""
     try:
-        data = json.loads(path.read_text())
-        return data if isinstance(data, dict) else None
+        text = path.read_text()
     except FileNotFoundError:
         return {}
+    try:
+        data = json.loads(text)
     except Exception:  # noqa: BLE001
-        return None
+        try:
+            data = json.loads(strip_jsonc(text))
+        except Exception:  # noqa: BLE001
+            return None
+    return data if isinstance(data, dict) else None
 
 
 def write_json(path, data):
@@ -161,10 +196,13 @@ def main():
         binary = ensure_binary(root, work)
         # Replace via rename staged in the same directory: copy2 over a still-running detached server
         # fails ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
-        staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
+        # On Windows the client only discovers eden-local.exe/.cmd — an extensionless file
+        # would leave local mode disabled.
+        binary_name = "eden-local.exe" if sys.platform == "win32" else "eden-local"
+        staged = dest / "bin" / f".{binary_name}.{os.getpid()}.tmp"
         shutil.copy2(binary, staged)
         staged.chmod(0o755)
-        os.replace(staged, dest / "bin" / "eden-local")
+        os.replace(staged, dest / "bin" / binary_name)
         merge_settings(home, dest)
         print(f"Eden installed to {dest}; hooks and the MCP server registered in {home}/settings.json")
         print(f"Next: put sources in {home}/eden/sources.json (see README.md) and start a new Gemini CLI session.")
