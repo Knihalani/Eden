@@ -125,6 +125,15 @@ export interface FanoutOptions {
   /** Per (user, source) rate limit (default 5/s, burst 10). */
   ratePerSec?: number;
   burst?: number;
+  /**
+   * The tenant's pace per connector, shared by the tenant's users on this process (S1-P1): the operator's
+   * fleet-wide figure divided by processes and machines (as D993 divides caps). Unset: per (user, source)
+   * pacing only. Only background calls (`list` with a `reserve`) are held by it — a lookup's own poll, search
+   * and fetch are never held — while the connector's own 429 pushes the whole tenant's background calls back,
+   * not one user's. Burst defaults to two seconds of the pace.
+   */
+  tenantRatePerSec?: number;
+  tenantBurst?: number;
   breaker?: BreakerOptions;
   /** Concurrency limit per (user, source): AIMD between 1 and `maxConcurrency` (default 4). */
   maxConcurrency?: number;
@@ -245,6 +254,8 @@ export class SourceFanout {
   private readonly results: S3FifoCache<string, ContextItem[]> | null;
   private readonly rate: Gcra<string>;
   private readonly shadowRate: Gcra<string>;
+  /** The (tenant, source) pace, or null when `tenantRatePerSec` is unset (per-user pacing only). */
+  private readonly tenantRate: Gcra<string> | null;
   private readonly options: FanoutOptions;
   private readonly now: () => number;
   /** The `PlanCalls` this fan-out handed out: a planned source using one returns items already sanitized here. */
@@ -285,6 +296,19 @@ export class SourceFanout {
       burst: Math.max(1, Math.floor(burst / 2)),
       now: this.now,
     });
+    this.tenantRate =
+      options.tenantRatePerSec !== undefined
+        ? new Gcra({
+            ratePerSec: options.tenantRatePerSec,
+            burst: options.tenantBurst ?? Math.max(1, Math.ceil(options.tenantRatePerSec * 2)),
+            now: this.now,
+          })
+        : null;
+  }
+
+  /** The tenant's pace key for (scope, source) — `${tenantId}|${sourceId}` — or null with the pace unset. */
+  private tenantKey(scope: Scope, sourceId: string): string | null {
+    return this.tenantRate === null ? null : `${scope.tenantId}|${sourceId}`;
   }
 
   /**
@@ -348,7 +372,7 @@ export class SourceFanout {
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
     const key = `${scopeKey(scope)}|${source.id}`;
     const s = this.state(key);
-    const epoch = this.admit(key, s);
+    const epoch = this.admit(key, this.tenantKey(scope, source.id), s);
     if (typeof epoch !== "number") {
       const pushedBack = epoch === "limited" && (s.pushedBackUntil ?? -Infinity) > this.now();
       return { status: "failed", why: "refused", guard: epoch, ...(pushedBack ? { pushedBack } : {}) };
@@ -374,7 +398,7 @@ export class SourceFanout {
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) {
-        this.pushBack(key, s, retryAfterMs(message) ?? 5_000);
+        this.pushBack(key, this.tenantKey(scope, source.id), s, retryAfterMs(message) ?? 5_000);
         return failed("throttled");
       }
       return failed(timeout.aborted ? "timeout" : "error");
@@ -421,9 +445,14 @@ export class SourceFanout {
     const timeout = AbortSignal.timeout(options.timeoutMs);
     const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
     const key = `${scopeKey(scope)}|${source.id}`;
-    if ((options.reserve ?? 0) > 0 && this.rate.available(key) < 1 + options.reserve!) return "limited";
+    const tenant = this.tenantKey(scope, source.id);
+    if (
+      (options.reserve ?? 0) > 0 &&
+      (this.rate.available(key) < 1 + options.reserve! || (tenant !== null && this.tenantRate!.available(tenant) < 1))
+    )
+      return "limited";
     const s = this.state(key);
-    const epoch = this.admit(key, s);
+    const epoch = this.admit(key, tenant, s);
     if (typeof epoch !== "number") return epoch;
     const started = performance.now();
     let page: ListPage;
@@ -439,7 +468,7 @@ export class SourceFanout {
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
       if (RATE_LIMITED.test(message)) {
-        this.pushBack(key, s, retryAfterMs(message) ?? 5_000);
+        this.pushBack(key, tenant, s, retryAfterMs(message) ?? 5_000);
         if (!timeout.aborted) return "throttled";
       }
       return timeout.aborted ? "timeout" : "error";
@@ -563,7 +592,11 @@ export class SourceFanout {
    * the same per-(user, source) rate limit, so the limit counts calls, not lookups. False when the limit is spent.
    */
   permit(scope: Scope, sourceId: string): boolean {
-    return this.rate.take(`${scopeKey(scope)}|${sourceId}`) <= 0;
+    const key = `${scopeKey(scope)}|${sourceId}`;
+    if (this.rate.take(key) > 0) return false;
+    const tenant = this.tenantKey(scope, sourceId);
+    if (tenant !== null) this.tenantRate!.spend(tenant);
+    return true;
   }
 
   /**
@@ -574,7 +607,10 @@ export class SourceFanout {
    */
   permitShadow(scope: Scope, sourceId: string): boolean {
     const key = `${scopeKey(scope)}|${sourceId}`;
-    return this.rate.available(key) > 0 && this.shadowRate.take(key) <= 0;
+    if (this.rate.available(key) <= 0 || this.shadowRate.take(key) > 0) return false;
+    const tenant = this.tenantKey(scope, sourceId);
+    if (tenant !== null) this.tenantRate!.spend(tenant);
+    return true;
   }
 
   /**
@@ -665,14 +701,21 @@ export class SourceFanout {
     const key = `${scopeKey(scope)}|${sourceId}`;
     const ms = retryAfterMs(message) ?? 5_000;
     // A parked pair's guards come back to note the push-back, as the guards it had would have (`FetchFailed`).
-    this.pushBack(key, this.per.get(key) ?? (this.parked.has(key) ? this.state(key) : undefined), ms);
+    this.pushBack(
+      key,
+      this.tenantKey(scope, sourceId),
+      this.per.get(key) ?? (this.parked.has(key) ? this.state(key) : undefined),
+      ms,
+    );
     this.shadowRate.penalize(key, ms);
   }
 
   /** Pushes the rate limit back after the connector's own rate-limit error, and notes until when (`FetchFailed`). */
-  private pushBack(key: string, s: PerSource | undefined, ms: number): void {
+  private pushBack(key: string, tenant: string | null, s: PerSource | undefined, ms: number): void {
     // Until the bucket is full again, not until the Retry-After ends: the refusals in between are the penalty's too.
     const until = this.rate.penalize(key, ms);
+    // The connector's quota is the tenant's: its 429 holds off the tenant's other users' background calls too.
+    if (tenant !== null) this.tenantRate!.penalize(tenant, ms);
     if (s && until >= 0) s.pushedBackUntil = Math.max(s.pushedBackUntil ?? 0, until);
   }
 
@@ -686,7 +729,7 @@ export class SourceFanout {
    * the breaker's half-open probe is taken only once the call is sure to go, so a call skipped as limited or busy
    * neither burns a token nor uses up the probe. Returns the breaker epoch to report with.
    */
-  private admit(key: string, s: PerSource): number | "open" | "limited" | "busy" {
+  private admit(key: string, tenant: string | null, s: PerSource): number | "open" | "limited" | "busy" {
     if (s.breaker.state === "open") return "open";
     if (this.rate.available(key) < 1) return "limited";
     if (!s.limiter.tryAcquire()) return "busy";
@@ -695,6 +738,10 @@ export class SourceFanout {
       return "open";
     }
     this.rate.take(key);
+    // The tenant's pace is charged on every call that goes (`spend`: it counts real connector load even with
+    // the bucket spent) but holds only `list`'s reserved calls: a lookup's own poll, search or fetch is never
+    // refused by it.
+    if (tenant !== null) this.tenantRate!.spend(tenant);
     return s.breaker.epoch;
   }
 
@@ -807,7 +854,7 @@ export class SourceFanout {
       }
     }
     const s = this.state(sourceKey);
-    const epoch = this.admit(sourceKey, s);
+    const epoch = this.admit(sourceKey, this.tenantKey(query.scope, source.id), s);
     if (typeof epoch !== "number") return fallback(epoch);
 
     const started = performance.now();
@@ -861,7 +908,8 @@ export class SourceFanout {
       s.latency.record(performance.now() - started);
       s.limiter.release("dropped");
       s.breaker.failure(epoch);
-      if (RATE_LIMITED.test(message)) this.pushBack(sourceKey, s, retryAfterMs(message) ?? 5_000);
+      if (RATE_LIMITED.test(message))
+        this.pushBack(sourceKey, this.tenantKey(query.scope, source.id), s, retryAfterMs(message) ?? 5_000);
       return fallback(failure(timedOut, message), message);
     } finally {
       this.leave(sourceKey, drops);

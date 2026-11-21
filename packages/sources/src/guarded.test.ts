@@ -612,3 +612,118 @@ describe("a refusal the connector's 429 caused is pushedBack until the bucket re
     });
   }
 });
+
+describe("the tenant's pace per connector (S1-P1)", () => {
+  const listing = (id = "s"): Source => ({
+    id,
+    kind: "test",
+    description: "",
+    search: async () => [item("x")],
+    list: async () => ({ items: [item("l")], next: null }),
+  });
+  const at = (tenantId: string, userId: string) => ({ tenantId, userId });
+
+  test("background listings share the tenant's pace; a lookup's own call is never held", async () => {
+    let now = 0;
+    const f = new SourceFanout({
+      sanitize: (x) => x,
+      cacheBytes: 0,
+      tenantRatePerSec: 0.5, // one call per 2 s
+      tenantBurst: 1,
+      now: () => now,
+    });
+    const s = listing();
+    const bg = { timeoutMs: 1_000, reserve: 2 };
+    // User A's background listing takes the tenant's one burst token.
+    expect(await f.list(s, at("t1", "u1"), undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
+    // User B of the same tenant, background: the tenant's pace is spent, though the pair's is full.
+    expect(await f.list(s, at("t1", "u2"), undefined, 10, bg)).toBe("limited");
+    // But the same user's own demand calls — its lookup's poll and its search — are never held by it.
+    expect(await f.list(s, at("t1", "u2"), undefined, 10, { timeoutMs: 1_000 })).toMatchObject({
+      items: expect.any(Array),
+    });
+    const [out] = await f.search(
+      [s],
+      { scope: at("t1", "u2"), text: "q", entities: [], limit: 5 },
+      {
+        timeoutMs: 1_000,
+      },
+    );
+    expect(out!.status).toBe("ok");
+    // Another tenant's background call is paced by its own bucket, not t1's.
+    expect(await f.list(s, at("t2", "w1"), undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
+    // The demand listing and the search were still charged to the tenant's pace (the connector received them):
+    // two tokens are owed past the background listing's, so t1's background calls go again only 6 s out.
+    now = 2_100;
+    expect(await f.list(s, at("t1", "u2"), undefined, 10, bg)).toBe("limited");
+    now = 6_100;
+    expect(await f.list(s, at("t1", "u2"), undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
+  });
+
+  test("a demand call that goes anyway still charges the tenant's pace", async () => {
+    let now = 0;
+    const f = new SourceFanout({
+      sanitize: (x) => x,
+      cacheBytes: 0,
+      tenantRatePerSec: 0.5, // one call per 2 s
+      tenantBurst: 1,
+      now: () => now,
+    });
+    const s = listing();
+    const scope = at("t1", "u1");
+    const bg = { timeoutMs: 1_000, reserve: 2 };
+    // The background listing spends the bucket's one token.
+    expect(await f.list(s, scope, undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
+    // The user's own demand listing goes anyway — but the connector still received the call, so the pace
+    // charges it: the next token is owed 4 s out, not 2 s.
+    expect(await f.list(s, scope, undefined, 10, { timeoutMs: 1_000 })).toMatchObject({ items: expect.any(Array) });
+    now = 2_100;
+    expect(await f.list(s, scope, undefined, 10, bg)).toBe("limited");
+    now = 4_100;
+    expect(await f.list(s, scope, undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
+  });
+
+  test("a connector's 429 on one user's search pushes the tenant's background calls back, not another tenant's", async () => {
+    let now = 0;
+    const f = new SourceFanout({
+      sanitize: (x) => x,
+      cacheBytes: 0,
+      tenantRatePerSec: 1,
+      tenantBurst: 4,
+      now: () => now,
+    });
+    const failing: Source = {
+      id: "s",
+      kind: "test",
+      description: "",
+      search: async () => Promise.reject(new Error("429 Too Many Requests")),
+      list: async () => ({ items: [item("l")], next: null }),
+    };
+    const bg = { timeoutMs: 1_000, reserve: 1 };
+    const [throttled] = await f.search(
+      [failing],
+      { scope: at("t1", "u1"), text: "q", entities: [], limit: 5 },
+      {
+        timeoutMs: 1_000,
+      },
+    );
+    expect(throttled!.status).toBe("throttled");
+    // The pair's own push-back aside, the tenant's pace is pushed back too: another user's background
+    // listing of the same connector waits, where the pair's own 5 s pair-pushback could not reach it.
+    expect(await f.list(failing, at("t1", "u2"), undefined, 10, bg)).toBe("limited");
+    // A demand listing of the same user is still never held.
+    expect(await f.list(failing, at("t1", "u2"), undefined, 10, { timeoutMs: 1_000 })).toMatchObject({
+      items: expect.any(Array),
+    });
+    // A different tenant's background calls are untouched.
+    expect(await f.list(failing, at("t2", "w1"), undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
+  });
+
+  test("unset, the tenant's users are paced per (user, source) only", async () => {
+    const f = new SourceFanout({ sanitize: (x) => x, cacheBytes: 0 });
+    const s = listing();
+    const bg = { timeoutMs: 1_000, reserve: 2 };
+    for (let i = 1; i <= 5; i++)
+      expect(await f.list(s, at("t1", `u${i}`), undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
+  });
+});
