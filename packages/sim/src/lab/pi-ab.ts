@@ -1404,7 +1404,11 @@ async function runWorld(
         i.citations.map((c) => c.itemId),
         i.text,
       );
-      tl.point("eden.inject", { items: i.citations.length, chars: i.text.length });
+      tl.point("eden.inject", {
+        items: i.citations.length,
+        chars: i.text.length,
+        ids: i.citations.map((c) => c.itemId),
+      });
     };
     const takeEden = () => {
       if (!partner || !useEden) return;
@@ -1416,7 +1420,12 @@ async function runWorld(
           i.citations.map((c) => c.itemId),
           i.text,
         );
-        tl.point("eden.inject", { items: i.citations.length, chars: i.text.length, mode: i.mode });
+        tl.point("eden.inject", {
+          items: i.citations.length,
+          chars: i.text.length,
+          mode: i.mode,
+          ids: i.citations.map((c) => c.itemId),
+        });
       }
     };
     try {
@@ -1446,7 +1455,12 @@ async function runWorld(
             h.citations.map((c) => c.itemId),
             h.text,
           );
-          tl.point("eden.inject", { items: h.citations.length, chars: h.text.length, mode: "hits" });
+          tl.point("eden.inject", {
+            items: h.citations.length,
+            chars: h.text.length,
+            mode: "hits",
+            ids: h.citations.map((c) => c.itemId),
+          });
         }
       }
       const tools: AgentTool<any>[] = [];
