@@ -652,9 +652,35 @@ describe("the tenant's pace per connector (S1-P1)", () => {
     expect(out!.status).toBe("ok");
     // Another tenant's background call is paced by its own bucket, not t1's.
     expect(await f.list(s, at("t2", "w1"), undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
-    // After the pace's interval, t1's background calls go again.
+    // The demand listing and the search were still charged to the tenant's pace (the connector received them):
+    // two tokens are owed past the background listing's, so t1's background calls go again only 6 s out.
     now = 2_100;
+    expect(await f.list(s, at("t1", "u2"), undefined, 10, bg)).toBe("limited");
+    now = 6_100;
     expect(await f.list(s, at("t1", "u2"), undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
+  });
+
+  test("a demand call that goes anyway still charges the tenant's pace", async () => {
+    let now = 0;
+    const f = new SourceFanout({
+      sanitize: (x) => x,
+      cacheBytes: 0,
+      tenantRatePerSec: 0.5, // one call per 2 s
+      tenantBurst: 1,
+      now: () => now,
+    });
+    const s = listing();
+    const scope = at("t1", "u1");
+    const bg = { timeoutMs: 1_000, reserve: 2 };
+    // The background listing spends the bucket's one token.
+    expect(await f.list(s, scope, undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
+    // The user's own demand listing goes anyway — but the connector still received the call, so the pace
+    // charges it: the next token is owed 4 s out, not 2 s.
+    expect(await f.list(s, scope, undefined, 10, { timeoutMs: 1_000 })).toMatchObject({ items: expect.any(Array) });
+    now = 2_100;
+    expect(await f.list(s, scope, undefined, 10, bg)).toBe("limited");
+    now = 4_100;
+    expect(await f.list(s, scope, undefined, 10, bg)).toMatchObject({ items: expect.any(Array) });
   });
 
   test("a connector's 429 on one user's search pushes the tenant's background calls back, not another tenant's", async () => {

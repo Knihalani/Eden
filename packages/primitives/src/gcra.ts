@@ -46,6 +46,14 @@ export class Gcra<K = string> {
     return 0;
   }
 
+  /** Records `cost` requests whether the bucket could pay for them or not: a call that goes anyway still cost the upstream. */
+  spend(key: K, cost = 1): void {
+    const now = this.now();
+    if ((++this.ops & 1023) === 0) this.prune(now);
+    const tat = Math.max(this.tat.get(key) ?? now, now);
+    this.tat.set(key, tat + this.interval * cost);
+  }
+
   /** How many requests `key` could make now, back to back, without waiting (records nothing). */
   available(key: K): number {
     const now = this.now();

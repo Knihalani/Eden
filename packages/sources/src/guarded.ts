@@ -595,7 +595,7 @@ export class SourceFanout {
     const key = `${scopeKey(scope)}|${sourceId}`;
     if (this.rate.take(key) > 0) return false;
     const tenant = this.tenantKey(scope, sourceId);
-    if (tenant !== null) this.tenantRate!.take(tenant);
+    if (tenant !== null) this.tenantRate!.spend(tenant);
     return true;
   }
 
@@ -609,7 +609,7 @@ export class SourceFanout {
     const key = `${scopeKey(scope)}|${sourceId}`;
     if (this.rate.available(key) <= 0 || this.shadowRate.take(key) > 0) return false;
     const tenant = this.tenantKey(scope, sourceId);
-    if (tenant !== null) this.tenantRate!.take(tenant);
+    if (tenant !== null) this.tenantRate!.spend(tenant);
     return true;
   }
 
@@ -738,9 +738,10 @@ export class SourceFanout {
       return "open";
     }
     this.rate.take(key);
-    // The tenant's pace is charged on every call that goes (it counts real connector load) but holds only
-    // `list`'s reserved calls: a lookup's own poll, search or fetch is never refused by it.
-    if (tenant !== null) this.tenantRate!.take(tenant);
+    // The tenant's pace is charged on every call that goes (`spend`: it counts real connector load even with
+    // the bucket spent) but holds only `list`'s reserved calls: a lookup's own poll, search or fetch is never
+    // refused by it.
+    if (tenant !== null) this.tenantRate!.spend(tenant);
     return s.breaker.epoch;
   }
 
