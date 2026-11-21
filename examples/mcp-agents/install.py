@@ -263,12 +263,15 @@ def merge_goose(path, mcp_py, env, remove=False):
     # drop an `eden:` entry at the child indent (or shallower-but-still-under-extensions)
     kept, skipping = [], False
     for l in lines[ext_i + 1:end]:
-        if l.strip() and ext_indent < indent(l) <= child and re.match(r"^eden\s*:", l.lstrip()):
+        stripped = l.lstrip()
+        if l.strip() and ext_indent < indent(l) <= child and re.match(r"^eden\s*:", stripped):
             skipping = True
             continue
-        if skipping and l.strip() and not l.lstrip().startswith("#") and indent(l) <= child:
+        if skipping and l.strip() and not stripped.startswith("#") and indent(l) <= child:
             skipping = False
-        if not skipping:
+        if not skipping or not l.strip() or stripped.startswith("#"):
+            # Blanks and comments are never Eden's own lines — a commented-out extension
+            # sitting inside the dropped block is the user's content; keep it.
             kept.append(l)
 
     out = lines[:ext_i + 1] + kept + lines[end:]

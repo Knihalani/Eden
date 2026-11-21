@@ -232,6 +232,17 @@ describe.skipIf(!python)("the MCP-only installer", () => {
     expect(g2t).toContain("  developer:\n    type: builtin");
     expect(g2t).toContain("        # managed list");
 
+    // Goose: a commented-out extension inside the replaced eden block is user content — kept.
+    const goose3 = dir(base, "g3/config.yaml");
+    writeFileSync(goose3, "extensions:\n  eden:\n    type: stdio\n    # disabled-for-now:\n    # type: builtin\n  developer:\n    type: builtin\n");
+    const g3 = run(["--goose-config", goose3, "--agents", "goose", "--remote", "--eden-home", join(base, "eh")], env);
+    expect(g3.exitCode, g3.stderr.toString()).toBe(0);
+    const g3t = readFileSync(goose3, "utf8");
+    expect(g3t).toContain("# disabled-for-now:");
+    expect(g3t).toContain("# type: builtin");
+    expect(g3t).toContain("  developer:\n    type: builtin");
+    expect(g3t.split("eden:").length - 1).toBe(1);
+
     // A merged config may hold the API key: group/other must never read it, even on a 0644 file.
     const cline = dir(base, "c/settings.json");
     writeFileSync(cline, "{}");
