@@ -518,3 +518,39 @@ test("a store sharded over buckets (S1-P4): a user's blob lands in their bucket'
   await db.settle(1_000);
   expect(inShard.objects.has(`f/${da.local.nameOf(u)}`)).toBe(false);
 });
+
+test("a shard-count change: the sweep deletes the orphan in the shard that listed it, not the copy the name routes to now", async () => {
+  // A user whose bucket % 4 lands on a different store than % 2: its blob moved shards when the count changed.
+  const u = Array.from({ length: 200 }, (_, i) => ({ tenantId: "t", userId: `u${i}` })).find(
+    (s) => bucketOf("t", s.userId) % 4 >= 2,
+  )!;
+  const m = [new MemoryStore(), new MemoryStore(), new MemoryStore(), new MemoryStore()];
+  const oldShard = bucketOf("t", u.userId) % 2;
+  const newShard = bucketOf("t", u.userId) % 4;
+  expect(newShard).not.toBe(oldShard); // % 4 in {2,3} never equals % 2 in {0,1}
+  // Written under the two-shard store.
+  const two = new ShardedBlobStore([m[0]!, m[1]!], "f/");
+  const a = freezing();
+  const da = shared(two);
+  a.persist(da);
+  a.put(u, items(u.userId, 10), T0);
+  freezeAll(a, T0);
+  expect(await da.settle(1_000)).toBe(0);
+  const key = `f/${da.local.nameOf(u)}`;
+  expect(m[oldShard]!.objects.has(key)).toBe(true);
+  // The count changes to four; the user's fresh blob goes to the shard their bucket now names.
+  const four = new ShardedBlobStore(m, "f/");
+  const b = freezing();
+  const db = shared(four, tempDir());
+  b.persist(db);
+  b.put(u, items(`${u.userId}x`, 10), T0);
+  freezeAll(b, T0);
+  expect(await db.settle(1_000)).toBe(0);
+  expect(m[newShard]!.objects.has(key)).toBe(true);
+  // The old copy expires: the sweep must delete it where it lies and keep the fresh copy.
+  m[oldShard]!.objects.get(key)!.modified = 0;
+  await db.sweepStore(Date.now(), () => true);
+  await db.settle(1_000);
+  expect(m[oldShard]!.objects.has(key)).toBe(false);
+  expect(m[newShard]!.objects.has(key)).toBe(true);
+});
