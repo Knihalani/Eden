@@ -3280,8 +3280,7 @@ export class ContextPartner {
     // rather than being pushed past the cap by the others.
     const head = Math.min(pool.length, Math.max(0, this.config.pushCandidates));
     const seated = this.daySeats(s, cue, new Set(pool.slice(0, head).map((x) => x.item.id)));
-    if (seated.length === 0 && !byDay)
-      return { pool, like: pool.map((x) => this.constraintLike(x, cards)), cards };
+    if (seated.length === 0 && !byDay) return { pool, like: pool.map((x) => this.constraintLike(x, cards)), cards };
     // The pool as it stood, and its own gate: what a push with no check answer hands (`candidatesOf`), so a seat never
     // opens a hand-out no model judged. A push only the day started has no such hand-out at all.
     const before = pool.slice();
