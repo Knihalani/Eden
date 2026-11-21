@@ -870,6 +870,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2027 | 2026-11-21 | Adopted: the report queue binds inside `surface.report`, not in its callers. | adopted |
 | D2026 | 2026-11-21 | Adopted: a surface session's teardown reports `session_end` on its report queue. | adopted |
 | D2024 | 2026-11-21 | Adopted: the `item` argument and Sources lines reach every `ask_context` surface (A2, the last mile). | adopted |
+| D2025 | 2026-11-21 | Adopted: the usage record carries the handed injection's size — the digest prices the agent's re-reads (C1's report clause). | adopted |
+| D2024 | 2026-11-21 | Adopted: the `item` argument and Sources lines reach every `ask_context` surface (A2, the last mile). | adopted |
 | D2023 | 2026-11-21 | Adopted: `partner-ask.ts` — the ask path out of the verdict core, the top of the chain. | adopted |
 | D2022 | 2026-11-21 | Adopted: an optional `item` argument on `ask_context` — a citation's id returns that item's parts in full. | adopted |
 | D2021 | 2026-11-21 | Adopted: `partner-verdict.ts` — the verdict core the push and ask paths share, as the next class down. | adopted |

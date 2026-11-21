@@ -81,6 +81,8 @@ export interface Built {
  */
 export const MAX_OUTSTANDING = 64;
 
+const utf8 = new TextEncoder();
+
 export const PLAN_QUOTE_CHARS = 200;
 
 /** Whether sorted `xs` holds `x`. */
@@ -477,7 +479,11 @@ export abstract class PartnerDelivery extends PartnerCore {
     const o = s?.outstanding.get(f.injectionId);
     if (s && o) {
       s.outstanding.delete(f.injectionId);
-      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used, { sessionId: f.sessionId, how: "explicit" });
+      this.record(scope, f.injectionId, o.sourceIds, o.situation, f.used, {
+        sessionId: f.sessionId,
+        how: "explicit",
+        bytes: o.bytes,
+      });
       return true;
     }
     // The session may have ended (and counted the injection unused): the user's record outlives it.
@@ -494,6 +500,7 @@ export abstract class PartnerDelivery extends PartnerCore {
         used: f.used,
         how: "explicit",
         sourceIds: r.sourceIds,
+        injectionBytes: r.bytes,
       });
       return true;
     }
@@ -506,6 +513,7 @@ export abstract class PartnerDelivery extends PartnerCore {
         used: f.used,
         how: "explicit",
         sourceIds: r.sourceIds,
+        injectionBytes: r.bytes,
       });
     }
     return true;
@@ -589,6 +597,7 @@ export abstract class PartnerDelivery extends PartnerCore {
             injectionId: o.injectionId,
             sourceIds: [...o.sourceIds],
             situation: o.situation,
+            bytes: o.bytes,
             tokens: new Set(o.terms.map((t) => s.vocab.intern(t))),
             deliveredTurn: o.deliveredTurn - f.turn,
           });
@@ -626,6 +635,7 @@ export abstract class PartnerDelivery extends PartnerCore {
         used: false,
         sessionId: s.id,
         pending: true,
+        bytes: o.bytes,
       });
     s.outstanding.clear();
     s.checked?.clear();
@@ -640,7 +650,7 @@ export abstract class PartnerDelivery extends PartnerCore {
     s.abort.abort();
     if (learn) {
       for (const [id, o] of s.outstanding) {
-        this.record(s.scope, id, o.sourceIds, o.situation, false, { sessionId: s.id, how: "ended" });
+        this.record(s.scope, id, o.sourceIds, o.situation, false, { sessionId: s.id, how: "ended", bytes: o.bytes });
       }
     }
     s.outstanding.clear();
@@ -688,6 +698,8 @@ export abstract class PartnerDelivery extends PartnerCore {
       injectionId: injection.id,
       sourceIds: built.sourceIds,
       situation: s.situation,
+      // The handed bytes (C1): the usage record names them so the digest can price the agent's re-reads.
+      bytes: utf8.encode(injection.text).byteLength,
       tokens: (() => {
         const { ids, n } = termIds(built.text, s.vocab, true);
         return distinctiveTokens(ids, n, s.seen, s.vocab);
@@ -706,11 +718,24 @@ export abstract class PartnerDelivery extends PartnerCore {
     sourceIds: string[],
     situation: string,
     used: boolean,
-    report: { sessionId: string; how: UsageRecord["how"] },
+    report: { sessionId: string; how: UsageRecord["how"]; bytes?: number },
   ): void {
-    this.usage({ sessionId: report.sessionId, injectionId, used, how: report.how, sourceIds });
+    this.usage({
+      sessionId: report.sessionId,
+      injectionId,
+      used,
+      how: report.how,
+      sourceIds,
+      injectionBytes: report.bytes,
+    });
     for (const sourceId of sourceIds) this.deps.sourceMap.recordOutcome(scope, situation, sourceId, used);
-    this.recordRow(scope, injectionId, { sourceIds, situation, used, sessionId: report.sessionId });
+    this.recordRow(scope, injectionId, {
+      sourceIds,
+      situation,
+      used,
+      sessionId: report.sessionId,
+      bytes: report.bytes,
+    });
   }
 
   /** A row in `recorded`, under the same per-user and per-tenant caps `record` enforces. */

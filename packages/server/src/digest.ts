@@ -79,6 +79,12 @@ export interface Digest {
     explicit: number;
     bySource: Record<string, { injections: number; used: number }>;
   };
+  /**
+   * Packet text handed to the agent (C1): UTF-8 bytes summed over the usage records that name them, and how
+   * many did. The agent's model re-reads a session's packets on every later request; roughly four bytes a
+   * token. A record from before the field shipped carries none, so a log mixing versions undercounts.
+   */
+  packets: { bytes: number; counted: number };
   silent: { events: number; reasons: Record<string, number>; nothingToLookUp: number };
   connectors: ConnectorCalls;
   /** The same counts from a log without Eden's context (`--baseline`: shadow mode, or before Eden), if given. */
@@ -214,6 +220,10 @@ export function digest(lines: Iterable<string>): Digest {
     }
   }
   const explicit = records.filter((r) => r.how === "explicit").length;
+  const packets = {
+    bytes: records.reduce((a, r) => a + (typeof r.injectionBytes === "number" ? r.injectionBytes : 0), 0),
+    counted: records.filter((r) => typeof r.injectionBytes === "number").length,
+  };
   const connectors = connectorCalls(traces, syncRuns);
   return {
     events: report.events,
@@ -230,6 +240,7 @@ export function digest(lines: Iterable<string>): Digest {
       explicit,
       bySource,
     },
+    packets,
     silent: {
       events: Object.values(report.silentReasons).reduce((a, b) => a + b, 0),
       reasons: report.silentReasons,
@@ -341,6 +352,19 @@ export function formatDigest(d: Digest): string {
     `- request-time model spend $${r.costUsd.toFixed(4)} ($${r.costUsdPer1kEvents.toFixed(4)} per 1,000 events); ` +
       "background cards and intent are billed by the model provider, not traced",
   );
+  if (d.packets.counted > 0) {
+    const tokens = Math.round(d.packets.bytes / 4);
+    const per1k = r.events > 0 ? Math.round(tokens / (r.events / 1_000)) : 0;
+    const partial =
+      d.packets.counted < d.used.injections
+        ? ` (${d.packets.counted} of ${d.used.injections} injections name a size — a log from before the field ships none)`
+        : "";
+    out.push(
+      `- packet text handed to the agent: ~${tokens.toLocaleString()} tokens` +
+        (per1k > 0 ? ` (${per1k.toLocaleString()} per 1,000 events)` : "") +
+        ` — the agent's model re-reads a session's packets on every later request${partial}`,
+    );
+  }
   out.push("", "## Connector calls and their price", "");
   const c = callsPer1k(d.connectors);
   const bg =

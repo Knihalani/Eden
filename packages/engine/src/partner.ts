@@ -247,6 +247,8 @@ export interface Recorded {
    * recording an outcome (D2006): a compaction is no verdict. Feedback records it fresh, not as a flip.
    */
   pending?: boolean;
+  /** The handed injection's UTF-8 size, so a later correction's usage record still names it (C1). */
+  bytes?: number;
 }
 
 export interface Session {
@@ -668,6 +670,7 @@ export class ContextPartner extends PartnerAsk {
             used: false,
             sessionId: seed.sessionId,
             pending: true,
+            bytes: o.bytes,
           });
         const kept = frozenReset!.filter((f) => f !== seed);
         if (kept.length) this.restoredSessions.set(resetUser, kept);

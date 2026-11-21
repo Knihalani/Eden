@@ -117,6 +117,11 @@ export interface UsageRecord {
   how: "inferred" | "expired" | "ended" | "explicit";
   /** The connectors whose items the injection carried (configuration ids, as in a trace's item ids). */
   sourceIds: string[];
+  /**
+   * The handed injection's UTF-8 size (C1): a content-free count the digest sums into the packet text the
+   * agent's model re-reads on every later request of its session. Absent on a record from before the field.
+   */
+  injectionBytes?: number;
 }
 
 export type UsageSink = (record: UsageRecord) => void;

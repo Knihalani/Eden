@@ -78,7 +78,21 @@ describe("digest (D293)", () => {
     expect(d.added).toBeGreaterThan(0);
     expect(d.used.measured).toBe(true);
     expect(d.used.used).toBeGreaterThan(0);
+    // The packet text's bytes ride the usage records (C1): the digest reports what the agent's model re-reads.
+    expect(d.packets.bytes).toBeGreaterThan(0);
+    expect(d.packets.counted).toBe(d.used.injections);
+    expect(formatDigest(d)).toContain("packet text handed to the agent");
     for (const text of [lines.join("\n"), formatDigest(d)]) expect(text).not.toContain("Dana");
+  });
+
+  test("a usage record without a size (an older log) is not counted and says so", () => {
+    const withSize = JSON.stringify({
+      usage: { sessionId: "s", injectionId: "i1", used: true, how: "explicit", sourceIds: ["g"], injectionBytes: 400 },
+    });
+    const d = digest([t({}), u("i2", false, "ended"), withSize]);
+    expect(d.packets).toEqual({ bytes: 400, counted: 1 });
+    expect(formatDigest(d)).toContain("1 of 2 injections name a size");
+    expect(formatDigest(digest([t({}), u("i1", true)]))).not.toContain("packet text handed");
   });
   test("connector calls per request: the agent's tool calls, Eden's lookups' and its sync's last count per process", () => {
     const sync = (pid: number, backgroundCalls: number) =>

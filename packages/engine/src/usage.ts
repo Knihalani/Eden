@@ -15,6 +15,8 @@ export interface Outstanding {
   situation: string;
   tokens: Set<number>;
   deliveredTurn: number;
+  /** The handed injection's UTF-8 size, for the usage record's `injectionBytes` (C1). */
+  bytes?: number;
 }
 
 const hasDigit = (t: string) => /\d/.test(t);

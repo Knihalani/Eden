@@ -66,7 +66,16 @@ describe("context_reset (D2006)", () => {
     const id = await delivered(p);
     await p.observe(ev({ kind: "context_reset" }));
     expect(p.feedback({ ...ref, injectionId: id, used: true, how: "explicit" })).toBe(true);
-    expect(got).toEqual([{ sessionId: "s", injectionId: id, used: true, how: "explicit", sourceIds: ["crm"] }]);
+    expect(got).toEqual([
+      {
+        sessionId: "s",
+        injectionId: id,
+        used: true,
+        how: "explicit",
+        sourceIds: ["crm"],
+        injectionBytes: expect.any(Number),
+      },
+    ]);
   });
 
   test("without the reset the repeat stays blocked", async () => {
@@ -135,6 +144,15 @@ describe("context_reset on a cold or evicted session", () => {
     );
     await p.observe(ev({ kind: "context_reset" }));
     expect(p.feedback({ ...ref, injectionId: id, used: true, how: "explicit" })).toBe(true);
-    expect(got).toEqual([{ sessionId: "s", injectionId: id, used: true, how: "explicit", sourceIds: ["crm"] }]);
+    expect(got).toEqual([
+      {
+        sessionId: "s",
+        injectionId: id,
+        used: true,
+        how: "explicit",
+        sourceIds: ["crm"],
+        injectionBytes: expect.any(Number),
+      },
+    ]);
   });
 });

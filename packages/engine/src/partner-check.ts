@@ -279,7 +279,7 @@ export abstract class PartnerCheck extends PartnerDelivery {
       if (!used && !expired) continue;
       s.outstanding.delete(id);
       const how = used ? "inferred" : "expired";
-      this.record(s.scope, id, o.sourceIds, o.situation, used, { sessionId: s.id, how });
+      this.record(s.scope, id, o.sourceIds, o.situation, used, { sessionId: s.id, how, bytes: o.bytes });
     }
   }
 
