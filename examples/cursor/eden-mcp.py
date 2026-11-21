@@ -44,7 +44,12 @@ def _home():
     import os
 
     env_home = os.environ.get("CURSOR_HOME")
-    return Path(env_home).expanduser() if env_home else Path.home() / ".cursor"
+    if env_home:
+        return Path(env_home).expanduser()
+    here = Path(__file__).resolve()
+    # Installed as <home>/eden/eden-mcp.py, so the install home is the parent of this
+    # file's directory; in a repo checkout fall back to the default home.
+    return here.parents[1] if here.parent.name == "eden" else Path.home() / ".cursor"
 
 
 def _plugin():
@@ -78,7 +83,7 @@ def main() -> int:
             })
         elif method == "tools/list":
             reply(msg_id, {"tools": TOOLS})
-        elif msg_id == "tools/call":
+        elif method == "tools/call":
             params = msg.get("params") or {}
             if plugin is None:
                 plugin = _plugin()
