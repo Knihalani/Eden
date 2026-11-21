@@ -254,3 +254,38 @@ test("surface closeSession reports session_end on the session's queue, then drop
   await surface.closeSession("s1"); // unknown keys are a no-op
   expect(kinds).toEqual(["session_end"]);
 });
+
+test("surface report serializes concurrent callers on the session's queue", async () => {
+  const { createLocalSurface } = await import("./surface");
+  const surface = createLocalSurface({ pluginDir: "/nope", home: "/nope" });
+  const order: string[] = [];
+  surface.sessions.set("s1", {
+    eden: {
+      observe: async (e: { kind: string }) => {
+        await new Promise((r) => setTimeout(r, 1));
+        order.push(e.kind);
+        return { injection: null, pending: false };
+      },
+    } as unknown as EdenClient,
+    options: { userId: "u" },
+    sessionId: "s1",
+    generation: 0,
+    seen: new Map(),
+    copyCounts: new Map(),
+    reportedAssistant: new Set(),
+    kept: new Map(),
+    trailing: [],
+    reported: Promise.resolve(),
+    queued: [],
+    firstCall: false,
+    local: null,
+    reportedCalls: new Set(),
+    reportedResults: new Set(),
+  });
+  const s = surface.sessions.get("s1")!;
+  await Promise.all([
+    surface.report(s, [{ kind: "a" }, { kind: "b" }], false),
+    surface.report(s, [{ kind: "c" }], false),
+  ]);
+  expect(order).toEqual(["a", "b", "c"]);
+});

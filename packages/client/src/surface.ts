@@ -252,7 +252,7 @@ export function createLocalSurface<V = string>(opts: LocalSurfaceOptions): Local
     events: E[],
     waits: boolean,
   ): Promise<Injection | null> {
-    return s.reported.then(async () => {
+    const run = s.reported.then(async () => {
       let last: Injection | null = null;
       for (const ev of events) {
         const { injection } = await s.eden.observe(ev as never, waits ? {} : { waitMs: 0 });
@@ -260,6 +260,13 @@ export function createLocalSurface<V = string>(opts: LocalSurfaceOptions): Local
       }
       return last;
     });
+    // The chain binds here, in the one place that knows it: a caller that only awaits the return
+    // cannot silently break ordering, and one chain's failure must not stall every later report.
+    s.reported = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   async function closeSession(key: string): Promise<void> {
