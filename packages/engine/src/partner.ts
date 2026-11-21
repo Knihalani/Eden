@@ -1695,6 +1695,7 @@ export class ContextPartner extends PartnerAsk {
     parent: number,
     shown?: string,
     frame?: PacketFrame,
+    undoWas?: Map<string, LedgerEntry | undefined>,
   ): Injection {
     const spans = this.spans;
     // Whatever path delivered them, a probe that first brought one in paid for its call (`probeYield`).
@@ -1708,6 +1709,9 @@ export class ContextPartner extends PartnerAsk {
       if (x.sketch) this.recordDelivered(s, x.item, x.sketch);
     }
     // Every item counts as delivered, an echo folded out of the packet too: the agent has its occurrence.
+    // A caller undoing a delivery it never handed out gets each entry the marks replace — captured here, where
+    // the write is, not before the awaits that precede it, or another delivery's mark would read as ours.
+    if (undoWas) for (const x of scored) undoWas.set(x.item.id, s.ledger.entry(x.item.id));
     s.ledger.mark(
       scored.map((x) => x.item.id),
       s.turn,

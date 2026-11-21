@@ -132,7 +132,7 @@ import {
 import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
-  CANDIDATES_LEAD,
+  CHECKED_LEAD,
   LOOKUP_HEAD_LEAD,
   LOOKUP_LEAD,
   LOOKUP_QUIET,
@@ -1282,8 +1282,12 @@ export abstract class PartnerVerdict extends PartnerCheck {
       // even after the session closed (the call was paid for), so traces sum to the calls made.
       if (fresh) {
         const t0 = performance.now();
+        const requestAt = forRequest ?? s.requests;
         void running.then(
-          (r) => r.called && this.traceCheck(s, r, t0),
+          (r) => {
+            if (r.called) this.traceCheck(s, r, t0);
+            void this.deliverLateCheck(s, cue, gate, r, requestAt);
+          },
           () => undefined,
         );
       }
@@ -1338,6 +1342,70 @@ export abstract class PartnerVerdict extends PartnerCheck {
     return out;
   }
 
+  /**
+   * `pushCheckLate` (D2082): a check that answered past `pushCheckWaitMs` still serves the request it read — while
+   * that request stays the session's latest, the items it named that no delivery carried go out on the session's
+   * `pending` queue, so the agent takes them at its next event instead of a paid-for answer serving nothing
+   * (lh10: 98% of check calls settled late). An item already delivered is left out (`isFresh`), copies are
+   * re-verified on the wire (`deliverChecked`), and a session that closed or moved to a newer request gets nothing.
+   */
+  private async deliverLateCheck(
+    s: Session,
+    cue: Cue,
+    gate: PushGate,
+    r: PushCheckRead,
+    requestAt: number,
+  ): Promise<void> {
+    try {
+      if (!r.yes?.size || s.closed || s.requests !== requestAt) return;
+      // The check's answer goes through the same filters the in-time push applies (`candidatesOf`: look-alikes,
+      // stale siblings, bulk mail, the candidates cap) — a named item the rules would have kept out stays out —
+      // and an item already delivered is left out (`isFresh`).
+      const undelivered = this.candidatesOf(s, cue, gate, r).items.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
+      if (undelivered.length === 0) return;
+      // `deliverChecked`'s re-reads take a moment: `was` is what the ledger held before them (its own kept-guard
+      // drops items marked meanwhile), and `replaced` what its own marks replace — captured at mark time, so a
+      // newer request's delivery landing during the await is never rolled back as if it were ours (review).
+      const was = new Map(undelivered.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
+      const replaced = new Map<string, LedgerEntry | undefined>();
+      // The checked frame: `build` marks every item it cites, so a packet cut by the ordinary byte cap
+      // would suppress items its text never carried; the lead says a check read the items.
+      const injection = await this.deliverChecked(
+        s,
+        undelivered,
+        "proactive",
+        `candidates:${cue.id}`,
+        cue,
+        was,
+        this.checkedFrame(),
+        replaced,
+      );
+      if (injection === null) return;
+      if (s.closed || s.requests !== requestAt) {
+        // A session that closed or moved to a newer request during the re-reads gets no packet — and keeps the
+        // marks undone too: the agent never saw the items, so they stay deliverable to what it asks next. Only
+        // what `build` marked (`replaced`) is rolled back — an item verify dropped carries another delivery's
+        // mark, which stands.
+        const undo: Undo = new Map();
+        for (const x of undelivered) {
+          if (!replaced.has(x.item.id)) continue;
+          const set = s.ledger.entry(x.item.id);
+          const before = replaced.get(x.item.id);
+          if (!set || sameEntry(set, before)) continue;
+          undo.set(x.item.id, { was: before, set, sketch: x.sketch });
+        }
+        if (undo.size > 0) {
+          this.undoable.set(injection, undo);
+          this.withdraw(s, injection);
+        }
+        return;
+      }
+      s.pending.push(injection);
+    } catch {
+      // Best-effort: a late check's delivery must never break the session it serves.
+    }
+  }
+
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */
   protected traceCheck(s: Session, r: PushCheckRead, t0: number): void {
     this.trace(s, {
@@ -1367,7 +1435,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
-  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; lookup?: "named" | "head" } {
+  ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; lookup?: "named" | "head"; checked?: boolean } {
     const { like } = gate;
     // A check that names nothing sends no packet (D500, silent, D828): that is how the push stays silent on a request
     // with nothing to add.
@@ -1474,6 +1542,9 @@ export abstract class PartnerVerdict extends PartnerCheck {
       pool,
       ...(unsettled ? { unsettled } : {}),
       ...(lookup ? { lookup: lookupHead ? "head" : "named" } : {}),
+      // `pushCheckedCandidates` (D2083): a check answer decided the packet — its items carry CHECKED_LEAD, not
+      // the unchecked candidates' hedge (a lookup packet keeps its own frame regardless).
+      ...(yes !== null ? { checked: true } : {}),
     };
   }
 
@@ -3980,6 +4051,20 @@ export abstract class PartnerVerdict extends PartnerCheck {
   }
 
   /** `deliver`, after `verifyItems`: null when every item was found gone, or the session closed meanwhile. */
+  /**
+   * `CHECKED_LEAD`'s packet (D2083): how a check's named items are framed and cut — the same bounds as the
+   * candidates' packet (`candidateFrame`), a lead that says the items were read against the request.
+   */
+  protected checkedFrame(nudge = false): PacketFrame {
+    const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
+    const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
+    return {
+      lead: nudge ? `${CHECKED_LEAD} ${ASK_NUDGE}` : CHECKED_LEAD,
+      itemBytes: each,
+      maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
+    };
+  }
+
   private async deliverChecked(
     s: Session,
     scored: Scored[],
@@ -3987,6 +4072,8 @@ export abstract class PartnerVerdict extends PartnerCheck {
     reason: string,
     cue: Cue,
     was?: Map<string, LedgerEntry | undefined>,
+    frame?: PacketFrame,
+    undoWas?: Map<string, LedgerEntry | undefined>,
   ): Promise<Injection | null> {
     // The items were ranked against the ledger before the re-reads' await; a delivery during it (the next request's
     // fast path from the cache) may have handed some out since, and `build` marks without testing again: an item
@@ -3999,7 +4086,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       return now === undefined || sameEntry(held.has(x.item.id) ? held.get(x.item.id) : now, now);
     });
     if (kept.length === 0 || s.closed) return null;
-    return this.deliver(s, kept, mode, reason, cue);
+    return this.deliver(s, kept, mode, reason, cue, undefined, frame, undoWas);
   }
 
   /**
