@@ -8,6 +8,7 @@ import {
   parseDecisions,
   stale,
   summarize,
+  unpadded,
   topicOf,
   type Verdict,
 } from "./decision-index";
@@ -305,5 +306,25 @@ describe("pages", () => {
 
   test("the committed DECISION-INDEX.md and DEAD-ENDS.md are current (run `bun run decisions:index`)", () => {
     expect(stale()).toEqual([]);
+  });
+
+  test("stale compares cells, not bytes: prettier padding is not staleness (D2016)", () => {
+    const md = doc(["| D1 | d | **Adopted: `x`.** | |"]);
+    const { index } = generate(md);
+    // Padding a table's cells the way prettier does changes the bytes, not the content.
+    const padded = index
+      .split("\n")
+      .map((l) =>
+        l.startsWith("|")
+          ? `|${l
+              .split("|")
+              .slice(1)
+              .map((c) => ` ${c.trim().padEnd(10)} `)
+              .join("|")}`
+          : l,
+      )
+      .join("\n");
+    expect(padded).not.toBe(index);
+    expect(unpadded(padded)).toBe(unpadded(index));
   });
 });
