@@ -403,6 +403,10 @@ export function assess(
   // statement about the same matter (sharing a word with it) undoes it. "Passport expires 2 Nov" stands after
   // "driving licence renewed 2024"; "SOC 2 report expired 30 Sep" falls to "the renewed report was accepted".
   let firm: Set<string> | null = null;
+  // Whether the statement `firm` was built from was itself tied to the request: an untied firm's words are no
+  // gate on a clearance of the *tied* conflict that follows it — the deadline's words say nothing about a
+  // cancelled booking, so "the booking is reinstated" must still match the cancellation's matter (review find).
+  let firmUntied = false;
   // The words of the current tied conflict, whatever its firmness: an amount under a limit clears only a conflict
   // about the same matter — a rate cap's words are not a cancelled booking's, so "up to £400" cannot erase a
   // conflict the request's own words tie to it. A clearing statement resets it (`clear`), as does the clear below.
@@ -421,7 +425,10 @@ export function assess(
     // an empty set could never share a word, so kept it would block every amount-clear forever. `firm` and
     // `conflictWords` keep the empty set instead: no prose clearance or table row can prove it is about the terse
     // conflict ("the cap was lifted" is indistinguishable from "passport renewed"), so the conservative gate stands.
-    if (isFirm) firm = wordsFor(st);
+    if (isFirm) {
+      firm = wordsFor(st);
+      firmUntied = !t;
+    }
     if (t) conflictMatter = nonEmpty(wordsFor(st));
     if (V && t) conflictWords = wordsFor(st);
   };
@@ -437,7 +444,8 @@ export function assess(
   const clear = (st: Statement) => {
     const s = st.s;
     if (!blockSeen && !REVERSAL.test(s) && !(V && REVERSAL_MORE.test(s))) return;
-    if (firm && ![...wordsFor(st)].some((w) => firm!.has(w))) return;
+    if (firm && ![...wordsFor(st)].some((w) => firm!.has(w) || (firmUntied && (conflictMatter?.has(w) ?? false))))
+      return;
     if (V && s.startsWith("|") && state === "conflict" && tiedConflict && frame.names.length > 0 && conflictWords) {
       const cw: Set<string> = conflictWords;
       if (!tied(tieOf(st, V)) && ![...wordsFor(st)].some((w) => cw.has(w))) return;
