@@ -234,4 +234,14 @@ describe("pushOpenConstraint (Q4.2, opt-in): an opened push goes only when a con
     );
     expect(got.length).toBe(1);
   });
+
+  test("a constraint the agent already took does not count", async () => {
+    const p = partner({ pushOpen: true, pushOpenConstraint: true });
+    // A listed request delivers the constraint-like item first.
+    const first = await packets(p, "Pay Halden for the boiler quote and the Premium Bonds withdrawal.");
+    expect(first.length).toBe(1);
+    // An opened follow-up pools it again but its copy was delivered: what remains is plain records, so silence.
+    const next = await packets(p, "Top up the Premium Bonds withdrawal and file Oskar's Leeds itinerary.");
+    expect(next.length).toBe(0);
+  });
 });

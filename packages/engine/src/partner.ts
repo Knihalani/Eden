@@ -1780,6 +1780,9 @@ export class ContextPartner {
           push: true,
           request: internal.request,
           turn: internal.turn,
+          // The first pass's `open` carries over: a refreshed push of an opened request is still an opened push
+          // (pushOpenConstraint, D2011) — the poll finding new items must not hand what the first pass refused.
+          open: internal.open,
           again: { searched: again, prev },
         });
       })
@@ -2832,7 +2835,7 @@ export class ContextPartner {
           latencyMs: Math.round(performance.now() - t0),
         };
       }
-      const candidates = gate ? this.candidatesOf(s, cue, gate, check, internal.open === true) : null;
+      const candidates = gate ? this.candidatesOf(s, cue, gate, check) : null;
       const flagged = candidates
         ? candidates.items
         : reading
@@ -2871,7 +2874,23 @@ export class ContextPartner {
         return now === undefined || sameEntry(was.get(x.item.id), now);
       });
       const still = internal.request === undefined || internal.request === s.requests;
-      const delivering = checked.length > 0 && !s.closed && still;
+      // `pushOpenConstraint` (Q4.2, opt-in; o3-push-open §5, screened and not built): on a request the push opened
+      // by shape rather than a listed verb, a packet goes only when a constraint-like item is among those it would
+      // hand — the pool holding one is not enough, and a constraint the agent already took does not count (its copy
+      // left `fresh` in the ledger step above). A `pushLookup` packet is reference, not candidates, and an item the
+      // push check itself named counts: the model already judged it against the request.
+      const delivering =
+        checked.length > 0 &&
+        !s.closed &&
+        still &&
+        !(
+          candidates !== null &&
+          candidates.lookup === undefined &&
+          internal.open === true &&
+          this.config.pushOpenConstraint &&
+          gate !== null &&
+          !checked.some((x) => this.constraintLike(x, gate.cards) || (check?.yes?.has(x.item.id) ?? false))
+        );
       if (replacing && (delivering || !candidates)) {
         const at = s.pending.indexOf(prev!);
         if (at >= 0) {
@@ -3622,7 +3641,6 @@ export class ContextPartner {
     cue: Cue,
     gate: PushGate,
     check: PushCheckRead | null = null,
-    opened = false,
   ): { items: Scored[]; pool: Scored[]; unsettled?: Anchors; lookup?: "named" | "head" } {
     const { like } = gate;
     // A check that names nothing sends no packet (D500, silent, D828): that is how the push stays silent on a request
@@ -3728,11 +3746,6 @@ export class ContextPartner {
         items = items.slice(0, settledCut(handed, anchors, fewer));
       }
     }
-    // `pushOpenConstraint` (Q4.2, opt-in; o3-push-open §5, screened and not built): on a request the push opened by
-    // shape rather than a listed verb, a packet goes only when a constraint-like item is among those handed — the
-    // pool holding one is not enough. Screened: −25% of the neutral packets `pushOpen` adds for −8% of its facts.
-    if (opened && this.config.pushOpenConstraint && !lookup)
-      items = items.some((x) => this.constraintLike(x, gate.cards)) ? items : [];
     // The arguments are built only when the lab's hook is wired (an optional call evaluates none otherwise).
     const read = anchors;
     this.deps.onPushPool?.({
