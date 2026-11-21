@@ -456,9 +456,9 @@ export const docYears = (item: ContextItem): number[] => {
  */
 const STALE_TAG = /[\[(（【]\s*(?:old|superseded|expired|outdated|out[- ]of[- ]date|previous|archived|void)\b/i;
 const STALE_CAPS = /\b(?:OLD|SUPERSEDED|EXPIRED|OUTDATED|VOID)\b/;
-const STALE_TITLE = /\b(?:superseded|expired|withdrawn|obsolete|outdated)\b/i;
+const STALE_TITLE = /\b(?:superseded|withdrawn|obsolete|outdated)\b/i;
 const STALE_DECLARED =
-  /\b(?:superseded by|has been superseded|has been replaced by|no longer valid|has expired|now expired|is expired|expired on|was withdrawn|has been withdrawn|out of date)\b/i;
+  /\b(?:superseded by|has been superseded|has been replaced by|no longer valid|was withdrawn|has been withdrawn|out of date)\b/i;
 /** How far into a document its own death notice is read (`STALE_DECLARED`): the preamble where it is written. */
 const STALE_CHARS = 400;
 /** The request names the old version or a stale state itself: the stale copy is then the answer, not a look-alike. */
@@ -472,16 +472,17 @@ export const MONTH =
 /**
  * The words that lead a document's own expiry ("expires", "valid until", "offer ends", "closing date"):
  * each followed by the date it runs out. A bare "until" or "ends" is no lead — a meeting "ends on Friday"
- * is an occurrence's time, not a record's death.
+ * is an occurrence's time, not a record's death; nor is past-tense "expired" one — "your passport expired
+ * on 30 Sep" reports the subject's state, and the notice itself is the current record.
  */
 const EXPIRY_LEAD =
-  /\b(?:expires?|expiry|expired|valid(?:ity)?\s+(?:until|through|to|till)|offer ends|ends on|closing(?:\s+date)?|available (?:until|through|to)|runs (?:until|out on)|last day)\s*:?\s*/gi;
+  /\b(?:expires?|expiry|valid(?:ity)?\s+(?:until|through|to|till)|offer ends|ends on|closing(?:\s+date)?|available (?:until|through|to)|runs (?:until|out on)|last day)\s*:?\s*/gi;
 /**
  * The date an `EXPIRY_LEAD` match's tail writes: ISO, day-month(-year), month-day(-year), or month-year.
  * Groups: 1-3 ISO; 4 day, 5 month, 6 year; 7 month, 8 day, 9 year; 10 month, 11 year (`MONTH` captures).
  */
 const EXPIRY_DATE = new RegExp(
-  String.raw`^(\d{4})-(\d{1,2})-(\d{1,2})|^(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s+(?:of\s+)?(?:${MONTH})[a-z]*\s*,?\s*(\d{4})?|^(?:${MONTH})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s*,?\s*(\d{4})?|^(?:${MONTH})[a-z]*\s*,?\s*(\d{4})`,
+  String.raw`(\d{4})-(\d{1,2})-(\d{1,2})|(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s+(?:of\s+)?(?:${MONTH})\b\s*,?\s*(\d{4})?|(?:${MONTH})\b\s+(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s*,?\s*(\d{4})?|(?:${MONTH})\b\s*,?\s*(\d{4})?`,
   "y",
 );
 /** The expiry a document declares, as the latest end it names (ms): its last deadline is when it dies. */
@@ -535,8 +536,10 @@ export const docSpan = (item: ContextItem): [number, number] | null => {
     if (m[10] !== undefined) day = 0; // month-year alone: the month is the range
     if (month < 0 || month > 11 || day > 31) continue;
     if (!y) {
+      // No year written: the record's own date is never in its future — a "September statement" updated in
+      // November is this September's, not next year's (which would outrank the current November revision).
       y = new Date(written).getUTCFullYear();
-      if (Date.UTC(y, month, day || 1) < written - 86_400_000) y++;
+      if (Date.UTC(y, month, day || 1) > written) y--;
     }
     day === 0
       ? stretch(Date.UTC(y, month, 1), Date.UTC(y, month + 1, 1))
@@ -558,7 +561,7 @@ export const docSpan = (item: ContextItem): [number, number] | null => {
  * Groups: 1-3 ISO; 4 day, 5 month, 6 year; 7 month, 8 day, 9 year; 10 month, 11 year (`MONTH` captures).
  */
 const DOC_DATE = new RegExp(
-  String.raw`\b(\d{4})-(\d{1,2})-(\d{1,2})|\b(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s+(?:of\s+)?(?:${MONTH})[a-z]*\s*,?\s*(\d{4})?|\b(?:${MONTH})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s*,?\s*(\d{4})?|\b(?:${MONTH})[a-z]*\s*,?\s*(\d{4})`,
+  String.raw`\b(\d{4})-(\d{1,2})-(\d{1,2})|\b(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s+(?:of\s+)?(?:${MONTH})\b\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s+(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s*,?\s*(\d{4})?`,
   "gi",
 );
 /** What `staleSelf` and `staleIds` read of an item once: whether it declares itself dead, and its own expiry. */
@@ -1541,8 +1544,9 @@ export abstract class PartnerVerdict extends PartnerCheck {
    * the stale copy is the answer (`ASKS_OLD`), so nothing counts as stale.
    */
   protected staleSelf(item: ContextItem, cue: Cue): boolean {
-    // A request that names its own year asks for that year's record: whatever state it is in now is the answer.
-    if (ASKS_OLD.test(cue.raw) || requestYear(cue) !== null) return false;
+    // A request that names its own year asks for that year's record: whatever state it is in now is the
+    // answer. The year is the raw text's alone — "today" resolving to a day of this year is no exemption.
+    if (ASKS_OLD.test(cue.raw) || cue.raw.match(YEARS) !== null) return false;
     const r = staleOf(item);
     return r.declared || (r.expiry !== null && r.expiry <= cue.at);
   }
@@ -1573,7 +1577,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
           phrases[i]!.length > 0 && (titleNames([e], item) === "whole" || namesEntity(item, anchorsPer[i]!)) ? i : -1,
         )
         .filter((i) => i >= 0);
-    const yearless = requestYear(cue) === null;
+    const yearless = cue.raw.match(YEARS) === null;
     const deliveredSpans = yearless ? this.deliveredEntitySpans(s, cue) : new Map<string, [number, number]>();
     // Per entity, the newest start among the pool's approved, anchored, not-self-stale records: a newer
     // record itself declared dead cannot make anything its sibling.

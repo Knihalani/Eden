@@ -219,4 +219,70 @@ describe("stale supersession: the current record ranks and hands ahead of the de
     const ids = await ask(p, "Was my MacBook battery replacement free?");
     expect(ids).toContain("mail:mac-repair");
   });
+
+  test("a 'today' request is no exemption: the stale sibling still loses", async () => {
+    const { p } = partner({}, [statements()]);
+    const ids = await ask(p, "What was my Monzo balance today?");
+    expect(ids).toContain("mail:monzo-oct");
+    if (ids.includes("mail:monzo-sep"))
+      expect(ids.indexOf("mail:monzo-oct")).toBeLessThan(ids.indexOf("mail:monzo-sep"));
+  });
+
+  test("a notice that a thing expired is the current record, not a dead one", async () => {
+    const docs = new StaticSource("mail", "Mail", [
+      {
+        ref: "passport-warn",
+        title: "Your passport expired on 30 September 2026",
+        text: "Your passport expired on 30 September 2026. Renew it before booking travel.",
+        updatedAt: Date.parse("2026-10-02T00:00:00Z"),
+      },
+    ]);
+    const { p } = partner({}, [docs]);
+    const ids = await ask(p, "Do I need to renew my passport?");
+    expect(ids).toContain("mail:passport-warn");
+  });
+
+  test("a title's yearless date is this year's, not next year's", async () => {
+    const docs = new StaticSource("mail", "Mail", [
+      {
+        ref: "monzo-sep2",
+        // The same September statement with no year written, updated in November: it is 2026's, and the
+        // November revision beside it is the current record.
+        title: "Monzo statement — September",
+        text: "Your Monzo statement for September. Balance 3,800 GBP.",
+        updatedAt: Date.parse("2026-11-01T00:00:00Z"),
+      },
+      {
+        ref: "monzo-nov2",
+        title: "Monzo statement — November 2026",
+        text: "Your Monzo statement for November 2026. Balance 4,400 GBP.",
+      },
+    ]);
+    const { p } = partner({ config: { groundSubject: true, confidentScore: 0.1, minMatchedTerms: 1 } }, [docs]);
+    const ids = await say(p, "What was my Monzo balance?", [docs], { config: { groundSubject: true } });
+    expect(ids).toContain("mail:monzo-nov2");
+    expect(ids).not.toContain("mail:monzo-sep2");
+  });
+
+  test("an explicit expiry date alone silences the offer — no sibling, no body year", async () => {
+    const docs = new StaticSource("mail", "Mail", [
+      {
+        ref: "bonus-sep",
+        // Neither the title nor a body year dates this one: only its own deadline says when it died.
+        title: "Weekend saver bonus",
+        text: "Top up this weekend for a bonus. Offer ends 30 September.",
+        updatedAt: Date.parse("2026-09-01T00:00:00Z"),
+      },
+      {
+        ref: "bonus-nov",
+        title: "Weekend saver bonus — November 2026",
+        text: "Top up this November for a bonus.",
+        updatedAt: Date.parse("2026-11-02T00:00:00Z"),
+      },
+    ]);
+    const { p } = partner({ config: { groundSubject: true, confidentScore: 0.1, minMatchedTerms: 1 } }, [docs]);
+    const ids = await say(p, "Is there a saver bonus for me?", [docs], { config: { groundSubject: true } });
+    expect(ids).toContain("mail:bonus-nov");
+    expect(ids).not.toContain("mail:bonus-sep");
+  });
 });
