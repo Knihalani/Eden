@@ -125,15 +125,22 @@ export function aliasExpand(
     out.push(e);
     return "added";
   };
-  for (const entity of entities) {
-    const ws = entity.toLowerCase().match(/\p{L}+/gu) ?? [];
+  const own = entities.map((e) => e.toLowerCase().match(/\p{L}+/gu) ?? []);
+  for (let i = 0; i < entities.length; i++) {
+    const entity = entities[i]!;
+    const ws = own[i]!;
     if (ws.length === 0) continue;
+    // An identifier's letters are not a name: "LEE-123" must not grow "marcus lee" into its anchors.
+    if (/\d/.test(entity)) continue;
     if (ws.length === 1) {
       // A dup only means the name is already there; a full `out` is what stops the sweep.
       for (const full of aliases.get(ws[0]!) ?? []) if (push(full) === "full") break;
       continue;
     }
     for (const w of ws.slice(1)) {
+      // Two requested people sharing the part must not collapse into it: "marcus webb, sara webb" + "webb" makes
+      // one person's record anchor the other person's name, and `staleSibling` drops the older.
+      if (own.some((w2, j) => j !== i && w2.includes(w))) continue;
       for (const full of aliases.get(w) ?? []) {
         const nw: string[] = full.match(/\p{L}+/gu) ?? [];
         if (ws.every((x) => nw.includes(x))) {

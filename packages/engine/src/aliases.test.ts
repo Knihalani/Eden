@@ -74,6 +74,16 @@ describe("aliasExpand (D2009): name forms the user's alias table knows", () => {
     const grown = aliasExpand(many, ["webb"], 3);
     expect(grown.length).toBe(1 + 3);
   });
+
+  test("two requested people sharing a surname do not collapse into it", () => {
+    // "webb" here would anchor both people's records to one entity and `staleSibling` would drop the older.
+    expect(aliasExpand(aliases, ["Marcus Webb", "Sara Webb"])).toEqual(["Marcus Webb", "Sara Webb"]);
+  });
+
+  test("an identifier's letters are not expanded into people", () => {
+    const lee = table(["Marcus Lee"]);
+    expect(aliasExpand(lee, ["LEE-123"])).toEqual(["LEE-123"]);
+  });
 });
 
 describe("ItemCache.aliasTable (D2009): the per-user table, kept as items come and go", () => {
