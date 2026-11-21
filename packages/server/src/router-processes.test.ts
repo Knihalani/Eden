@@ -580,6 +580,10 @@ describe("a child that answers connections but hangs on the request (R1's hole i
         const r = await fetch(`http://127.0.0.1:${router.port}/v1/whoami`, { method: "POST" });
         expect(r.status).toBe(503);
         expect(performance.now() - t0).toBeLessThan(5_000); // the bound, not a killed socket
+        // /metrics is bounded too: the hung child's text drops out, the router's own gauges still answer.
+        const m = await fetch(`http://127.0.0.1:${router.port}/metrics`);
+        expect(m.status).toBe(200);
+        expect(await m.text()).toContain("eden_router_children");
       } finally {
         await router.stop();
       }

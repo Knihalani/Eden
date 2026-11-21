@@ -784,7 +784,8 @@ export async function startRouter(options: RouterOptions): Promise<Router> {
     const texts = await Promise.all(
       children.map((c) =>
         c.up
-          ? fetch(`http://127.0.0.1:${c.port}/metrics`).then(
+          ? // A child hung mid-answer must not stall the scrape: bound it and its text drops out, as a down one's.
+            fetch(`http://127.0.0.1:${c.port}/metrics`, { signal: AbortSignal.timeout(5_000) }).then(
               (r) => (r.ok ? r.text() : ""),
               () => "",
             )
