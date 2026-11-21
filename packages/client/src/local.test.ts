@@ -220,3 +220,36 @@ test("resolveLocalEden: EDEN_URL wins with its key and tenant; else a found bina
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("surface closeSession reports session_end on the session's queue, then drops it", async () => {
+  const { createLocalSurface } = await import("./surface");
+  const { EdenClient } = await import("./client");
+  const surface = createLocalSurface({ pluginDir: "/nope", home: "/nope" });
+  const kinds: string[] = [];
+  let closed = false;
+  surface.sessions.set("s1", {
+    eden: {
+      observe: async (e: { kind: string }) => (kinds.push(e.kind), { injection: null, pending: false }),
+    } as unknown as EdenClient,
+    options: { userId: "u" },
+    sessionId: "s1",
+    generation: 0,
+    seen: new Map(),
+    copyCounts: new Map(),
+    reportedAssistant: new Set(),
+    kept: new Map(),
+    trailing: [],
+    reported: Promise.resolve(),
+    queued: [],
+    firstCall: false,
+    local: { close: () => (closed = true) } as never,
+    reportedCalls: new Set(),
+    reportedResults: new Set(),
+  });
+  await surface.closeSession("s1");
+  expect(kinds).toEqual(["session_end"]);
+  expect(closed).toBe(true);
+  expect(surface.sessions.has("s1")).toBe(false);
+  await surface.closeSession("s1"); // unknown keys are a no-op
+  expect(kinds).toEqual(["session_end"]);
+});
