@@ -269,9 +269,12 @@ def merge_goose(path, mcp_py, env, remove=False):
             continue
         if skipping and l.strip() and not stripped.startswith("#") and indent(l) <= child:
             skipping = False
-        if not skipping or not l.strip() or stripped.startswith("#"):
-            # Blanks and comments are never Eden's own lines — a commented-out extension
-            # sitting inside the dropped block is the user's content; keep it.
+        if not skipping:
+            kept.append(l)
+        elif indent(l) <= child and (not l.strip() or stripped.startswith("#")):
+            # A blank or comment at the child indent (or shallower) is a sibling line,
+            # not Eden's own. A deeper one rides inside the dropped block — keeping it
+            # could let a preceding extension's block scalar absorb it into its value.
             kept.append(l)
 
     out = lines[:ext_i + 1] + kept + lines[end:]

@@ -234,12 +234,22 @@ describe.skipIf(!python)("the MCP-only installer", () => {
 
     // Goose: a commented-out extension inside the replaced eden block is user content — kept.
     const goose3 = dir(base, "g3/config.yaml");
-    writeFileSync(goose3, "extensions:\n  eden:\n    type: stdio\n    # disabled-for-now:\n    # type: builtin\n  developer:\n    type: builtin\n");
+    writeFileSync(goose3, "extensions:\n  eden:\n    type: stdio\n  # disabled-for-now:\n  # type: builtin\n    note: inside-eden-block\n  developer:\n    type: builtin\n");
     const g3 = run(["--goose-config", goose3, "--agents", "goose", "--remote", "--eden-home", join(base, "eh")], env);
     expect(g3.exitCode, g3.stderr.toString()).toBe(0);
     const g3t = readFileSync(goose3, "utf8");
     expect(g3t).toContain("# disabled-for-now:");
     expect(g3t).toContain("# type: builtin");
+    expect(g3t).not.toContain("inside-eden-block");
+
+    // A comment dropped inside the eden block must not leak into a preceding block scalar.
+    const goose4 = dir(base, "g4/config.yaml");
+    writeFileSync(goose4, "extensions:\n  developer:\n    prompt: |\n      hello\n      world\n  eden:\n    type: stdio\n    # managed list\n");
+    const g4 = run(["--goose-config", goose4, "--agents", "goose", "--remote", "--eden-home", join(base, "eh")], env);
+    expect(g4.exitCode, g4.stderr.toString()).toBe(0);
+    const g4t = readFileSync(goose4, "utf8");
+    expect(g4t).not.toContain("managed list");
+    expect(g4t).toContain("prompt: |\n      hello\n      world");
     expect(g3t).toContain("  developer:\n    type: builtin");
     expect(g3t.split("eden:").length - 1).toBe(1);
 
