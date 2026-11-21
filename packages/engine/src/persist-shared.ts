@@ -27,8 +27,13 @@ export interface BlobStore {
   /** The object's bytes, or null when there is none. */
   get(key: string): Promise<Uint8Array | null>;
   delete(key: string): Promise<void>;
-  /** Every key under `prefix` with its last-modified time (ms), page by page. */
-  list(prefix: string): AsyncIterable<{ key: string; modified: number }>;
+  /**
+   * Every key under `prefix` with its last-modified time (ms), page by page. `store`, when set, is the store the key
+   * was listed from: a sharded store (S1-P4) fills it so a caller that deletes or reads the listed copy can reach
+   * the shard it lives on — a name's shard can move when the count changes, and routing the copy's key again would
+   * touch the wrong one.
+   */
+  list(prefix: string): AsyncIterable<{ key: string; modified: number; store?: BlobStore }>;
 }
 
 export interface SharedDiskOptions extends DiskOptions {
@@ -49,9 +54,55 @@ export interface SharedDiskOptions extends DiskOptions {
  */
 export const MAX_ABSENT = 100_000;
 
-type Job = { kind: "put"; bytes: Uint8Array } | { kind: "delete" };
+type Job =
+  | { kind: "put"; bytes: Uint8Array }
+  // `store`: delete the copy this store listed, not the shard the name routes to now (S1-P4's count-change orphans).
+  | { kind: "delete"; store?: BlobStore };
 
 const NAME = /^([0-9a-f]{4})-[0-9a-f]{40}\.blob$/;
+
+/**
+ * Several stores behind one (S1-P4): each user's blobs go to the store their bucket names — a name's first four hex
+ * digits are its bucket (NAME), and shard = bucket mod the number of stores — so one bucket's request-rate bound is
+ * not the whole fleet's. A key that names no blob (the key-id marker) sits on the first store.
+ *
+ * Changing the shard count moves every user: a fetch looks in the shard the name routes to now, misses a copy written
+ * under another count, and the user re-syncs; the orphaned copy is found by `sweepStore`'s merged list and deleted by
+ * age. Plan a count change for a quiet window.
+ */
+export class ShardedBlobStore implements BlobStore {
+  private readonly stores: readonly BlobStore[];
+  private readonly prefix: string;
+
+  constructor(stores: readonly BlobStore[], prefix: string) {
+    if (stores.length === 0) throw new Error("ShardedBlobStore needs at least one store");
+    this.stores = stores;
+    this.prefix = prefix;
+  }
+
+  private of(key: string): BlobStore {
+    const m = NAME.exec(key.slice(this.prefix.length));
+    return this.stores[m ? parseInt(m[1]!, 16) % this.stores.length : 0]!;
+  }
+
+  put(key: string, bytes: Uint8Array): Promise<void> {
+    return this.of(key).put(key, bytes);
+  }
+
+  get(key: string): Promise<Uint8Array | null> {
+    return this.of(key).get(key);
+  }
+
+  delete(key: string): Promise<void> {
+    return this.of(key).delete(key);
+  }
+
+  async *list(prefix: string): AsyncIterable<{ key: string; modified: number; store?: BlobStore }> {
+    for (const s of this.stores) {
+      for await (const o of s.list(prefix)) yield { ...o, store: s };
+    }
+  }
+}
 /** The store's marker of the key its users were written with (D1071); not a blob name: no sweep or fetch reads it. */
 const KEY_MARK = "key-id";
 
@@ -243,13 +294,13 @@ export class SharedFrozenDisk implements FrozenDisk {
   async sweepStore(now: number, owns: (bucket: number) => boolean = this.owns): Promise<number> {
     let n = 0;
     try {
-      for await (const { key, modified } of this.store.list(this.prefix)) {
+      for await (const { key, modified, store } of this.store.list(this.prefix)) {
         const m = NAME.exec(key.slice(this.prefix.length));
         if (!m || !owns(parseInt(m[1]!, 16))) continue;
         if (now - modified <= this.maxAgeMs) continue;
         const name = key.slice(this.prefix.length);
         if (this.queued.has(name)) continue; // a write of ours is on its way
-        this.enqueue(name, { kind: "delete" });
+        this.enqueue(name, { kind: "delete", store });
         n++;
       }
     } catch {
@@ -282,10 +333,10 @@ export class SharedFrozenDisk implements FrozenDisk {
       let theirs = false;
       if (marker !== null) theirs = !sameBytes(marker, mine);
       else {
-        for await (const { key } of this.store.list(this.prefix)) {
+        for await (const { key, store } of this.store.list(this.prefix)) {
           if (sampled >= sample) break;
           if (!NAME.test(key.slice(this.prefix.length))) continue;
-          const bytes = await this.store.get(key);
+          const bytes = await (store ?? this.store).get(key);
           const k = bytes === null ? null : this.local.keyOf(bytes);
           if (k === null) continue;
           sampled++;
@@ -382,7 +433,7 @@ export class SharedFrozenDisk implements FrozenDisk {
             this.remote.put++;
             this.remote.bytesPut += job.bytes.byteLength;
           } else {
-            await this.store.delete(this.prefix + name);
+            await (job.store ?? this.store).delete(this.prefix + name);
             this.remote.deleted++;
           }
           return;

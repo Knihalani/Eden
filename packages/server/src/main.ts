@@ -9,6 +9,7 @@ import {
   EncryptedFrozenDisk,
   type PersistEvent,
   PersistKeyMismatch,
+  ShardedBlobStore,
   SharedFrozenDisk,
   turnGate,
 } from "@eden/engine";
@@ -244,7 +245,7 @@ async function serve(config: ServerConfig): Promise<void> {
       `${keys.length > 0 ? `; engine settings: ${keys.join(", ")}` : ""}` +
       (persist
         ? `; frozen users persisted, encrypted (${persist.count} on disk, cap ${mb(config.persist!.maxBytes)} MB` +
-          `${persist instanceof SharedFrozenDisk ? `, mirrored to s3://${config.persist!.store!.bucket}` : ""}, D991)`
+          `${persist instanceof SharedFrozenDisk ? `, mirrored to s3://${config.persist!.store!.buckets.join(",")}` : ""}, D991)`
         : "; frozen users NOT persisted (EDEN_PERSIST=off or dev mode): a restart re-reads every user's sources") +
       (child
         ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
@@ -345,16 +346,19 @@ async function persistStore(config: ServerConfig): Promise<EncryptedFrozenDisk |
   return store;
 
   function makeStore(): EncryptedFrozenDisk | SharedFrozenDisk {
-    return p!.store
-      ? // In a cluster the store is the copy of record: local files left from before this start may be older than what
-        // another machine wrote since, so this child's are deleted first (D992).
-        new SharedFrozenDisk({
-          ...options,
-          startEmpty: true,
-          store: new S3BlobStore(p!.store),
-          prefix: p!.store.prefix,
-        })
-      : new EncryptedFrozenDisk(options);
+    if (!p!.store) return new EncryptedFrozenDisk(options);
+    const cfg = p!.store;
+    // In a cluster the store is the copy of record: local files left from before this start may be older than what
+    // another machine wrote since, so this child's are deleted first (D992). Several buckets shard the store by the
+    // user's bucket (S1-P4): one bucket's request-rate bound is not the fleet's.
+    const store =
+      cfg.buckets.length === 1
+        ? new S3BlobStore({ ...cfg, bucket: cfg.buckets[0]! })
+        : new ShardedBlobStore(
+            cfg.buckets.map((bucket) => new S3BlobStore({ ...cfg, bucket })),
+            cfg.prefix,
+          );
+    return new SharedFrozenDisk({ ...options, startEmpty: true, store, prefix: cfg.prefix });
   }
 }
 

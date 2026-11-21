@@ -4,7 +4,9 @@
  * "auto"), Hetzner or OVH object storage, AWS S3, MinIO. The bytes it holds are the persistence files, already
  * encrypted under the operator's key (D425): the store never sees content or ids.
  *
- *   EDEN_PERSIST_STORE        s3://<bucket>/<prefix>   (prefix optional, default "frozen/")
+ *   EDEN_PERSIST_STORE        s3://<bucket>/<prefix>   (prefix optional, default "frozen/"); several
+ *                             comma-separated URLs shard the store over that many buckets (S1-P4), a
+ *                             user's shard picked by their bucket — every URL's prefix must be the same
  *   EDEN_S3_ENDPOINT          the service's endpoint URL (unset: AWS for the region)
  *   EDEN_S3_REGION            default "auto"
  *   EDEN_S3_ACCESS_KEY_ID, EDEN_S3_SECRET_ACCESS_KEY   credentials scoped to that bucket (never logged)
@@ -13,8 +15,19 @@ import { S3Client } from "bun";
 import type { BlobStore } from "@eden/engine";
 
 export interface StoreConfig {
-  bucket: string;
+  /** One bucket per shard (S1-P4); one for the unsharded store. */
+  buckets: string[];
+  /** The same for every shard: a key's shard is its bucket, the name under the prefix unchanged. */
   prefix: string;
+  endpoint?: string;
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+/** One bucket's worth of `StoreConfig`, as `S3BlobStore` needs it. */
+export interface BucketConfig {
+  bucket: string;
   endpoint?: string;
   region: string;
   accessKeyId: string;
@@ -25,10 +38,24 @@ export interface StoreConfig {
 export function storeConfig(env: NodeJS.ProcessEnv): StoreConfig | null {
   const url = env.EDEN_PERSIST_STORE ?? "";
   if (url === "") return null;
-  const m = /^s3:\/\/([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])(?:\/(.*))?$/.exec(url);
-  if (!m) throw new Error("EDEN_PERSIST_STORE must be s3://<bucket>/<prefix>, e.g. s3://eden-frozen/frozen/");
-  let prefix = m[2] ?? "frozen/";
-  if (prefix !== "" && !prefix.endsWith("/")) prefix += "/";
+  const buckets: string[] = [];
+  let prefix: string | undefined;
+  for (const part of url.split(",")) {
+    const m = /^s3:\/\/([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])(?:\/(.*))?$/.exec(part.trim());
+    if (!m) {
+      throw new Error(
+        "EDEN_PERSIST_STORE must be s3://<bucket>/<prefix>[,s3://<bucket>/<prefix>...], " +
+          "e.g. s3://eden-frozen/frozen/",
+      );
+    }
+    let p = m[2] ?? "frozen/";
+    if (p !== "" && !p.endsWith("/")) p += "/";
+    if (prefix === undefined) prefix = p;
+    else if (p !== prefix) {
+      throw new Error("EDEN_PERSIST_STORE's shards must share one prefix (a shard is picked by bucket)");
+    }
+    buckets.push(m[1]!);
+  }
   const accessKeyId = env.EDEN_S3_ACCESS_KEY_ID ?? "";
   const secretAccessKey = env.EDEN_S3_SECRET_ACCESS_KEY ?? "";
   if (accessKeyId === "" || secretAccessKey === "") {
@@ -38,7 +65,14 @@ export function storeConfig(env: NodeJS.ProcessEnv): StoreConfig | null {
   if (endpoint !== undefined && !/^https?:\/\/[^\s/]+/.test(endpoint)) {
     throw new Error("EDEN_S3_ENDPOINT must be an http(s) URL");
   }
-  return { bucket: m[1]!, prefix, endpoint, region: env.EDEN_S3_REGION || "auto", accessKeyId, secretAccessKey };
+  return {
+    buckets,
+    prefix: prefix!,
+    endpoint,
+    region: env.EDEN_S3_REGION || "auto",
+    accessKeyId,
+    secretAccessKey,
+  };
 }
 
 /** True for the client's "no such object" (a 404), which `get` answers as null rather than a failure. */
@@ -55,7 +89,7 @@ function missing(e: unknown): boolean {
 export class S3BlobStore implements BlobStore {
   private readonly client: S3Client;
 
-  constructor(c: StoreConfig) {
+  constructor(c: BucketConfig) {
     this.client = new S3Client({
       bucket: c.bucket,
       endpoint: c.endpoint,

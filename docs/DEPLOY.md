@@ -262,7 +262,10 @@ re-sync from their sources (minutes each, connector calls), and per-user learnin
 
 - **Nodes** (`deploy/compose/node`): Eden on the private address only, `EDEN_PERSIST_STORE` (an S3-compatible
   bucket every node reaches: Hetzner Object Storage has no request fees but allows 750 requests a second per bucket
-  and 100 buckets an account; Cloudflare R2, Oracle, AWS work too), `EDEN_CLUSTER_KEY`, `EDEN_CLUSTER_SIZE` (the
+  and 100 buckets an account; Cloudflare R2, Oracle, AWS work too). Several comma-separated
+  `s3://<bucket>/<prefix>` URLs shard the store over that many buckets (S1-P4: a user's shard is their bucket mod the
+  count, one prefix shared by all of them) for fleets whose peak would exceed one bucket's rate bound — set the
+  count once, since changing it re-syncs every user. `EDEN_CLUSTER_KEY`, `EDEN_CLUSTER_SIZE` (the
   machine count: divides each tenant's spend cap, D993). A node clears its local copies at start: the store is the
   copy of record. A Hetzner vSwitch (the private network between dedicated servers) joins at most 100 servers.
 - **Cluster router** (`deploy/compose/cluster-router`): `EDEN_NODES_FILE` (`id=url` lines; ids are stable names),

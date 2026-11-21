@@ -14,7 +14,7 @@ const env = {
 test("EDEN_PERSIST_STORE is checked at startup, and no message shows a credential (D992)", () => {
   expect(storeConfig({})).toBeNull();
   const c = storeConfig(env)!;
-  expect([c.bucket, c.prefix, c.region]).toEqual(["eden-test", "frozen/", "auto"]);
+  expect([c.buckets, c.prefix, c.region]).toEqual([["eden-test"], "frozen/", "auto"]);
   expect(storeConfig({ ...env, EDEN_PERSIST_STORE: "s3://eden-test" })!.prefix).toBe("frozen/");
   for (const bad of ["eden-test", "s3://", "http://x/y", "s3://A_B/x"]) {
     expect(() => storeConfig({ ...env, EDEN_PERSIST_STORE: bad })).toThrow(/EDEN_PERSIST_STORE must be/);
@@ -30,8 +30,23 @@ test("EDEN_PERSIST_STORE is checked at startup, and no message shows a credentia
   expect(() => storeConfig({ ...env, EDEN_S3_ENDPOINT: "not a url" })).toThrow(/EDEN_S3_ENDPOINT/);
 });
 
+test("EDEN_PERSIST_STORE names several buckets, comma-separated; every prefix must be the same (S1-P4)", () => {
+  const c = storeConfig({
+    ...env,
+    EDEN_PERSIST_STORE: "s3://eden-frozen-0/frozen, s3://eden-frozen-1/frozen/,s3://eden-frozen-2",
+  })!;
+  expect(c.buckets).toEqual(["eden-frozen-0", "eden-frozen-1", "eden-frozen-2"]);
+  expect(c.prefix).toBe("frozen/");
+  expect(() => storeConfig({ ...env, EDEN_PERSIST_STORE: "s3://a-bucket/frozen,s3://b-bucket/other/" })).toThrow(
+    /prefix/,
+  );
+  expect(() => storeConfig({ ...env, EDEN_PERSIST_STORE: "s3://a-bucket/frozen,nope" })).toThrow(
+    /EDEN_PERSIST_STORE must be/,
+  );
+});
+
 test("S3BlobStore puts, gets, lists page by page and deletes through Bun's S3 client; a missing key is null", async () => {
-  const store = new S3BlobStore(storeConfig(env)!);
+  const store = new S3BlobStore({ ...storeConfig(env)!, bucket: "eden-test" });
   const bytes = new Uint8Array([1, 2, 3, 250]);
   await store.put("frozen/0001-a.blob", bytes);
   expect(s3.objects.get("frozen/0001-a.blob")?.bytes).toEqual(bytes);

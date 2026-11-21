@@ -47,9 +47,9 @@ describe("EDEN_PERSIST_* (D425, on by default since D991)", () => {
     const node = { ...prod, EDEN_PERSIST_KEY: HEX, EDEN_CLUSTER_KEY: "cluster-key-0123456789abcdef" };
     expect(() => loadConfig(node)).toThrow(/needs EDEN_PERSIST_STORE/);
     const store = { EDEN_S3_ACCESS_KEY_ID: "a", EDEN_S3_SECRET_ACCESS_KEY: "secret-0123456789" };
-    expect(loadConfig({ ...node, ...store, EDEN_PERSIST_STORE: "s3://eden-frozen/" }).persist!.store!.bucket).toBe(
+    expect(loadConfig({ ...node, ...store, EDEN_PERSIST_STORE: "s3://eden-frozen/" }).persist!.store!.buckets).toEqual([
       "eden-frozen",
-    );
+    ]);
     expect(
       loadConfig({ ...prod, EDEN_PERSIST: "off", EDEN_CLUSTER_KEY: node.EDEN_CLUSTER_KEY }).cluster!.key,
     ).not.toBeNull();
