@@ -116,7 +116,7 @@ def merge_hooks(home, dest):
         ] + [
             h.get("command")
             for entry in entries
-            for h in (entry.get("hooks") if isinstance(entry, dict) else [])
+            for h in ((entry.get("hooks") or []) if isinstance(entry, dict) else [])
             if isinstance(h, dict)
         ]
         if command not in commands:
@@ -178,10 +178,13 @@ def main():
         binary = ensure_binary(root, work)
         # Replace via rename staged in the same directory: copy2 over a still-running detached server
         # fails ETXTBSY on Linux, and a cross-filesystem rename fails EXDEV.
-        staged = dest / "bin" / f".eden-local.{os.getpid()}.tmp"
+        # On Windows the client only discovers eden-local.exe/.cmd — an extensionless file
+        # would leave local mode disabled.
+        binary_name = "eden-local.exe" if sys.platform == "win32" else "eden-local"
+        staged = dest / "bin" / f".{binary_name}.{os.getpid()}.tmp"
         shutil.copy2(binary, staged)
         staged.chmod(0o755)
-        os.replace(staged, dest / "bin" / "eden-local")
+        os.replace(staged, dest / "bin" / binary_name)
         merge_hooks(home, dest)
         merge_mcp(home, dest)
         print(f"Eden installed to {dest}; hooks registered in {home}/hooks.json, "
