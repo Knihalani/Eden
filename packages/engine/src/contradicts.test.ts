@@ -218,6 +218,10 @@ describe("fallback asks", () => {
     expect(p.staleSelf(dead, cue("What Lisbon hotel do I have in November?"))).toBe(true);
     // A request about the cancellation itself wants the record.
     expect(p.staleSelf(dead, cue("Was my Lisbon hotel cancelled?"))).toBe(false);
+    // A leading "Cancelled:" declares the record dead; "budget review cancelled" mid-title reports an event
+    // — the notice is fresh news, not a dead record.
+    const notice = item("n", "Dana Lee: budget review cancelled", "Dana Lee cancelled the budget review.");
+    expect(p.staleSelf(notice, cue("What's new with Dana Lee?"))).toBe(false);
     // The dated exemption still stands for a deadline since passed: the period is what it asks about.
     const lapsed = item("o", "Lisbon offer", "Booking offer expires 8 November 2026.");
     expect(p.staleSelf(lapsed, cue("What Lisbon offers ran in November 2026?"))).toBe(false);

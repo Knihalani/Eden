@@ -481,7 +481,7 @@ const ruleDoc = (words: ReadonlySet<string>) => [...words].filter((t) => POLICY_
 
 const STALE_TAG = /[\[(（【]\s*(?:old|superseded|expired|outdated|out[- ]of[- ]date|previous|archived|void)\b/i;
 const STALE_CAPS = /\b(?:OLD|SUPERSEDED|EXPIRED|OUTDATED|VOID)\b/;
-const STALE_TITLE = /\b(?:superseded|withdrawn|obsolete|outdated|cancell?ed)\b/i;
+const STALE_TITLE = /\b(?:superseded|withdrawn|obsolete|outdated)\b|^\s*cancell?ed\b/i;
 const STALE_DECLARED =
   /\b(?:superseded by|has been superseded|has been replaced by|no longer valid|was withdrawn|has been withdrawn|out of date)\b/i;
 /** How far into a document its own death notice is read (`STALE_DECLARED`): the preamble where it is written. */
