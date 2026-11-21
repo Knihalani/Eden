@@ -214,6 +214,24 @@ describe.skipIf(!python)("the MCP-only installer", () => {
     expect(v.servers.eden.command).toBe("python3");
     expect(v.servers.eden.env.EDEN_API_KEY).toBe("k9");
 
+    // A corrupt container ({,}) is not a trailing comma: the file is warned and untouched.
+    const corrupt = dir(base, "corrupt/settings.json");
+    writeFileSync(corrupt, '{ "mcpServers": {,} }');
+    const cr2 = run(["--cline-config", corrupt, "--agents", "cline", "--remote", "--eden-home", join(base, "eh")], env);
+    expect(cr2.exitCode).toBe(1);
+    expect(cr2.stderr.toString()).toContain("not a JSON object");
+    expect(readFileSync(corrupt, "utf8")).toBe('{ "mcpServers": {,} }');
+
+    // Goose: a comment deeper than the real entries must not set Eden's indent.
+    const goose2 = dir(base, "g2/config.yaml");
+    writeFileSync(goose2, "extensions:\n        # managed list\n  developer:\n    type: builtin\n");
+    const g2 = run(["--goose-config", goose2, "--agents", "goose", "--remote", "--eden-home", join(base, "eh")], env);
+    expect(g2.exitCode, g2.stderr.toString()).toBe(0);
+    const g2t = readFileSync(goose2, "utf8");
+    expect(g2t).toContain("  eden:\n    type: stdio");
+    expect(g2t).toContain("  developer:\n    type: builtin");
+    expect(g2t).toContain("        # managed list");
+
     // A merged config may hold the API key: group/other must never read it, even on a 0644 file.
     const cline = dir(base, "c/settings.json");
     writeFileSync(cline, "{}");
