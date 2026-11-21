@@ -2838,9 +2838,13 @@ export class ItemCache {
         if (r instanceof Promise) {
           this.restoring.set(key, r);
           // Gone once settled, whoever thawed the user (a sync `peek` as well as `ready`'s sliced job).
-          void r.finally(() => {
-            if (this.restoring.get(key) === r) this.restoring.delete(key);
-          });
+          void r
+            .finally(() => {
+              if (this.restoring.get(key) === r) this.restoring.delete(key);
+            })
+            // The cleanup is the whole point of the derived arm: a restore that fails still leaves this entry, and
+            // its rejection is heard by `ready`'s own caller, not re-raised here as unhandled.
+            .catch(() => {});
         }
       } catch {
         // The owner's restore fails open: the items are held, and its own state starts over (a re-sync).

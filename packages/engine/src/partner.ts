@@ -832,7 +832,13 @@ export class ContextPartner extends PartnerAsk {
     if (this.config.syncPollBehind && this.sync && this.config.syncOnDemand) {
       this.afterPoll(s, cue, t0, event.kind, slow);
     }
-    const queueLater = () => void slow.then((inj) => inj && !s.closed && s.pending.push(inj));
+    // A seat on the reject: `lookup` throws when its model or a source does, and past "late" nothing else awaits
+    // `slow`, so its rejection would ride to the process as unhandled. The seat drops it as `push`'s does above.
+    const queueLater = () =>
+      void slow.then(
+        (inj) => inj && !s.closed && s.pending.push(inj),
+        () => {},
+      );
     const waitMs = options.waitMs ?? 0;
     if (queued || waitMs <= 0) {
       queueLater();
