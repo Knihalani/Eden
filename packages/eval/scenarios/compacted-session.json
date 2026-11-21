@@ -1,0 +1,48 @@
+{
+  "id": "compacted-session",
+  "category": "sessions",
+  "description": "An agent session compacted mid-task (D2006): the reset drops the shown marks, so the same items may be delivered again for the same request; a half-typed draft is ignored (D56).",
+  "sources": [
+    {
+      "id": "mail",
+      "description": "The user's email",
+      "docs": [
+        {
+          "ref": "msg-dentist",
+          "title": "Dentist appointment confirmed",
+          "text": "Dr. Okafor's practice confirms your check-up Tuesday 9:00 at Harley Street."
+        },
+        {
+          "ref": "msg-boiler",
+          "title": "Boiler service booked",
+          "text": "A. Barnes Heating: your boiler service is Thursday 14:00; the engineer brings the flue kit."
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "s1",
+      "turns": [
+        {
+          "event": { "kind": "session_start" }
+        },
+        {
+          "event": { "kind": "user_message", "text": "Also, when is the boiler engineer", "draft": true },
+          "expect": "silent"
+        },
+        {
+          "event": { "kind": "user_message", "text": "When is my dentist appointment with Dr. Okafor?" },
+          "expect": { "items": ["mail:msg-dentist"] }
+        },
+        {
+          "event": { "kind": "context_reset" }
+        },
+        {
+          "event": { "kind": "user_message", "text": "When is my dentist appointment with Dr. Okafor?" },
+          "expect": { "items": ["mail:msg-dentist"] }
+        }
+      ]
+    }
+  ]
+}
