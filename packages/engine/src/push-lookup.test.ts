@@ -116,7 +116,7 @@ describe("pushLookup (D1252)", () => {
     const scored = ITEMS.map((x) => ({ item: x, score: 1, matched: 1, sketch: null }));
     const gate = { pool: scored, like: scored.map((x) => /hold|due/.test(x.item.text)) };
     const cue = { entities: ["Harlow"], time: null, raw: REQUEST, offset: 0 };
-    const session = { id: "s1", requests: 1, scope: { tenantId: "t", userId: "u" } };
+    const session = { id: "s1", requests: 1, scope: { tenantId: "t", userId: "u1" } };
     const read = (called: boolean) =>
       (
         p as unknown as { candidatesOf: (...a: unknown[]) => { items: { item: ContextItem }[]; lookup?: string } }
