@@ -944,6 +944,8 @@ generated pages (`.gitattributes` merges them as a union so a merge never stops 
 
 | D2050 | 2026-11-21 | **Adopted: pacing classes default `now` to `Date.now`, not a fresh arrow per instance.** D2046's `RateHold` (and `Pace`, since D1811) built `now` as `() => Date.now()`: a new function object every construction, so two independently built roles compared unequal by structure — the eval harness's wiring test (`toEqual` over role options) failed on main the moment roles got a shared `RateHold`, and any two `Pace`s had never been value-equal. `Date.now` itself is the same function reference, so two default instances are structurally equal; behaviour is identical (`now()` reads the clock either way). The D128 shipped-wiring test passes again; the rest of `run.test.ts`/`llm.test.ts` is unchanged. |
 
+| D2054 | 2026-11-21 | **Adopted: the user-range tally test runs with `sync` on, so the cache is full before each session.** The test merged two shards' tallies and compared the report to the whole run's — but verdict gates read the background sync's progress against the event loop, which is wall-clock timing: whether a poll landed before a request flipped `verify`/`silent`/delivery counts (~2 runs in 6, post-D1982's finer-grained stale gates). `sync` (the lab's prefill, D356) puts every item in the cache up front, so a shard's run and the whole run differ only in what the merge itself does — which is what the test asserts. The flag changes nothing about `mergeTallies`/`qualityReport` under test; the `userRange` validation and sample-concatenation checks are unchanged. |
+
 ## Trial switches
 
 A trial is decided in the branch or session that opened it, as soon as its evidence is in (D814): promoted into
