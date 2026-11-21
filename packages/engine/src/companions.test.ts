@@ -189,10 +189,15 @@ describe("companions: a delivered item pulls its cross-source companions (D1977)
       { ref: "visa-policy", title: "Visa fee schedule", text: "Fees and surcharges for each visa class." },
       // Another party's policy is not the pick's rules: TAP's shares "booking" and no name or rare word.
       { ref: "tap-policy", title: "Changing your TAP booking", text: "Change fees and penalties apply." },
+      // Two more picks of the request's own terms fill the packet to its cap of three — the fare rules
+      // still ride beside the booking, one rule document past the cap (D2058).
+      { ref: "lis-insurance", title: "Lisbon flight insurance", text: "Flight cover for Lisbon, 12 GBP." },
+      { ref: "lis-seat", title: "Lisbon flight seat", text: "Seat selection for your flight to Lisbon." },
     ]);
     const { ids } = await run("What does my Lisbon flight itinerary say?", [mail]);
     expect(ids).toContain("mail:ba-booking");
     expect(ids).toContain("mail:ba-policy");
+    expect(ids).toContain("mail:lis-insurance");
     expect(ids).not.toContain("mail:visa-policy");
     expect(ids).not.toContain("mail:tap-policy");
   });

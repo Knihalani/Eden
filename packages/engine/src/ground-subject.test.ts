@@ -64,7 +64,8 @@ describe("groundSubject: a request about a subject it names gets the context aro
     const { ids, reasons } = await run("Can you move my Lisbon flight to the Saturday morning instead?", {
       config: { groundSubject: true },
     });
-    expect(ids.sort()).toEqual(["calendar:evt-lisbon", "mail:ba-booking", "mail:train"]);
+    // The fare rules ride beside the booking on the rule-document allowance, one past the pick cap (D2058).
+    expect(ids.sort()).toEqual(["calendar:evt-lisbon", "mail:ba-booking", "mail:ba-policy", "mail:train"]);
     expect(reasons.some((r) => r.startsWith("grounded-subject:"))).toBe(true);
   });
 

@@ -1003,10 +1003,12 @@ describe("the reader in the engine (config.askReader)", () => {
       const { traces, sent } = await run({ askReader: true, readerPush }, { asks: 0 });
       expect(sent.searches).toBeGreaterThan(0);
       expect(traces.reduce((n, t) => n + t.sourceCalls, 0)).toBe(sent.searches);
-      // One source, the same query: the push and the slow path share one call, counted on one of their traces.
+      // One source, the same query: the push and the slow path share one call, counted on one of their
+      // traces. Whether the companion pass's re-search adds a second rides on the push's race against the
+      // slow path's picks (D2053) — a full packet skips it (maxItemsPerInjection == confidentItems here), and
+      // the rule-document allowance only opens it when the packet still holds no policy doc (D2058).
       const pushed = traces.find((t) => t.decision === "reader-push");
-      if (readerPush) expect(sent.searches).toBe(1);
-      else expect(pushed).toBeUndefined();
+      if (!readerPush) expect(pushed).toBeUndefined();
     }
   });
 
