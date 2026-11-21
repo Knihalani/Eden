@@ -939,3 +939,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2061 | 2026-11-21 | Adopted: the earliest year a request names is the look-alike floor. | adopted |
 | D2062 | 2026-11-21 | Adopted: a CPU-cost bound reads the least run, not the median. | adopted |
 | D2064 | 2026-11-21 | Adopted: the P8 cell design. | adopted |
+| D2063 | 2026-11-21 | Adopted: an item's searchable text is scanned once, not once a pass. | adopted |
