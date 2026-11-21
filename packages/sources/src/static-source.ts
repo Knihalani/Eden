@@ -15,9 +15,11 @@ export interface StaticDoc {
 
 /**
  * The term definition of this source. Not `@eden/primitives`' tokenizer: that folds accents ("Zoë" and "zoe" are one
- * term) and would change what matches; search results must stay as they were (D175).
+ * term) and would change what matches; search results must stay as they were (D175). A joiner keeps what it joins
+ * ("v2.1", "ops-142", "a_b.c") but never ends a term: "booking." at a sentence's end is "booking", or a doc whose
+ * only copy of the word ended a sentence could never be found (D2059).
  */
-const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_.-]*/gu) ?? [];
+const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}]*(?:[._-]+[\p{L}\p{N}]+)*/gu) ?? [];
 
 /**
  * The postings of every term: the documents that contain it, ascending, once each (CSR layout). Built on the first

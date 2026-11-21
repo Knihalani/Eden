@@ -5,7 +5,7 @@ import type { ContextItem } from "@eden/protocol";
 import type { SearchQuery } from "./source";
 import { StaticSource, type StaticDoc } from "./static-source";
 
-const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_.-]*/gu) ?? [];
+const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}]*(?:[._-]+[\p{L}\p{N}]+)*/gu) ?? [];
 
 /** StaticSource.search before D175: every document re-tokenized on every call. */
 function oracleSearch(items: ContextItem[], query: SearchQuery): ContextItem[] {
@@ -122,6 +122,20 @@ describe("StaticSource index (D175)", () => {
     expect(await s.search({ ...q, text: " -- " })).toEqual([]);
     // The per-search scratch is cleared: the same query twice gives the same answer.
     expect((await s.search({ ...q, text: "budget agenda" })).map((i) => i.ref)).toEqual(["b", "d", "a", "e"]);
+  });
+
+  test("a term ending a sentence is the bare word: trailing joiners are not part of it (D2059)", async () => {
+    const s = new StaticSource("mail", "mail", [
+      { ref: "a", title: "note", text: "See the booking." },
+      { ref: "b", title: "v2.1 spec", text: "Ops-142 applies." },
+    ]);
+    const q = { scope: { tenantId: "t", userId: "u" }, entities: [], limit: 10 };
+    // "booking." at a sentence's end answers "booking"; a trailing joiner is not the term.
+    expect((await s.search({ ...q, text: "booking" })).map((i) => i.ref)).toEqual(["a"]);
+    // What a joiner joins stays whole.
+    expect((await s.search({ ...q, text: "v2.1 ops-142" })).map((i) => i.ref)).toEqual(["b"]);
+    // A query written with the mark on it still finds the bare term.
+    expect((await s.search({ ...q, text: "booking." })).map((i) => i.ref)).toEqual(["a"]);
   });
 
   test("construction tokenizes nothing; the first search builds the index once and later searches reuse it", async () => {

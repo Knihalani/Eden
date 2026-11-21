@@ -934,3 +934,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2056 | 2026-11-21 | Adopted: the user-range tally test also runs with `syncPollBehind` off. | adopted |
 | D2057 | 2026-11-21 | Adopted: a rule document of a pick's matter links as a companion on one shared term, common words allowed. | adopted |
 | D2058 | 2026-11-21 | Adopted: one rule document may ride beside the packet the pick cap already closed. | adopted |
+| D2059 | 2026-11-21 | Adopted: a trailing joiner is not part of a term. | adopted |

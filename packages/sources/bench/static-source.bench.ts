@@ -13,7 +13,7 @@ import type { ContextItem } from "@eden/protocol";
 import type { SearchQuery } from "../src/source";
 import { StaticSource, type StaticDoc } from "../src/static-source";
 
-const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_.-]*/gu) ?? [];
+const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}]*(?:[._-]+[\p{L}\p{N}]+)*/gu) ?? [];
 
 interface Variant {
   search(q: SearchQuery): Promise<ContextItem[]>;
