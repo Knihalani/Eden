@@ -21,7 +21,7 @@
  * their items on demand, so the item text a connector would hold elsewhere is not in this process's memory.
  * No model, no network.
  */
-import { appendFileSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { tmpDir } from "@eden/primitives";
 import { join } from "node:path";
@@ -466,7 +466,9 @@ async function orchestrate(): Promise<void> {
       );
     });
   const all = { event: [] as number[], message: [] as number[], ask: [] as number[] };
+  // A fixed journal name is appended, not overwritten: a second run without --out must not keep the last run's lines.
   const journal = `${arg("out", join(tmpdir(), "eden-soak-report.json"))}.jsonl`;
+  rmSync(journal, { force: true });
   const totals = { errors: 0, status4xx: 0, requests: 0 };
   const sampler = setInterval(() => {
     const sample = {
