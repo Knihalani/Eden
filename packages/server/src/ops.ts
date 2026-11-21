@@ -17,7 +17,7 @@
  * metrics summed, and the cluster message sent to every child, their answers summed.
  */
 import { timingSafeEqual } from "node:crypto";
-import type { ContextPartner, SharedFrozenDisk } from "@eden/engine";
+import { FIRST_VALUE_LE, type ContextPartner, type SharedFrozenDisk } from "@eden/engine";
 import { childTable, OwnerTable } from "@eden/primitives";
 import { bucketOf, type Scope } from "@eden/protocol";
 import { modelCache, modelFailures } from "./build";
@@ -272,6 +272,25 @@ export class Ops {
     gauge("eden_process_heap_bytes", "JavaScript heap in use", mem.heapUsed);
     gauge("eden_processes_ready", "Processes taking traffic (not draining)", this.draining ? 0 : 1);
     gauge("eden_uptime_seconds_max", "Seconds since the oldest process started", (Date.now() - this.started) / 1_000);
+    const sync = this.partner.sync;
+    if (sync) {
+      // S1-P2 (B4): the backfill and fairness signals an autoscaler and the SLO alerts read. Counts only — a
+      // tenant or a user is never a label (D56's rule for traces).
+      const g = sync.gauges();
+      gauge("eden_sync_users_backfilling", "Users with a source still in its first pass", g.backfilling);
+      gauge("eden_sync_users_waiting_first_page", "Users with no source page stored yet", g.waitingFirstPage);
+      gauge("eden_sync_kick_queue_users", "Users waiting for a kick turn", g.kickQueuedUsers);
+      gauge("eden_sync_kick_queue_tenants", "Tenants with users waiting for a kick turn", g.kickQueuedTenants);
+      gauge("eden_sync_kick_running", "Kicked backfill steps running", g.kickRunning);
+      const st = sync.stats;
+      for (let t = 0; t < 4; t++) {
+        this.counts.set(`eden_sync_listing_calls_total{tier="${t}"}`, st.callsByTier[t] ?? 0);
+        this.counts.set(`eden_sync_listing_held_total{tier="${t}"}`, st.heldByTier[t] ?? 0);
+        this.counts.set(`eden_sync_listing_throttled_total{tier="${t}"}`, st.throttledByTier[t] ?? 0);
+      }
+      this.counts.set('eden_sync_listing_calls_total{tier="demand"}', st.demandCalls);
+      this.counts.set('eden_sync_listing_throttled_total{tier="demand"}', st.demandThrottled);
+    }
     if (this.disk) {
       gauge("eden_persisted_users", "Users with a blob in the local persistence directory", this.disk.count);
       if ("remote" in this.disk) {
@@ -307,6 +326,18 @@ export class Ops {
       lines.push(`eden_request_seconds_bucket{route="${route}",le="+Inf"} ${h[LE.length + 1]}`);
       lines.push(`eden_request_seconds_sum{route="${route}"} ${h[LE.length]}`);
       lines.push(`eden_request_seconds_count{route="${route}"} ${h[LE.length + 1]}`);
+    }
+    if (sync) {
+      const st = sync.stats;
+      lines.push("# TYPE eden_sync_first_value_seconds histogram");
+      for (let i = 0; i < FIRST_VALUE_LE.length; i++) {
+        lines.push(`eden_sync_first_value_seconds_bucket{le="${FIRST_VALUE_LE[i]}"} ${st.firstPageSeconds[i]}`);
+      }
+      lines.push(
+        `eden_sync_first_value_seconds_bucket{le="+Inf"} ${st.firstPageCount}`,
+        `eden_sync_first_value_seconds_sum ${st.firstPageSumSeconds}`,
+        `eden_sync_first_value_seconds_count ${st.firstPageCount}`,
+      );
     }
     return `${lines.join("\n")}\n`;
   }
