@@ -122,8 +122,19 @@ describe("explain (D277)", () => {
     expect(explainTrace({ ...base, decision: "reader-push", readerCalls: 1 })).toContain("reader read it");
   });
 
-  test("SILENT_REASONS names every silent reason partner.ts writes (trace-report and digest print only these)", async () => {
-    const src = await Bun.file(new URL("./partner.ts", import.meta.url)).text();
+  test("SILENT_REASONS names every silent reason the partner writes (trace-report and digest print only these)", async () => {
+    // The partner's paths live across partner.ts and partner-*.ts (R3); scan them all.
+    const src = (
+      await Promise.all(
+        [
+          "./partner.ts",
+          "./partner-verdict.ts",
+          "./partner-check.ts",
+          "./partner-delivery.ts",
+          "./partner-core.ts",
+        ].map((f) => Bun.file(new URL(f, import.meta.url)).text()),
+      )
+    ).join("\n");
     const written = [
       ...src.matchAll(/(?:done|trace)\("silent", "([^"]+)"\)/g),
       ...src.matchAll(/noModel\("([^"]+)"/g),
