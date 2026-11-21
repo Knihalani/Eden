@@ -398,6 +398,73 @@ describe("frozen users on disk (D425)", () => {
     expect(files(dir)).toEqual([]);
   });
 
+  test("a shutdown writes live users in the drain form (S1-P3): no index or vocabulary snapshot, rebuilt at the thaw", () => {
+    const dir = tempDir();
+    const a = freezing();
+    const { d: inner } = disk(dir);
+    const blobs: Uint8Array[] = [];
+    const capture: FrozenDisk = {
+      has: (s) => inner.has(s),
+      read: (s, now) => inner.read(s, now),
+      write: (s, user, now) => {
+        blobs.push(user.blob);
+        return inner.write(s, user, now);
+      },
+      delete: (s) => inner.delete(s),
+      sweep: (now) => inner.sweep(now),
+    };
+    a.persist(capture);
+    const long = items("alice", 20).map((it, i) => ({
+      ...it,
+      text: `${it.text} ${"the Lisbon offsite notes, the vendor and the date. ".repeat(8)} ${i}`,
+    }));
+    a.put(alice, long, T0, false, false, 5);
+    // The drain skips what the restart rebuilds: no snapshot of the index or the vocabulary is taken at a flush.
+    const u = (
+      a as never as { users: Map<string, { index: { snapshot(): unknown }; vocab: { snapshot(): unknown } }> }
+    ).users.get("t/alice")!;
+    let snapshots = 0;
+    const snapIndex = u.index.snapshot.bind(u.index);
+    u.index.snapshot = () => (snapshots++, snapIndex());
+    const snapVocab = u.vocab.snapshot.bind(u.vocab);
+    u.vocab.snapshot = () => (snapshots++, snapVocab());
+    expect(a.flush()).toBe(1);
+    expect(snapshots).toBe(0);
+    expect(blobs.length).toBe(1);
+    expect([...blobs[0]!.slice(0, 4)]).toEqual([0x45, 0x44, 0x46, 0x33]); // "EDF3", not a warm blob's EDF2.
+    const b = freezing();
+    b.persist(disk(dir).d);
+    const found = find(b, alice, "quarterly budget review Friday", T0);
+    expect(found.map((i) => i.id)).toEqual(find(a, alice, "quarterly budget review Friday", T0).map((i) => i.id));
+    for (const it of found) {
+      expect(it.text).toBe(long.find((m) => m.id === it.id)!.text);
+      expect(isPacked(it)).toBe(true);
+    }
+  });
+
+  test("a shutdown writes the most recently seen users first, so a deadline strands the coldest (S1-P3)", () => {
+    const dir = tempDir();
+    const a = freezing();
+    const { d: inner } = disk(dir);
+    const written: string[] = [];
+    const capture: FrozenDisk = {
+      has: (s) => inner.has(s),
+      read: (s, now) => inner.read(s, now),
+      write: (s, user, now) => {
+        written.push(s.userId);
+        return inner.write(s, user, now);
+      },
+      delete: (s) => inner.delete(s),
+      sweep: (now) => inner.sweep(now),
+    };
+    a.persist(capture);
+    a.put(alice, items("alice", 3), T0);
+    a.expireIdle(T0); // Bob is seen a tick later than alice.
+    a.put(bob, items("bob", 3), T0);
+    expect(a.flush()).toBe(2);
+    expect(written).toEqual(["bob", "alice"]);
+  });
+
   test("a warm blob whose texts are DEFLATE (format 6's), wholly or in part, reads back exactly (D1926)", () => {
     expect(READABLE_FORMATS.has(6)).toBe(true);
     expect(PERSIST_FORMAT).toBe(7);

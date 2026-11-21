@@ -374,6 +374,15 @@ interface FastHead {
   wide: [number, 0 | 1][];
 }
 
+/** The JSON head of a drain blob (S1-P3): a `FastHead` without the index or the vocabulary. */
+interface LeanHead {
+  lean: true;
+  entries: FastEntry[];
+  parties: [string, number][];
+  partied: number;
+  offsets: [number, number][];
+}
+
 /**
  * An array of non-negative integers as varints of the zigzag gap from the one before: postings and a doc's terms
  * mostly ascend in small steps, so most gaps take a byte, and zstd shrinks the rest (O4's screen 1: about 0.6 of the
@@ -432,6 +441,16 @@ function align8(n: number): number {
 const FAST_MAGIC = new Uint8Array([0x45, 0x44, 0x46, 0x32]); // "EDF2"
 function isFast(blob: Uint8Array): boolean {
   return blob.byteLength >= 8 && blob[0] === 0x45 && blob[1] === 0x44 && blob[2] === 0x46 && blob[3] === 0x32;
+}
+
+/**
+ * A drain blob (S1-P3): the fast form's layout minus the index and vocabulary, which a restart rebuilds — what makes
+ * a warm freeze cost three times a lean one's. Its own magic so `warm` (a blob that thaws in milliseconds) stays
+ * honest, and an older binary reads it as neither form and starts the user over.
+ */
+const LEAN_MAGIC = new Uint8Array([0x45, 0x44, 0x46, 0x33]); // "EDF3"
+function isLean(blob: Uint8Array): boolean {
+  return blob.byteLength >= 8 && blob[0] === 0x45 && blob[1] === 0x44 && blob[2] === 0x46 && blob[3] === 0x33;
 }
 
 /** Delta docs (and removals not purged) below which an idle index is left as it is (D861, `compactable`). */
@@ -1008,22 +1027,24 @@ export class ItemCache {
    * Writes every live user to disk as a freeze would, and every warm one (D862, not written at its freeze), for a
    * shutdown (D425): users frozen compact were written when they froze. Stops at `deadlineMs`; returns how many it
    * wrote. Only for a process about to exit: the users stay as they are, so a later change to them (a removal) would
-   * not reach the file they now have on disk.
+   * not reach the file they now have on disk. Most recently seen first (S1-P3): the users likeliest to be asked for
+   * after the restart are the ones a short deadline still covers, and their blob is the drain form — the fast layout
+   * minus the index and vocabulary a restart can rebuild, so the freeze is about a third of a warm one's cost.
    */
   flush(deadlineMs = Infinity): number {
     const disk = this.disk;
     if (disk === null) return 0;
     const t0 = performance.now();
     let n = 0;
-    for (const x of this.users.values()) {
+    const entries = [...this.users.values()].sort((a, b) => b.seen - a.seen);
+    for (const x of entries) {
       if (performance.now() - t0 > deadlineMs) break;
       if (x instanceof FrozenUser) {
         if (x.warm && this.write(x)) n++;
         continue;
       }
       if (x.items.size === 0) continue;
-      // Warm when the trial is on (D862): a restart then thaws its users in milliseconds.
-      const steps = this.freezeSteps(x, this.limits.warmIdleMs > 0);
+      const steps = this.fastFreezeSteps(x, true);
       let r = steps.next();
       while (!r.done) r = steps.next();
       if (this.write(r.value)) n++;
@@ -2403,8 +2424,10 @@ export class ItemCache {
    * A freeze in the fast-thaw form (`CacheLimits.warmIdleMs`, D860), a step per `STEP_ITEMS` entries: the entries'
    * fields as JSON with each packed text's bytes kept apart, and the vocabulary and the compacted index as arrays.
    * No text is decompressed or compressed; the JSON and the arrays go through zstd, the packed text bytes do not.
+   * `lean` is the drain form (S1-P3): the same layout without the index or vocabulary, which a thaw then rebuilds —
+   * the drain does no index snapshot, compaction or gaps, about a third of the cost of the full form.
    */
-  private *fastFreezeSteps(u: UserCache): Generator<undefined, FrozenUser> {
+  private *fastFreezeSteps(u: UserCache, lean = false): Generator<undefined, FrozenUser> {
     const texts: Uint8Array[] = [];
     let textBytes = 0;
     const recs: FastEntry[] = [];
@@ -2439,46 +2462,52 @@ export class ItemCache {
       recs.push(rec);
       if (++n % STEP_ITEMS === 0) yield;
     }
-    const index = u.index.snapshot(); // Compacts first: no delta, no dead docs.
-    const vocab = u.vocab.snapshot();
-    // The vocabulary's fingerprints are left out (hashed again at the thaw: about 12 bytes a term, which zstd barely
-    // shrinks); the postings, forward arena and key offsets go as varint gaps (`gaps`), which zstd then shrinks well.
-    const arrays: FastArray[] = [
-      index.totalLens,
-      index.df,
-      index.lens,
-      index.where,
-      index.fwdStart,
-      index.fwdLen,
-      index.nPost,
-      gaps(index.keyStart),
-      gaps(index.fDocs),
-      index.fTfs,
-      gaps(index.fFwd),
-      index.bigTf,
-      index.freeDocs,
-    ];
-    const wide = [index.keyStart, index.fDocs, index.fFwd].map((a) => [a.length, a instanceof Uint32Array ? 1 : 0]);
-    const head: FastHead = {
-      entries: recs,
-      parties: [...u.parties],
-      partied: u.partied,
-      offsets: [...u.offsets],
-      baseline: u.baseline,
-      terms: vocab.terms,
-      free: vocab.free,
-      index: {
-        docs: index.docs,
-        live: index.live,
-        keys: index.keys,
-        totalPostings: index.totalPostings,
-        liveTerms: index.liveTerms,
-        deltaCap: index.deltaCap,
-        chained: index.chained,
-      },
-      arrays: arrays.map((a) => [arrayKind(a), a.length]),
-      wide: wide as [number, 0 | 1][],
-    };
+    let arrays: FastArray[] = [];
+    let head: FastHead | LeanHead;
+    if (lean) {
+      head = { lean: true, entries: recs, parties: [...u.parties], partied: u.partied, offsets: [...u.offsets] };
+    } else {
+      const index = u.index.snapshot(); // Compacts first: no delta, no dead docs.
+      const vocab = u.vocab.snapshot();
+      // The vocabulary's fingerprints are left out (hashed again at the thaw: about 12 bytes a term, which zstd barely
+      // shrinks); the postings, forward arena and key offsets go as varint gaps (`gaps`), which zstd then shrinks well.
+      arrays = [
+        index.totalLens,
+        index.df,
+        index.lens,
+        index.where,
+        index.fwdStart,
+        index.fwdLen,
+        index.nPost,
+        gaps(index.keyStart),
+        gaps(index.fDocs),
+        index.fTfs,
+        gaps(index.fFwd),
+        index.bigTf,
+        index.freeDocs,
+      ];
+      const wide = [index.keyStart, index.fDocs, index.fFwd].map((a) => [a.length, a instanceof Uint32Array ? 1 : 0]);
+      head = {
+        entries: recs,
+        parties: [...u.parties],
+        partied: u.partied,
+        offsets: [...u.offsets],
+        baseline: u.baseline,
+        terms: vocab.terms,
+        free: vocab.free,
+        index: {
+          docs: index.docs,
+          live: index.live,
+          keys: index.keys,
+          totalPostings: index.totalPostings,
+          liveTerms: index.liveTerms,
+          deltaCap: index.deltaCap,
+          chained: index.chained,
+        },
+        arrays: arrays.map((a) => [arrayKind(a), a.length]),
+        wide: wide as [number, 0 | 1][],
+      };
+    }
     const json = utf8.encode(JSON.stringify(head));
     let size = 8 + json.byteLength;
     for (const a of arrays) size = align8(size) + a.byteLength;
@@ -2495,7 +2524,7 @@ export class ItemCache {
     yield;
     const packedBody = Bun.zstdCompressSync(body, { level: 3 });
     const blob = new Uint8Array(8 + packedBody.byteLength + textBytes);
-    blob.set(FAST_MAGIC, 0);
+    blob.set(lean ? LEAN_MAGIC : FAST_MAGIC, 0);
     new DataView(blob.buffer).setUint32(4, packedBody.byteLength, true);
     blob.set(packedBody, 8);
     let t = 8 + packedBody.byteLength;
@@ -2611,6 +2640,76 @@ export class ItemCache {
       u.byDoc[r.d] = entry;
       if (j % STEP_ITEMS === STEP_ITEMS - 1) yield;
     }
+    return u;
+  }
+
+  /**
+   * The thaw of a drain blob (S1-P3): the index and vocabulary the drain left out are rebuilt from the items' texts,
+   * in old insertion order as a compact thaw builds them — the packed texts stay packed (`packedFrom`), and the index
+   * pass reads each item's text once through the shared decode memo, where any later read then hits. Doc numbers and
+   * vocabulary ids are new, as after a compact thaw.
+   */
+  private *leanThawSteps(f: FrozenUser, blob: Uint8Array): Generator<undefined, UserCache> {
+    const dv = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+    const bodyLen = dv.getUint32(4, true);
+    const body = Bun.zstdDecompressSync(blob.subarray(8, 8 + bodyLen));
+    const jsonLen = new DataView(body.buffer, body.byteOffset, body.byteLength).getUint32(0, true);
+    const head = JSON.parse(fromUtf8.decode(body.subarray(8, 8 + jsonLen))) as LeanHead;
+    const u = new UserCache(f.scope, this.limits.releaseTerms);
+    u.revision = f.revision;
+    u.seen = f.seen;
+    u.probes = f.probes;
+    u.parties = new Map(head.parties);
+    u.partied = head.partied;
+    u.offsets = new Map(head.offsets);
+    let t = 8 + bodyLen;
+    const items = head.entries;
+    const entries: Entry[] = new Array(items.length);
+    for (let j = 0; j < items.length; j++) {
+      const r = items[j]!;
+      let item: ContextItem;
+      if (r.p) {
+        item = packedFrom(r.i, blob.subarray(t, t + r.p[0]), r.p[1]);
+        t += r.p[0];
+      } else item = r.i as ContextItem;
+      const sketch = r.k === undefined ? undefined : r.k && { lo: r.k[0], hi: r.k[1], numbers: r.k[2] };
+      const entry: Entry = {
+        item,
+        fetchedAt: r.f,
+        // Another process's marks mean nothing here: 0 is older than any signal this process takes (D425).
+        readMark: f.fromDisk ? 0 : r.m,
+        doc: -1,
+        sketch,
+        prev: null,
+        next: null,
+        raw: r.r,
+        seq: r.q,
+        dates: thawedDates(r.t),
+        dayIndex: thawedDates(r.t),
+        stamp: f.stamps?.[j] ?? 0,
+      };
+      if (r.s === 1) {
+        entry.synced = true;
+        u.synced++;
+        this.syncedHeld?.(u.scope, item.sourceId, item.id, true);
+      }
+      u.items.set(item.id, entry);
+      link(u, entry);
+      indexEntry(u, entry, 1);
+      entries[j] = entry;
+      if (j % STEP_ITEMS === STEP_ITEMS - 1) yield;
+    }
+    // Indexed in their old insertion order; a packed item's text decodes once here, into the memo later reads share.
+    const order = entries.map((_, j) => j).sort((a, b) => entries[a]!.seq - entries[b]!.seq);
+    for (let k = 0; k < order.length; k++) {
+      const j = order[k]!;
+      const doc = this.index(u, entries[j]!.item);
+      entries[j]!.doc = doc;
+      u.byDoc[doc] = entries[j]!;
+      if (k % STEP_ITEMS === STEP_ITEMS - 1) yield;
+    }
+    u.index.settle();
+    u.baseline = u.vocab.size;
     return u;
   }
 
@@ -2754,6 +2853,7 @@ export class ItemCache {
   private *thawSteps(f: FrozenUser): Generator<undefined, UserCache> {
     const blob = f.blob;
     if (isFast(blob)) return yield* this.fastThawSteps(f, blob);
+    if (isLean(blob)) return yield* this.leanThawSteps(f, blob);
     const body = JSON.parse(fromUtf8.decode(Bun.zstdDecompressSync(blob))) as FrozenBody;
     yield;
     const u = new UserCache(f.scope, this.limits.releaseTerms);

@@ -916,3 +916,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2038 | 2026-11-21 | Adopted: a kicked step's freed turn goes to the waiting tenants in turn, not to the first-come queue. | adopted |
 | D2039 | 2026-11-21 | Adopted: a tight tenant pace is spent in value order — a background read's `tier` asks more of the bucket be free. | adopted |
 | D2040 | 2026-11-21 | Adopted: the sync's backfill and fairness signals in `/metrics` (S1-P2). | adopted |
+| D2041 | 2026-11-21 | Adopted: the shutdown drain writes live users most recently seen first, in a lean blob that leaves the index and vocabulary out… | adopted |
