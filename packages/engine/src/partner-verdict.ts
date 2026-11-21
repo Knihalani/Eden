@@ -569,27 +569,28 @@ export const docSpan = (item: ContextItem, written: number): [number, number] | 
  * Groups: 1-3 ISO; 4 day, 5 month, 6 year; 7 month, 8 day, 9 year; 10 month, 11 year (`MONTH` captures).
  */
 const DOC_DATE = new RegExp(
-  String.raw`\b(\d{4})-(\d{1,2})-(\d{1,2})|\b(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s+(?:of\s+)?(?:${MONTH})\b\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s+(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s*,?\s*(\d{4})|[-–—:(|]\s*(${MONTH})\b(?!\s*,?\s*\d{4})`,
+  String.raw`\b(\d{4})-(\d{1,2})-(\d{1,2})|\b(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s+(?:of\s+)?(?:${MONTH})\b\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s+(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s*,?\s*(\d{4})|[-–—:(|]\s*(${MONTH})\b(?!\s*,?\s*\d)`,
   "gi",
 );
 /** What `staleSelf` and `staleIds` read of an item once: whether it declares itself dead, and its own expiry. */
 const staleOf = (item: ContextItem, written: number): { declared: boolean; expiry: number | null } => {
   let r = staleMemo.get(item);
-  if (r === undefined || r.written !== written) {
+  if (r === undefined) {
     r = {
-      written,
       declared:
         STALE_TAG.test(item.title) ||
         STALE_CAPS.test(item.title) ||
         STALE_TITLE.test(item.title) ||
         STALE_DECLARED.test(item.text.slice(0, STALE_CHARS)),
+      // Resolved once, against the write time first seen: a yearless deadline that has already
+      // passed does not roll into next year on every later request.
       expiry: expiryOf(item, written),
     };
     staleMemo.set(item, r);
   }
   return r;
 };
-const staleMemo = new WeakMap<ContextItem, { written: number; declared: boolean; expiry: number | null }>();
+const staleMemo = new WeakMap<ContextItem, { declared: boolean; expiry: number | null }>();
 /** A month name in the request's own words ("balance on 30 September?") — like a literal year, it dates the ask. */
 const MONTH_NAME = new RegExp(String.raw`\b(?:${MONTH})\b`, "i");
 
