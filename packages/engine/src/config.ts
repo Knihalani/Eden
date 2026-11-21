@@ -398,8 +398,9 @@ export interface EngineConfig {
   sourceKindPrior: number;
   /**
    * Extra kind rules for `sourceKindPrior`, consulted before the static table (`source-prior.ts`): each entry
-   * `"word word …:mean"` gives sources whose name holds one of the words a draw of `mean` (0-1), so a screen — or a
-   * tenant's own counts, if the o4-new-user §5a prior is ever adopted — can mark the connectors it knows are used.
+   * `"word word …:mean"` gives sources whose name holds one of the words a draw of `mean` (0-1) — a hyphenated
+   * token (`"google-calendar"`) names the connector id it appears in — so a screen — or a tenant's own counts, if
+   * the o4-new-user §5a prior is ever adopted — can mark the connectors it knows are used.
    * []: the static table alone.
    */
   sourceKindPriorExtra: string[];

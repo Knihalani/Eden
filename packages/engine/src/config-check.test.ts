@@ -28,7 +28,7 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     expect(() => checkEngineConfig({ x: 1 }, { where: "--set" })).toThrow(/^--set: unknown key "x"/);
     // A malformed sourceKindPriorExtra entry is refused at startup, not per ask (live routing would 503).
     expect(() => checkEngineConfig({ sourceKindPriorExtra: ["crm 0.75"] })).toThrow(
-      /sourceKindPriorExtra: "crm 0\.75"/,
+      /sourceKindPriorExtra: entry 0 is not/,
     );
     expect(() => checkEngineConfig({ sourceKindPriorExtra: ["crm:2"] })).toThrow(/sourceKindPriorExtra/);
     expect(() =>

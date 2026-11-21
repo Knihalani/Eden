@@ -69,15 +69,23 @@ describe("sourcePriors (D2015)", () => {
     // An extra rule wins over the static table when both match.
     const over = sourcePriors(sources, 20, ["gmail:0.3"])!;
     expect(over.get("gmail")).toEqual({ alpha: 6, beta: 14 });
-    // An entry named like a hyphenated connector id matches it (the words split on hyphens too).
-    const hyph = sourcePriors([{ id: "google-calendar", description: "the calendar" }], 20, ["google-calendar:0.3"])!;
+    // An entry named like a hyphenated connector id matches that id — and not a source sharing one word.
+    const hyph = sourcePriors(
+      [
+        { id: "google-calendar", description: "the user's calendar" },
+        { id: "caldav-4", description: "a calendar server" },
+      ],
+      20,
+      ["google-calendar:0.3"],
+    )!;
     expect(hyph.get("google-calendar")).toEqual({ alpha: 6, beta: 14 });
-    // A malformed entry throws (a silent no-op would reshape no draw), the entry bounded and one line.
+    // caldav keeps the static calendar prior (0.75): "google-calendar" is not a substring of its id.
+    expect(hyph.get("caldav-4")).toEqual({ alpha: 15, beta: 5 });
+    // A malformed entry throws (a silent no-op would reshape no draw), naming the place but not the text.
     expect(() => sourcePriors(sources, 20, ["crm 0.75"])).toThrow("sourceKindPriorExtra");
     expect(() => sourcePriors(sources, 20, ["crm:2"])).toThrow("sourceKindPriorExtra");
-    expect(() => sourcePriors(sources, 20, [":0.5"])).toThrow("sourceKindPriorExtra");
-    expect(() => sourcePriors(sources, 20, ["bad\nentry:0.5"])).toThrow(/^sourceKindPriorExtra: "bad\\nentry:0\.5" /);
-    expect(() => sourcePriors(sources, 20, ["x".repeat(500)])).toThrow(/\.{3}" /);
+    expect(() => sourcePriors(sources, 20, [":0.5"])).toThrow(/^sourceKindPriorExtra: entry 0 is not /);
+    expect(() => sourcePriors(sources, 20, ["ok:0.5", "bad\nentry:0.5"])).toThrow(/entry 1 is not /);
     // Empty extra is the static table alone; strength 0 stays off.
     expect(sourcePriors(sources, 20, [])!.get("crm")).toEqual({ alpha: 0, beta: 10 });
     expect(sourcePriors(sources, 0, ["crm:0.75"])).toBeUndefined();

@@ -30,15 +30,11 @@ const ENTRY = /^((?:[\w-]+ +)*[\w-]+):(0(?:\.\d+)?|1(?:\.0*)?)$/;
  */
 export function extraKindRules(extra: readonly string[] | undefined): readonly { words: string[]; mean: number }[] {
   if (!extra || extra.length === 0) return [];
-  return extra.map((e) => {
+  return extra.map((e, i) => {
     const m = ENTRY.exec(e);
-    if (!m) {
-      // JSON.stringify keeps the quoted entry on one line and bounds escapes; the slice bounds its length.
-      const shown = JSON.stringify(e.length > 120 ? `${e.slice(0, 117)}...` : e);
-      throw new Error(`sourceKindPriorExtra: ${shown} is not "word word …:mean"`);
-    }
-    // Words split on hyphens too: a rule named like a hyphenated connector id ("google-calendar") matches it.
-    return { words: m[1]!.toLowerCase().split(/[ -]+/), mean: Number(m[2]) };
+    // The error names the entry's place, never its text: a pasted secret would land in startup logs otherwise.
+    if (!m) throw new Error(`sourceKindPriorExtra: entry ${i} is not "word word …:mean"`);
+    return { words: m[1]!.toLowerCase().split(/ +/), mean: Number(m[2]) };
   });
 }
 
@@ -64,7 +60,10 @@ export function sourcePriors(
         .split(/\W+/)
         .filter((w) => w.length > 0),
     );
-    const kind = table.find((k) => k.words.some((w) => words.has(w)));
+    // A plain word matches the source's words; a hyphenated token ("google-calendar") matches as a
+    // substring of the id, so it overrides the connector it names and not every source sharing one word.
+    const id = s.id.toLowerCase();
+    const kind = table.find((k) => k.words.some((w) => words.has(w) || (w.includes("-") && id.includes(w))));
     priors.set(
       s.id,
       kind === undefined
