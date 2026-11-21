@@ -480,7 +480,11 @@ export function messageParts(
       // Nothing the conversation has not already said (every content word in it): the agent has this part. A sender
       // stays: who said the rest is not in its words.
       const words = key.match(WORDS) ?? [];
-      if (!/^from:/.test(key) && !words.some((w) => w.length > 1 && !isStopword(w) && !known(w))) continue;
+      // A part with no word of two or more characters is tested by its one-character words (D2022): a flattened
+      // table's row of single cells ("| A | 2") is data, not a repeat.
+      const anyLong = words.some((w) => w.length > 1);
+      if (!/^from:/.test(key) && !words.some((w) => (w.length > 1 || !anyLong) && !isStopword(w) && !known(w)))
+        continue;
       seen.add(key);
       parts.push({ text: part, quoted, header });
     }

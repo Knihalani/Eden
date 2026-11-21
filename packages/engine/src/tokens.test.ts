@@ -67,6 +67,18 @@ describe("compactParts in messageParts", () => {
     expect(on).toContain("| Rose Kimura | pending |");
     expect(Buffer.byteLength(on)).toBeLessThanOrEqual(80);
   });
+
+  test("a row of one-character cells is data, not a repeat: the known test does not drop it (D2022, the review)", () => {
+    const rows = "| A | 2 | | B | 7 |";
+    const on = messageParts(rows, undefined, 2026, "Robin Carter", undefined, true).map((p) => p.text);
+    expect(on).toContain("| A | 2 |");
+    expect(on).toContain("| B | 7 |");
+    // A row whose evidence word was already shown is still a repeat; one it was not is kept.
+    const known = new Set(["2"]);
+    const dup = messageParts(rows, (w) => known.has(w), 2026, "Robin Carter", undefined, true).map((p) => p.text);
+    expect(dup).not.toContain("| A | 2 |");
+    expect(dup).toContain("| B | 7 |");
+  });
 });
 
 describe("askDedup in renderPacket", () => {

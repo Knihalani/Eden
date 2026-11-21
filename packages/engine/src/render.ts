@@ -506,22 +506,33 @@ function unknownParts(all: AllParts, known: (word: string) => boolean): { parts:
  */
 function saysUnknown(s: string, known: (word: string) => boolean): boolean {
   let start = -1;
+  // A part with no word of two or more characters is tested by its one-character words instead (D2022, the review):
+  // a flattened table's row of single cells ("| A | 2") is data, not a repeat — `known` holds no word of one
+  // character, so any non-stopword one answers.
+  let long = false;
+  let short = false;
   for (let i = 0; i <= s.length; i++) {
     const c = i < s.length ? s.charCodeAt(i) : 32;
     let k = WORD_UNITS[c]!;
-    if (k === 0 && (k = readWordUnit(c)) === 0)
-      return wordsIn(s).some((w) => w.length > 1 && !isStopword(w) && !known(w));
+    if (k === 0 && (k = readWordUnit(c)) === 0) {
+      const ws = wordsIn(s);
+      const anyLong = ws.some((w) => w.length > 1);
+      return ws.some((w) => (w.length > 1 || !anyLong) && !isStopword(w) && !known(w));
+    }
     if (k === 1) {
       if (start < 0) start = i;
     } else if (start >= 0) {
+      const w = s.slice(start, i);
       if (i - start > 1) {
-        const w = s.slice(start, i);
+        long = true;
         if (!isStopword(w) && !known(w)) return true;
+      } else if (!isStopword(w) && !known(w)) {
+        short = true;
       }
       start = -1;
     }
   }
-  return false;
+  return !long && short;
 }
 
 /** A code unit in a surrogate pair's range: `wordsIn` then reads the string by its regex. */
