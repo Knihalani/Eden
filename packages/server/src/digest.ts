@@ -361,8 +361,8 @@ export function formatDigest(d: Digest): string {
     const tokens = Math.round(d.packets.bytes / 4);
     const per1k = r.events > 0 ? Math.round(tokens / (r.events / 1_000)) : 0;
     const partial =
-      d.packets.counted < d.used.injections
-        ? ` (${d.packets.counted} of ${d.used.injections} injections name a size — a log from before the field ships none)`
+      d.packets.counted < d.packets.total
+        ? ` (${d.packets.counted} of ${d.packets.total} injections name a size — a log from before the field ships none)`
         : "";
     out.push(
       `- packet text handed to the agent: ~${tokens.toLocaleString()} tokens` +

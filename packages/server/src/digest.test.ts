@@ -110,7 +110,8 @@ describe("digest (D293)", () => {
     expect(d.packets).toEqual({ bytes: 400, counted: 1, total: 2 });
     expect(d.used.injections).toBe(1);
     expect(d.used.used).toBe(0);
-    expect(d.used.bySource["g"]).toBeUndefined();
+    // The reset's own sourceId adds no verdict row; "gmail" is i2's, alone.
+    expect(d.used.bySource).toEqual({ gmail: { injections: 1, used: 0 } });
     // A sized reset must not hide the sizeless record: coverage is partial, and says so.
     expect(formatDigest(d)).toContain("1 of 2 injections name a size");
   });
