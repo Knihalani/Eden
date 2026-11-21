@@ -867,6 +867,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2009 | 2026-11-20 | Adopted: a per-user alias table — name parts to their full names — expands a request's anchors, so a person asked for by one form anchors… | adopted |
 | D2011 | 2026-11-20 | Adopted: `pushOpenConstraint` — an opt-in mild filter: on a request the push opened by shape rather than a listed verb, a packet goes only… | adopted |
 | D2012 | 2026-11-20 | Adopted: a key EDEN_ENGINE_CONFIG names that the running version does not have is warned about on stderr and skipped, not fatal. | adopted |
+| D2018 | 2026-11-21 | Adopted: `partner-core.ts` — the partner's fields and wiring as a base class. | adopted |
 | D2017 | 2026-11-21 | Adopted: `partner.ts` splits, first its frozen-blob slice into `partner-freeze.ts`. | adopted |
 | D2013 | 2026-11-21 | Adopted: `AsyncEden` — the Python client's calls as coroutines. | adopted |
 | D2014 | 2026-11-21 | Adopted: the MCP server drains the pending queue — an MCP-only agent gets push too. | adopted |
