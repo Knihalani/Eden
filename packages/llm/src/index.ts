@@ -10,7 +10,7 @@ export { PRICES, priceFor, costOf, type Price } from "./pricing";
 export { Budget, DEFAULT_LIMITS, TenantSpend, type BudgetLimits, type Reservation } from "./budget";
 export { FakeModel } from "./fake";
 export { estimateTokens } from "./tokens";
-export { Pacer, RequestCapReached, retryAfterMs, type PacingOptions } from "./pacing";
+export { ModelHeldError, Pacer, RateHold, RequestCapReached, retryAfterMs, type PacingOptions } from "./pacing";
 export {
   AnthropicModel,
   ANTHROPIC_PRICES,

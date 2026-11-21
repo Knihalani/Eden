@@ -15,7 +15,7 @@ import {
   type UsageSink,
 } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
-import { Budget, DEFAULT_LIMITS, TenantSpend, type Model } from "@eden/llm";
+import { Budget, DEFAULT_LIMITS, ModelHeldError, TenantSpend, type Model } from "@eden/llm";
 import { WorkerPool } from "@eden/primitives";
 import { QueryPlanner, type SourceResolver } from "@eden/sources";
 import { sanitizeForStore } from "@eden/redact";
@@ -109,11 +109,13 @@ export type ModelRole = "reader" | "check";
  * parse, which happens on about 2% of healthy checks (docs/research/n5-widen-check.md), so the alert reads `error`
  * only. Card calls are not counted here: `CardEnricher` has no failure hook.
  */
-export const modelFailures: Record<`${ModelRole}:${"error" | "unreadable"}`, number> = {
+export const modelFailures: Record<`${ModelRole}:${"error" | "unreadable" | "held"}`, number> = {
   "reader:error": 0,
   "reader:unreadable": 0,
+  "reader:held": 0,
   "check:error": 0,
   "check:unreadable": 0,
+  "check:held": 0,
 };
 
 /** The model roles whose prompt-cache use is counted for `/metrics` (D1800): the card role's calls too. */
@@ -190,7 +192,10 @@ export function readerFailureLog(
   let logged = false;
   return (error: unknown): void => {
     const message = error instanceof Error ? error.message : String(error);
-    modelFailures[`${role}:${UNREADABLE.test(message) ? "unreadable" : "error"}`]++;
+    // A held call sent nothing (D2046): it counts under `held`, not as a provider error.
+    const kind = error instanceof ModelHeldError ? "held" : UNREADABLE.test(message) ? "unreadable" : "error";
+    modelFailures[`${role}:${kind}`]++;
+    if (error instanceof ModelHeldError) return;
     if (logged) return;
     logged = true;
     const raw = error instanceof Error ? error.message : String(error);
