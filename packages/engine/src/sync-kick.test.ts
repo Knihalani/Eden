@@ -506,6 +506,52 @@ describe("syncKick (D751)", () => {
     }
   });
 
+  test("a storm of one tenant's users does not hold another tenant's behind it: kicks take tenants in turn (B2)", async () => {
+    const flight = { now: 0, max: 0, users: new Set<string>(), maxUsers: 0 };
+    const a = new Listing("a", 30, 1, flight);
+    const b = new Listing("b", 30, 1, flight);
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    a.gate = gate;
+    b.gate = gate;
+    const { partner, sync, settle } = build({ syncKick: true }, [a, b]);
+    const ev = (tenantId: string, userId: string): AgentEvent =>
+      ({ tenantId, userId, sessionId: "s1", at: T0, kind: "session_start" }) as AgentEvent;
+    const ta = (userId: string): Scope => ({ tenantId: "ta", userId });
+    const tb = (userId: string): Scope => ({ tenantId: "tb", userId });
+    // Four of tenant ta start (the gate holds their first page); three more wait, then one of tb arrives last.
+    for (let i = 1; i <= 4; i++) await partner.observe(ev("ta", `u${i}`));
+    await Bun.sleep(5);
+    for (let i = 5; i <= 7; i++) await partner.observe(ev("ta", `u${i}`));
+    await partner.observe(ev("tb", "w1"));
+    open();
+    const all = [...Array.from({ length: 7 }, (_, i) => ta(`u${i + 1}`)), tb("w1")];
+    for (let again = true; again;) {
+      again = false;
+      for (const s of all) {
+        const step = sync.kicked(s);
+        if (step) {
+          await step;
+          again = true;
+        }
+      }
+    }
+    await settle();
+    // First pages in start order. First-come order would run every waiting ta user before tb's (u5, u6, u7, w1);
+    // taking turns starts w1 as soon as ta's first wait ends.
+    expect(a.asked.filter((x) => x.endsWith("@0"))).toEqual([
+      "u1@0",
+      "u2@0",
+      "u3@0",
+      "u4@0",
+      "u5@0",
+      "w1@0",
+      "u6@0",
+      "u7@0",
+    ]);
+    expect(sync.warm(tb("w1"))).toBe(true);
+  });
+
   test("a tick leaves users waiting for a kick turn alone: users arriving together read no more at once than four pools", async () => {
     // 24 users of 40 sources arrive together and a tick comes while they are read. The tick's 16 lanes stepping the
     // waiting users as well (as pools: 512 listings at once in the review's probe; as batches: 128 more) would pass
