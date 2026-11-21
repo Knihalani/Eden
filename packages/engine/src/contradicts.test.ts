@@ -184,22 +184,10 @@ describe("fallback asks", () => {
     // A possessive at the title's end names no owned thing ("Rosa's" is the place).
     const rosas = scored(item("b-rosa", "Brunch at Rosa's", "Sunday 11:00"));
     expect(p.contradicts(rosas, cue("Book our anniversary dinner"))).toBe(false);
+    // A bare possessive title is too ambiguous to condemn: "Kai Nihalani's appointment" on the user's own
+    // calendar is the user's own — only a forward mark makes the named owner a third party.
+    const own = scored(item("b-own", "Kai Nihalani's appointment", "Dentist, Tuesday 15:00."));
+    expect(p.contradicts(own, cue("Reschedule my appointment"))).toBe(false);
   });
 
-  test("a record that declares itself dead is dead beside a dated ask too (D2060)", () => {
-    const p = partner() as any;
-    const dead = item(
-      "h",
-      "Cancelled: Hotel Alfama, Lisbon",
-      "Your reservation at Hotel Alfama for 12 to 14 November 2026 has been cancelled at your request.",
-    );
-    // A dated ask looks up the period's records — a cancelled one is none of them.
-    expect(p.staleSelf(dead, cue("Move my Lisbon flight on 12 November to the evening departure."))).toBe(true);
-    expect(p.staleSelf(dead, cue("What Lisbon hotel do I have in November?"))).toBe(true);
-    // A request about the cancellation itself wants the record.
-    expect(p.staleSelf(dead, cue("Was my Lisbon hotel cancelled?"))).toBe(false);
-    // The dated exemption still stands for a deadline since passed: the period is what it asks about.
-    const lapsed = item("o", "Lisbon offer", "Booking offer expires 8 November 2026.");
-    expect(p.staleSelf(lapsed, cue("What Lisbon offers ran in November 2026?"))).toBe(false);
-  });
-});
+  

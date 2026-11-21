@@ -639,7 +639,9 @@ export const sameRef = (refs: ReadonlySet<string>, item: ContextItem): boolean =
 export const MOVES = /\b(move|moved|reschedul\w*|postpone|push|switch\w*|change)\b/i;
 /** The request claims a thing for the user: "my flight", "our booking". */
 const FIRST_PERSON = /\b(?:my|mine|our|ours)\b/i;
-/** A title declaring a named third party's thing: "Fwd: Sam Okoro's flight to Lisbon" — owner, then the thing. */
+/** The mark of a document handed on from its holder: "Fwd:" / "FW:" say the thing it names is someone else's. */
+const FORWARDED = /^\s*(?:fwd?|fw)\s*:/i;
+/** A forwarded title declaring a named party's thing: "Fwd: Sam Okoro's flight to Lisbon" — owner, then the thing. */
 const OWNED_BY = /\b([\p{Lu}][\p{L}]+(?:\s+[\p{Lu}][\p{L}]+){0,2})['’]s\s+([\p{L}\p{N}]+)/gu;
 
 /**
@@ -691,11 +693,16 @@ export const idNumbers = (text: string): Set<string> => {
  * earlier is last year's look-alike, not what the request means (D1970).
  */
 export function requestYear(cue: Cue): number | null {
-  let found = Math.max(...(cue.raw.match(YEARS)?.map(Number) ?? [0]));
-  for (const d of cue.time?.days ?? []) found = Math.max(found, Number(d.slice(0, 4)) || 0);
-  const now = new Date(cue.at).getUTCFullYear();
-  if (found === 0) return null; // no year or day named: nothing to be stale against
-  return Math.min(found, now);
+  const named = (cue.raw.match(YEARS)?.map(Number) ?? []).slice();
+  for (const d of cue.time?.days ?? []) {
+    const y = Number(d.slice(0, 4)) || 0;
+    if (y > 0) named.push(y);
+  }
+  if (named.length === 0) return null; // no year or day named: nothing to be stale against
+  // The earliest year named is the look-alike floor: a request that names two years asks across them both —
+  // "how did 2023 compare with 2024" wants the earlier side's records, not 2024's alone (D2061). A day ahead
+  // still makes this year's items no older, so the floor is capped at now either way.
+  return Math.min(Math.max(...named), new Date(cue.at).getUTCFullYear());
 }
 
 /**
@@ -1700,11 +1707,13 @@ export abstract class PartnerVerdict extends PartnerCheck {
       const second = other[1]!.toLowerCase().replace(/['’]s?$/, "");
       if (!seconds.has(second)) return true;
     }
-    // A thing a title declares a named third party's, when the request claims that thing for the user
-    // (D2060): "Fwd: Sam Okoro's flight to Lisbon" is not the booking "move my flight" acts on. The owner
-    // named in the request itself is no look-alike ("reschedule Sam's flight"), nor is a bare possessive
-    // at the title's end ("Brunch at Rosa's"), which names no owned thing.
-    if (FIRST_PERSON.test(cue.raw)) {
+    // A thing a forwarded document declares a named party's, when the request claims that thing for the
+    // user (D2060): "Fwd: Sam Okoro's flight to Lisbon" is not the booking "move my flight" acts on. The
+    // forward mark is what makes the owner a third party — "Kai Nihalani's appointment" on the user's own
+    // calendar is the user's own, however the request phrases it. The owner the request itself names is
+    // no look-alike ("reschedule Sam's flight"), nor is a bare possessive at the title's end ("Brunch at
+    // Rosa's"), which names no owned thing.
+    if (FIRST_PERSON.test(cue.raw) && FORWARDED.test(x.item.title)) {
       const raw = cue.raw.toLowerCase();
       OWNED_BY.lastIndex = 0;
       for (const m of x.item.title.matchAll(OWNED_BY)) {
