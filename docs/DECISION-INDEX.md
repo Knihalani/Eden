@@ -959,3 +959,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2081 | 2026-11-21 | Finding: Eden ~2×s hidden facts over ten-day horizons with a weak agent. | finding |
 | D2083 | 2026-11-21 | `pushCheckedCandidates` adopted. | adopted |
 | D2082 | 2026-11-21 | `pushCheckLate` adopted. | adopted |
+| D2086 | 2026-11-21 | Adopted: a loop-lag probe on every hermes-ab task. | adopted |
