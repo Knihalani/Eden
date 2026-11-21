@@ -516,7 +516,7 @@ const expiryOf = (item: ContextItem, writtenAt: number): number | null => {
  * when that month is still ahead). The body's dates never date the record — an expiry it mentions is not
  * the record's own time (`docYears`'s rule, D1982). Null when nothing dates it.
  */
-export const docSpan = (item: ContextItem): [number, number] | null => {
+export const docSpan = (item: ContextItem, written: number): [number, number] | null => {
   let lo = Infinity;
   let hi = 0;
   const stretch = (a: number, b: number) => {
@@ -527,7 +527,6 @@ export const docSpan = (item: ContextItem): [number, number] | null => {
     const t = Date.parse(item.meta.start);
     if (!Number.isNaN(t)) stretch(t, t + 86_400_000);
   }
-  const written = item.updatedAt ?? Date.now();
   for (const m of item.title.matchAll(DOC_DATE)) {
     let y = Number(m[1] ?? m[6] ?? m[9] ?? m[11]);
     const month =
@@ -536,10 +535,14 @@ export const docSpan = (item: ContextItem): [number, number] | null => {
     if (m[10] !== undefined) day = 0; // month-year alone: the month is the range
     if (month < 0 || month > 11 || day > 31) continue;
     if (!y) {
-      // No year written: the record's own date is never in its future — a "September statement" updated in
-      // November is this September's, not next year's (which would outrank the current November revision).
+      // No year written: the nearest year's date — a "September statement" updated in November is this
+      // September's (which would otherwise outrank the current November revision), and "renews on
+      // 8 November" written three days earlier is the coming one, not last year's.
       y = new Date(written).getUTCFullYear();
-      if (Date.UTC(y, month, day || 1) > written) y--;
+      const half = 365.25 * 86_400_000 / 2;
+      const d = Date.UTC(y, month, day || 1);
+      if (d - written > half) y--;
+      else if (written - d > half) y++;
     }
     day === 0
       ? stretch(Date.UTC(y, month, 1), Date.UTC(y, month + 1, 1))
@@ -565,22 +568,26 @@ const DOC_DATE = new RegExp(
   "gi",
 );
 /** What `staleSelf` and `staleIds` read of an item once: whether it declares itself dead, and its own expiry. */
-const staleOf = (item: ContextItem): { declared: boolean; expiry: number | null } => {
+const staleOf = (item: ContextItem, written: number): { declared: boolean; expiry: number | null } => {
   let r = staleMemo.get(item);
-  if (r === undefined) {
+  if (r === undefined || r.written !== written) {
     r = {
+      written,
       declared:
         STALE_TAG.test(item.title) ||
         STALE_CAPS.test(item.title) ||
         STALE_TITLE.test(item.title) ||
         STALE_DECLARED.test(item.text.slice(0, STALE_CHARS)),
-      expiry: expiryOf(item, item.updatedAt ?? Date.now()),
+      expiry: expiryOf(item, written),
     };
     staleMemo.set(item, r);
   }
   return r;
 };
-const staleMemo = new WeakMap<ContextItem, { declared: boolean; expiry: number | null }>();
+const staleMemo = new WeakMap<
+  ContextItem,
+  { written: number; declared: boolean; expiry: number | null }
+>();
 
 /** A number followed by a measure or money word is a quantity ("650 GBP", "30 days"), not an identifier. */
 export const QUANTITY = /^\s*(?:GBP|USD|EUR|pence|kg|km|miles?|%|days?|weeks?|months?|years?|people|of us)\b/i;
@@ -1547,7 +1554,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     // A request that names its own year asks for that year's record: whatever state it is in now is the
     // answer. The year is the raw text's alone — "today" resolving to a day of this year is no exemption.
     if (ASKS_OLD.test(cue.raw) || cue.raw.match(YEARS) !== null) return false;
-    const r = staleOf(item);
+    const r = staleOf(item, item.updatedAt ?? cue.at);
     return r.declared || (r.expiry !== null && r.expiry <= cue.at);
   }
 
@@ -1588,7 +1595,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       if (d !== undefined) n = d[0];
       for (const x of peers)
         if (approve(x) && !this.staleSelf(x.item, cue) && anchoredOf(x.item).includes(i)) {
-          const span = docSpan(x.item);
+          const span = docSpan(x.item, x.item.updatedAt ?? cue.at);
           if (span !== null && span[0] > n) n = span[0];
         }
       return n;
@@ -1596,7 +1603,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     return (item: ContextItem) => {
       if (item.meta?.start !== undefined) return false;
       if (!yearless || ASKS_OLD.test(cue.raw)) return false;
-      const span = docSpan(item);
+      const span = docSpan(item, item.updatedAt ?? cue.at);
       if (span === null) return false;
       const an = anchoredOf(item);
       return an.length > 0 && an.every((i) => span[1] <= newestE[i]!);
@@ -1711,8 +1718,9 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const acts = this.acts(s, cue, eventKind);
     // A look-alike that contradicts the request's anchors is not grounded either (D1970), nor the copy that
     // reads stale beside the current one.
+    const staleOf = this.staleSibling(s, cue, cue.entities, candidates);
     const pool = candidates.filter(
-      (x) => !bulkMail(x.item) && !this.contradicts(x, cue) && !this.staleSelf(x.item, cue),
+      (x) => !bulkMail(x.item) && !this.contradicts(x, cue) && !this.staleSelf(x.item, cue) && !staleOf(x.item),
     );
     const time = cue.time;
     // A `dayCls` seat counts as on the day beside a timed `meta.start` day (D1978) — except a bare-weekday one
