@@ -189,7 +189,7 @@ describe.skipIf(!python)("the MCP-only installer", () => {
 
     // Kilo Code (JSONC): the mcp table gets a "local" entry with a command array + environment.
     const kilo = dir(base, "kilo/kilo.jsonc");
-    writeFileSync(kilo, '{ // kilo is jsonc\n  "mcp": {}}');
+    writeFileSync(kilo, '{ // kilo is jsonc\n  "mcp": {},\n}\n');
     const kr = run(
       ["--kilo-code-config", kilo, "--agents", "kilo-code", "--remote", "--eden-home", join(base, "eh")],
       env,
@@ -205,10 +205,11 @@ describe.skipIf(!python)("the MCP-only installer", () => {
 
     // VS Code user mcp.json: a plain `servers` table, stdio entries.
     const vsc = dir(base, "vsc/User/mcp.json");
-    writeFileSync(vsc, "{}");
+    writeFileSync(vsc, '{ "servers": { "other": { "command": "x" }, }, }'); // trailing commas
     const vr = run(["--vscode-config", vsc, "--agents", "vscode", "--remote", "--eden-home", join(base, "eh")], env);
     expect(vr.exitCode, vr.stderr.toString()).toBe(0);
     const v = JSON.parse(readFileSync(vsc, "utf8"));
+    expect(v.servers.other).toEqual({ command: "x" });
     expect(v.servers.eden.type).toBe("stdio");
     expect(v.servers.eden.command).toBe("python3");
     expect(v.servers.eden.env.EDEN_API_KEY).toBe("k9");
