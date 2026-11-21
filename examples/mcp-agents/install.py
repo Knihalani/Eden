@@ -116,9 +116,13 @@ def read_json(path):
 def write_text(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
-    tmp.chmod(mode)
+    # 0600 from creation, not after: a merged EDEN_API_KEY must never sit in a readable file —
+    # not for the tmp's brief life, and not under an existing config's looser mode.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    mode = (path.stat().st_mode & 0o700) if path.exists() else 0o600
+    tmp.chmod(mode or 0o600)
     tmp.replace(path)
 
 
@@ -282,7 +286,6 @@ def merge_agent(name, config, fmt, mcp_py, env, remove=False):
             servers["eden"] = entry_for("mcpservers", mcp_py, env)
             write_json(config, data)
         return True
-
     if fmt == "goose":
         return merge_goose(config, mcp_py, env, remove)
     if fmt == "codex":
