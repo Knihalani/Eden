@@ -270,4 +270,16 @@ describe("the `item` ask runs the same freshness check (D2022, the review)", () 
     expect(r.answer).toContain("Harlow invoice on hold");
     expect(citedIds(r)).toEqual([HOLD]);
   });
+
+  test("a re-read that finds a newer copy serves the new version, not the superseded one (the review)", async () => {
+    const { src, p, user, ask } = await setup();
+    expect(citedIds(await ask())).toContain(HOLD);
+    expect(p.sourceChanged(user, "mail")).toBe(true);
+    // The source now holds a changed copy of the same ref.
+    src.add("hold", "Harlow invoice on hold", "Harlow invoice payments resumed once the dispute settled", T0);
+    const r = await p.ask({ ...user, sessionId: "s1", question: "Is the Harlow invoice on hold?", itemId: HOLD });
+    expect(citedIds(r)).toEqual([HOLD]);
+    expect(r.answer).toContain("resumed once the dispute settled");
+    expect(r.answer).not.toContain("until the dispute ends");
+  });
 });

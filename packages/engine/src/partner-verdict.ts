@@ -1032,15 +1032,17 @@ export abstract class PartnerVerdict extends PartnerCheck {
       if (held.length === 0 || s.closed) {
         return { answer: ITEM_GONE, citations: [], usedModel: false, costUsd: 0, latencyMs };
       }
+      // `held` carries the copy the re-read confirmed — a changed one, where `item` is the superseded copy in hand.
+      const fresh = held[0]!.item;
       const focus = focusOf(itemCue);
-      const answer = renderPacket([item], {
+      const answer = renderPacket([fresh], {
         maxBytes: ASK_ITEM_BYTES + 1_024,
         focus,
         itemBytes: ASK_ITEM_BYTES,
         self: this.deps.cache.selfOf(s.scope),
         ...(this.config.compactParts ? { split: true } : {}),
       });
-      return { answer, citations: this.cited([item]), usedModel: false, costUsd: 0, latencyMs };
+      return { answer, citations: this.cited([fresh]), usedModel: false, costUsd: 0, latencyMs };
     }
     // `requestGloss` (F1, D1153): a request in another language also searches with the English its words mean, ahead
     // of its own words so the cue's term cap keeps them. The request itself (`raw`) is left as written.
