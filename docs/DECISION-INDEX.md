@@ -946,6 +946,5 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2068 | 2026-11-21 | Adopted: a reset clears the cue cooldown, and the scorer measures a reset. | adopted |
 | D2069 | 2026-11-21 | Adopted: Eden for Gemini CLI (the eighth agent surface). | adopted |
 | D2070 | 2026-11-21 | Adopted: Eden for Cursor — the ninth agent surface. | adopted |
-| D2073 | 2026-11-21 | Adopted: the MCP `tools/call` dispatch compares the method, and the install home comes from the script's path. | adopted |
 | D2071 | 2026-11-21 | Adopted: Eden for Qwen Code — the tenth agent surface. | adopted |
 | D2073 | 2026-11-21 | Adopted: the MCP `tools/call` dispatch compares the method, and the install home comes from the script's path. | adopted |

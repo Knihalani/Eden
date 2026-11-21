@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 """Install Eden into every local agent home found: claude-code, cursor, gemini-cli, gptme, openclaw,
-opencode, pi.
-"""Install Eden into every local agent home found: claude-code, gemini-cli, gptme, openclaw,
-opencode, pi.
-"""Install Eden into every local agent home found: claude-code, gemini-cli, gptme, openclaw,
 opencode, pi, qwen-code.
 
 Each agent ships its own `examples/<agent>/install.py`; this detects which agents are present
@@ -36,7 +32,6 @@ AGENTS = {
     "pi": (("PI_HOME",), Path.home() / ".pi", "--pi-home"),
 }
 
-
 def resolved_home(name):
     """The home an agent's installer would use, same env/default resolution it performs."""
     envs, default, _ = AGENTS[name]
@@ -45,14 +40,11 @@ def resolved_home(name):
             return Path(os.environ[env]).expanduser()
     return Path(default).expanduser()
 
-
 def home_override(args, name):
     return getattr(args, f"{name.replace('-', '_')}_home")
 
-
 def detected():
     return [name for name in AGENTS if resolved_home(name).is_dir()]
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -119,7 +111,6 @@ def main():
     if failed:
         print(f"failed: {', '.join(failed)}", file=sys.stderr)
     return len(failed)
-
 
 if __name__ == "__main__":
     sys.exit(main())
