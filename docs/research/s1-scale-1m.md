@@ -181,7 +181,7 @@ Recommendations (the parent's call, not built here unless asked): a process-wide
 | P7 | Cluster router redundancy: several router processes behind the LB (stateless, same placement), measured throughput | B9 | with P5 | design |
 | P8 | Cells: ~10-20 nodes, their own routers, store buckets and alert scope; a tenant above one cell spread over cells by bucket range, a static top table | B10 | design only | design |
 | P9 | Model roles: a process-wide 429 backoff, contract-sized tenant cap | B8 | the parent's call | recommend |
-| P10 | Monitoring at fleet scale: recording rules per cell, paid tier or self-hosted Prometheus | B11 | docs | design |
+| P10 | Monitoring at fleet scale: recording rules per cell, paid tier or self-hosted Prometheus | B11 | shipped | the §8 SLO rows as real alerts in `deploy/monitoring/alerts.yaml` (D2047): first value p90, first-page backlog, connector 429 ratio, kick-queue starvation; a paid tier or self-hosted Prometheus stays the operator's choice (config.alloy writes to either) |
 
 **Pre-registered for P1 (before any run):** in the surge harness (§9), with a connector quota per tenant that refuses
 past its rate (429), P1 ships if, against main: users given their first page of every source within 5 minutes of
