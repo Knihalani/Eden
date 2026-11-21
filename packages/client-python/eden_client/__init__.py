@@ -455,12 +455,12 @@ class EdenClient:
         return ([injection] if injection else []) + self.pending()
 
     def ask(self, question: str, max_items: Optional[int] = None,
-            item: Optional[str] = None,
-            timeout_s: Optional[float] = None) -> Optional[Dict[str, Any]]:
+            timeout_s: Optional[float] = None,
+            item: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Asks Eden (the ``ask_context`` tool); the answer with citations, or None.
 
         ``item`` (D2022): a citation's item id from an earlier answer's Sources list; the answer is
-        that item's parts in full."""
+        that item's parts in full. It trails ``timeout_s`` so a positional ``timeout_s`` still binds."""
         body = {**self._who(), "question": question}
         if max_items is not None:
             body["maxItems"] = max_items
