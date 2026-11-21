@@ -821,6 +821,14 @@ export class SyncManager {
   }
 
   /**
+   * Whether the source can re-read one item by its ref (`Source.fetchesById`, or a `fetch` that reports gone): the
+   * `refs` notice then re-reads just the named ones, where a bare signal doubts every held copy (D2008). O(1).
+   */
+  fetchesById(scope: Scope, sourceId: string): boolean {
+    return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.fetches === true;
+  }
+
+  /**
    * Items a notification carried (`syncPush`, `ContextPartner.sourceItems`), already redacted: stored as synced, as a
    * poll would, with no call. The source's copy is not marked current by them (other changes may have come
    * unannounced): only a poll does that. Returns how many were new or changed; 0 for a source not synced yet.

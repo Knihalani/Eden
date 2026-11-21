@@ -360,7 +360,9 @@ sourceId, refs}` (at most 100 each), also exposed as `client.sourceItems` and `c
   p50 1,013 ms against 6 ms, an `ask_context` p50 588 ms against 2.3 ms and 7.4 connector calls a task against 2.0
   (A18, above). **It also makes `ask_context` slow** (CL4, D249): on Pi with signals, an ask took 1.35–1.59 s, almost all of it
   re-reading 4–5 doubted copies it cites; with the items pushed it took 0.19 s (heldout14 neutral tasks, one seed,
-  Anthropic-direct lab figures, docs/research/cl-cl4.md).
+  Anthropic-direct lab figures, docs/research/cl-cl4.md). When the source can re-read items by ref, the answer adds
+  `advice: "refs"` and the clients report it once per source through `onError`/`n` (D2008): send the changed refs or
+  items instead.
 
 Declare the sources you forward: `"notifies": true` in the user's source spec (`EDEN_USER_SOURCES_FILE` or your
 `SourceDirectory`), or `notifies: true` on a `Source` you build. A source that notifies is polled only when told it

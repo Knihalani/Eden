@@ -168,11 +168,21 @@ export interface ActionCheck {
  */
 export type SourceChangedReason = "push-off" | "not-synced" | "not-notifying";
 
+/**
+ * A nudge a change notification's answer carries (`SourceChangedResult.advice`): `"refs"` when the source can
+ * re-read an item by its ref (`fetchesById`), so a bare signal — which puts every held copy of the source in doubt
+ * and re-reads them all on delivery — should instead name what changed (`/v1/sources/refs`) or carry it
+ * (`/v1/sources/items`). Optional and additive: absent from older servers.
+ */
+export type SourceChangedAdvice = "refs";
+
 /** What a change notification did: `synced` when the source's copy will be polled at its next use; else why not. */
 export interface SourceChangedResult {
   synced: boolean;
   /** Set only when `synced` is false. Optional and additive: absent from older servers. */
   reason?: SourceChangedReason;
+  /** Set only when a cheaper notification exists for this source. Optional and additive. */
+  advice?: SourceChangedAdvice;
 }
 
 /** How a later turn showed whether the agent used an injection. Feeds source learning. */
