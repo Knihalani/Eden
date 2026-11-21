@@ -385,8 +385,9 @@ describe("the long-reply path stays linear", () => {
     }
   });
 
-  /** Median CPU ms of `f` over runs taken in turn with `g`'s, so load hits both alike. */
-  function medians(f: () => unknown, g: () => unknown, runs: number): [number, number] {
+  /** Least CPU ms of `f` over runs taken in turn with `g`'s, so load hits both alike. The minimum, not the
+   * median: a few-millisecond run's median swings with GC the way its minimum does not. */
+  function minimums(f: () => unknown, g: () => unknown, runs: number): [number, number] {
     const a: number[] = [];
     const b: number[] = [];
     for (let k = 0; k < runs; k++) {
@@ -397,8 +398,7 @@ describe("the long-reply path stays linear", () => {
       g();
       b.push(cpuMs() - t);
     }
-    const mid = (x: number[]) => x.sort((p, q) => p - q)[x.length >> 1]!;
-    return [mid(a), mid(b)];
+    return [Math.min(...a), Math.min(...b)];
   }
 
   test("short number arrays cost what the plain path costs (D1900's review: a reader call for each was 2.7-4x)", () => {
@@ -413,7 +413,7 @@ describe("the long-reply path stays linear", () => {
         LONG_REPLY.body = DEFAULTS.body;
       };
       for (let k = 0; k < 3; k++) [parseJsonText(text), plain()];
-      const [long, short] = medians(() => parseJsonText(text), plain, 9);
+      const [long, short] = minimums(() => parseJsonText(text), plain, 9);
       // About 1.0 here; 2.7-4 with a reader call for every `[` before a digit.
       expect(long).toBeLessThan(short * 1.5 + 2);
     }
@@ -432,19 +432,19 @@ describe("the long-reply path stays linear", () => {
     };
     expect(same(parseJsonText(text), plainText(text, 1_008, 1_010_000))).toBe(true);
     for (let k = 0; k < 2; k++) [parseJsonText(text), plain()];
-    const [long, short] = medians(() => parseJsonText(text), plain, 7);
+    const [long, short] = minimums(() => parseJsonText(text), plain, 7);
     // About 1.0 here; 4-6x at this size when every level counted to the innermost `]`.
     expect(long).toBeLessThan(short * 1.5 + 2);
   });
 
   /**
-   * `medians` with a full collection before each timed call, so neither side pays for garbage the other (or the fuzz
+   * `minimums` with a full collection before each timed call, so neither side pays for garbage the other (or the fuzz
    * tests before it) left: without it this ratio read 0.87 against 0.85 once in a loaded gate (D1965). The process
    * clock, not `process.threadCpuUsage()`: on Bun 1.4.4 that steps by up to 4 ms and under-reads, and with D1919's
    * regression planted it let the ratio through (D1965's review); with the process clock and the collections the
    * regression reads 0.96-1.47 and the reader 0.48-0.72.
    */
-  function settledMedians(f: () => unknown, g: () => unknown, runs: number): [number, number] {
+  function settledMinimums(f: () => unknown, g: () => unknown, runs: number): [number, number] {
     const a: number[] = [];
     const b: number[] = [];
     for (let k = 0; k < runs; k++) {
@@ -457,8 +457,7 @@ describe("the long-reply path stays linear", () => {
       g();
       b.push(cpuMs() - t);
     }
-    const mid = (x: number[]) => x.sort((p, q) => p - q)[x.length >> 1]!;
-    return [mid(a), mid(b)];
+    return [Math.min(...a), Math.min(...b)];
   }
 
   const plainOf = (text: string) => () => {
@@ -477,7 +476,7 @@ describe("the long-reply path stays linear", () => {
     expect(same(parseJsonBytes(encoder.encode(text)), JSON.parse(text))).toBe(true);
     const plain = plainOf(text);
     for (let k = 0; k < 2; k++) [parseJsonText(text), plain()];
-    const [long, short] = settledMedians(() => parseJsonText(text), plain, 9);
+    const [long, short] = settledMinimums(() => parseJsonText(text), plain, 9);
     // About 0.4 here; 1.3-1.6x when the reader gave up at the `null`.
     expect(long).toBeLessThan(short * 0.85);
   });
@@ -486,7 +485,7 @@ describe("the long-reply path stays linear", () => {
     const flood = encoder.encode(`[${"1,".repeat(2_000_000)}1]`);
     expect(parseJsonBytes(flood)).toBeUndefined();
     for (let k = 0; k < 2; k++) bodyShapeWithin(flood, 1_008, 1_010_000);
-    const [ours, scan] = medians(
+    const [ours, scan] = minimums(
       () => parseJsonBytes(flood),
       () => bodyShapeWithin(flood, 1_008, 1_010_000),
       7,
