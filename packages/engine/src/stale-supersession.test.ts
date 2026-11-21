@@ -285,4 +285,90 @@ describe("stale supersession: the current record ranks and hands ahead of the de
     expect(ids).toContain("mail:bonus-nov");
     expect(ids).not.toContain("mail:bonus-sep");
   });
+
+  test("a request naming the record's month asks for it, stale or not", async () => {
+    const docs = new StaticSource("mail", "Mail", [
+      {
+        ref: "monzo-sep3",
+        title: "Monzo statement — September 2026",
+        text: "Your Monzo statement for September 2026. Balance 3,800 GBP.",
+      },
+      {
+        ref: "monzo-nov3",
+        title: "Monzo statement — November 2026",
+        text: "Your Monzo statement for November 2026. Balance 4,400 GBP.",
+      },
+    ]);
+    const { p } = partner({ config: { groundSubject: true, confidentScore: 0.1, minMatchedTerms: 1 } }, [docs]);
+    const ids = await say(p, "Monzo balance on 30 September?", [docs], { config: { groundSubject: true } });
+    expect(ids).toContain("mail:monzo-sep3");
+  });
+
+  test("a revision published ahead of its month is still the new record", async () => {
+    const docs = new StaticSource("mail", "Mail", [
+      {
+        ref: "tariff-oct",
+        title: "Octopus tariff summary — October 2026",
+        text: "Flexible Octopus: unit rate 26.00p/kWh.",
+      },
+      {
+        ref: "tariff-nov-early",
+        // Published 25 October, dated 1 November: the coming revision, not last year's.
+        title: "Octopus tariff summary — 1 November",
+        text: "Flexible Octopus: unit rate 24.50p/kWh.",
+        updatedAt: Date.parse("2026-10-25T00:00:00Z"),
+      },
+    ]);
+    const { p } = partner({ config: { groundSubject: true, confidentScore: 0.1, minMatchedTerms: 1 } }, [docs]);
+    const ids = await say(p, "What is my Octopus unit rate?", [docs], { config: { groundSubject: true } });
+    expect(ids).toContain("mail:tariff-nov-early");
+    expect(ids).not.toContain("mail:tariff-oct");
+  });
+
+  test("a person named May does not date the record", async () => {
+    const docs = new StaticSource("mail", "Mail", [
+      {
+        ref: "may-statement",
+        // "May Chen" is the sender, not a date: the body's own November is the record's month.
+        title: "Monzo statement (May Chen)",
+        text: "Your Monzo statement for November 2026. Balance 4,400 GBP. — May Chen",
+      },
+      {
+        ref: "oct-statement",
+        title: "Monzo statement — October 2026",
+        text: "Your Monzo statement for October 2026. Balance 4,200 GBP.",
+      },
+    ]);
+    const { p } = partner({ config: { groundSubject: true, confidentScore: 0.1, minMatchedTerms: 1 } }, [docs]);
+    const ids = await say(p, "What was my Monzo balance?", [docs], { config: { groundSubject: true } });
+    expect(ids).toContain("mail:may-statement");
+    expect(ids).not.toContain("mail:oct-statement");
+  });
+
+  test("a month-only deadline runs out that month, not next year's", async () => {
+    const docs = new StaticSource("mail", "Mail", [
+      {
+        ref: "offer-nov",
+        title: "Weekend saver bonus",
+        text: "Top up this weekend for a bonus. Offer ends November.",
+        updatedAt: Date.parse("2026-11-10T00:00:00Z"),
+      },
+      {
+        ref: "offer-dec",
+        title: "Weekend saver bonus — December 2026",
+        text: "Top up this December for a bonus.",
+        updatedAt: Date.parse("2026-12-01T00:00:00Z"),
+      },
+    ]);
+    // Written 10 November, asked about in December: the offer is dead and the current one wins.
+    const dec5 = Date.parse("2026-12-05T12:00:00Z");
+    const { p } = partner(
+      { now: () => dec5, config: { groundSubject: true, confidentScore: 0.1, minMatchedTerms: 1 } },
+      [docs],
+    );
+    const ids = await ask(p, "Is there a saver bonus for me?");
+    expect(ids).toContain("mail:offer-dec");
+    if (ids.includes("mail:offer-nov"))
+      expect(ids.indexOf("mail:offer-dec")).toBeLessThan(ids.indexOf("mail:offer-nov"));
+  });
 });

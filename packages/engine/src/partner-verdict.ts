@@ -500,9 +500,11 @@ const expiryOf = (item: ContextItem, writtenAt: number): number | null => {
     if (month < 0 || month > 11 || day > 31) continue;
     if (!y) {
       // No year written: the first such date on or after the day it was written is the one it means
-      // ("expires 15 March" in a mail of December is next March).
+      // ("expires 15 March" in a mail of December is next March). A bare month is its own end:
+      // "offer ends November" written mid-November runs out this November, not next year's.
       y = new Date(writtenAt).getUTCFullYear();
-      if (Date.UTC(y, month, day || 1) < writtenAt - 86_400_000) y++;
+      const ref = day === 0 ? Date.UTC(y, month + 1, 0) : Date.UTC(y, month, day);
+      if (ref < writtenAt - 86_400_000) y++;
     }
     const end = day === 0 ? Date.UTC(y, month + 1, 0) + 86_400_000 : Date.UTC(y, month, day) + 86_400_000;
     if (latest === null || end > latest) latest = end;
@@ -530,16 +532,19 @@ export const docSpan = (item: ContextItem, written: number): [number, number] | 
   for (const m of item.title.matchAll(DOC_DATE)) {
     let y = Number(m[1] ?? m[6] ?? m[9] ?? m[11]);
     const month =
-      m[2] !== undefined ? Number(m[2]) - 1 : MONTHS3.indexOf((m[5] ?? m[7] ?? m[10])!.slice(0, 3).toLowerCase());
+      m[2] !== undefined
+        ? Number(m[2]) - 1
+        : MONTHS3.indexOf((m[5] ?? m[7] ?? m[10] ?? m[12])!.slice(0, 3).toLowerCase());
     let day = Number(m[3] ?? m[4] ?? m[8] ?? 0);
-    if (m[10] !== undefined) day = 0; // month-year alone: the month is the range
+    // A month alone — year'd ("March 2026") or set off by a separator ("— September") — is the month's range.
+    if (m[10] !== undefined || m[12] !== undefined) day = 0;
     if (month < 0 || month > 11 || day > 31) continue;
     if (!y) {
       // No year written: the nearest year's date — a "September statement" updated in November is this
       // September's (which would otherwise outrank the current November revision), and "renews on
       // 8 November" written three days earlier is the coming one, not last year's.
       y = new Date(written).getUTCFullYear();
-      const half = 365.25 * 86_400_000 / 2;
+      const half = (365.25 * 86_400_000) / 2;
       const d = Date.UTC(y, month, day || 1);
       if (d - written > half) y--;
       else if (written - d > half) y++;
@@ -564,7 +569,7 @@ export const docSpan = (item: ContextItem, written: number): [number, number] | 
  * Groups: 1-3 ISO; 4 day, 5 month, 6 year; 7 month, 8 day, 9 year; 10 month, 11 year (`MONTH` captures).
  */
 const DOC_DATE = new RegExp(
-  String.raw`\b(\d{4})-(\d{1,2})-(\d{1,2})|\b(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s+(?:of\s+)?(?:${MONTH})\b\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s+(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s*,?\s*(\d{4})?`,
+  String.raw`\b(\d{4})-(\d{1,2})-(\d{1,2})|\b(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s+(?:of\s+)?(?:${MONTH})\b\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s+(\d{1,2})(?:st|nd|rd|th)?(?!\d)\s*,?\s*(\d{4})?|\b(?:${MONTH})\b\s*,?\s*(\d{4})|[-–—:(|]\s*(${MONTH})\b(?!\s*,?\s*\d{4})`,
   "gi",
 );
 /** What `staleSelf` and `staleIds` read of an item once: whether it declares itself dead, and its own expiry. */
@@ -584,10 +589,9 @@ const staleOf = (item: ContextItem, written: number): { declared: boolean; expir
   }
   return r;
 };
-const staleMemo = new WeakMap<
-  ContextItem,
-  { written: number; declared: boolean; expiry: number | null }
->();
+const staleMemo = new WeakMap<ContextItem, { written: number; declared: boolean; expiry: number | null }>();
+/** A month name in the request's own words ("balance on 30 September?") — like a literal year, it dates the ask. */
+const MONTH_NAME = new RegExp(String.raw`\b(?:${MONTH})\b`, "i");
 
 /** A number followed by a measure or money word is a quantity ("650 GBP", "30 days"), not an identifier. */
 export const QUANTITY = /^\s*(?:GBP|USD|EUR|pence|kg|km|miles?|%|days?|weeks?|months?|years?|people|of us)\b/i;
@@ -1553,7 +1557,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
   protected staleSelf(item: ContextItem, cue: Cue): boolean {
     // A request that names its own year asks for that year's record: whatever state it is in now is the
     // answer. The year is the raw text's alone — "today" resolving to a day of this year is no exemption.
-    if (ASKS_OLD.test(cue.raw) || cue.raw.match(YEARS) !== null) return false;
+    if (ASKS_OLD.test(cue.raw) || cue.raw.match(YEARS) !== null || MONTH_NAME.test(cue.raw)) return false;
     const r = staleOf(item, item.updatedAt ?? cue.at);
     return r.declared || (r.expiry !== null && r.expiry <= cue.at);
   }
@@ -1584,7 +1588,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
           phrases[i]!.length > 0 && (titleNames([e], item) === "whole" || namesEntity(item, anchorsPer[i]!)) ? i : -1,
         )
         .filter((i) => i >= 0);
-    const yearless = cue.raw.match(YEARS) === null;
+    const yearless = cue.raw.match(YEARS) === null && !MONTH_NAME.test(cue.raw);
     const deliveredSpans = yearless ? this.deliveredEntitySpans(s, cue) : new Map<string, [number, number]>();
     // Per entity, the newest start among the pool's approved, anchored, not-self-stale records: a newer
     // record itself declared dead cannot make anything its sibling.
