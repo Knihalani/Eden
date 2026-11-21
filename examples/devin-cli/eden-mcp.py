@@ -64,6 +64,8 @@ def _queued(plugin, client, sid):
     """Queued packets plus any a sibling hook stashed: a PreToolUse observes this MCP call
     and cannot show its packets, so it parks them in the session's state file — the reply
     is the channel that can. Falls back to the live queue if the state file is unreadable."""
+    from eden_client.hermes import _joined
+
     try:
         with plugin._locked_state(sid) as state:
             return _joined(list(state.pop("stashed", []))
