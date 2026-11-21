@@ -464,8 +464,11 @@ interface Session {
   acted?: Cue[];
   /** `planConflict` (D301): ids the sync stored since the last take, at most `PLAN_WAITING`, oldest first. */
   planNew?: Set<string>;
-  /** `planConflict` (D301): ids a plan packet has sent, at most `PLAN_SENT`: each is said once per session. */
-  planSent?: Set<string>;
+  /**
+   * `planConflict` (D301): ids a plan packet has sent → its sends and the turn of the latest, at most `PLAN_SENT`.
+   * D2010: said once, then one repeat at a later request — 60% of late facts the alert carried were never raised.
+   */
+  planSent?: Map<string, { n: number; at: number }>;
 }
 
 /**
@@ -3885,21 +3888,33 @@ export class ContextPartner {
    */
   private checkPlans(s: Session): void {
     const waiting = s.planNew;
-    if (!this.config.planConflict || s.closed || !s.acted || !waiting || waiting.size === 0) return;
+    if (!this.config.planConflict || s.closed || !s.acted) return;
+    const sent = s.planSent;
+    // D2010: an alert said once repeats once at a request past the one it was sent on — while the copy is still
+    // the one the session holds (not `isFresh`: the alert's own delivery marks it read). `at` counts requests,
+    // not turns: a tool result's take must not spend the repeat before the next request arrives.
+    const repeats = sent === undefined ? false : [...sent.values()].some((m) => m.n === 1 && m.at < s.requests);
+    if ((!waiting || waiting.size === 0) && !repeats) return;
     const now = this.now();
-    const sent = (s.planSent ??= new Set());
+    const sentMap = (s.planSent ??= new Map());
     // A copy a change signal has put in doubt since it was read (D126's `doubted`) waits for a later take, when the
-    // poll the signal starts has stored the current one; a held-gone id is not in the cache. Once sent, never again.
+    // poll the signal starts has stored the current one; a held-gone id is not in the cache. A re-stored copy of an
+    // item said once counts as its repeat; one said twice is never said again.
     const fresh = new Set<string>();
     const later: string[] = [];
-    for (const id of waiting) {
+    for (const id of waiting ?? []) {
       const it = this.deps.cache.get(s.scope, id, now);
-      if (!it || sent.has(id) || !s.ledger.isFresh(id, s.turn)) continue;
+      if (!it || (sentMap.get(id)?.n ?? 0) >= 2 || !s.ledger.isFresh(id, s.turn)) continue;
       if (this.config.verifyDelivery && this.doubted(s, it)) later.push(id);
       else fresh.add(id);
     }
-    waiting.clear();
-    for (const id of later) waiting.add(id);
+    waiting?.clear();
+    if (waiting) for (const id of later) waiting.add(id);
+    for (const [id, mark] of sentMap) {
+      if (mark.n !== 1 || mark.at >= s.requests || fresh.has(id)) continue;
+      const it = this.deps.cache.get(s.scope, id, now);
+      if (it && !(this.config.verifyDelivery && this.doubted(s, it))) fresh.add(id);
+    }
     if (fresh.size === 0) return;
     const said = new Set<string>();
     for (const cue of s.acted) {
@@ -3914,8 +3929,9 @@ export class ContextPartner {
       const bearing = hits;
       for (const x of bearing) {
         said.add(x.item.id);
-        sent.add(x.item.id);
-        if (sent.size > PLAN_SENT) sent.delete(sent.values().next().value as string);
+        const mark = sentMap.get(x.item.id);
+        sentMap.set(x.item.id, { n: (mark?.n ?? 0) + 1, at: s.requests });
+        if (sentMap.size > PLAN_SENT) sentMap.delete(sentMap.keys().next().value as string);
       }
       // The user's own (redacted) words, on one line, their double quotes made single so the quote cannot be closed
       // and the rest read as Eden's voice.

@@ -196,13 +196,35 @@ describe("planConflict (A9): a new item that bears on an earlier acting request 
     expect(plans(t.partner.takePending({ ...scope, sessionId: "s1" })).length).toBe(1);
   });
 
-  test("once: the same item stored again queues nothing more", async () => {
+  test("said once, then one repeat at a later request, then never (D301 + D2010)", async () => {
     const t = await setup({ planConflict: true });
     await say(t.partner, BOOK, "s1", t.now());
     await t.arrive(CANCEL);
     expect(plans(await say(t.partner, LATER, "s1", t.now())).length).toBe(1);
+    // D2010: the alert the agent may not have raised repeats once at the next request.
+    expect(plans(await say(t.partner, "Anything else on the canteen lunch?", "s1", t.now())).length).toBe(1);
+    // Never a third time; a re-stored copy queues nothing either.
     await t.arrive({ ...CANCEL, text: `${CANCEL.text} ` });
-    expect(plans(await say(t.partner, "Anything else on the canteen lunch?", "s1", t.now())).length).toBe(0);
+    expect(plans(await say(t.partner, "And after lunch?", "s1", t.now())).length).toBe(0);
+  });
+
+  test("a tool result's take does not spend the repeat (D2010)", async () => {
+    const t = await setup({ planConflict: true });
+    await say(t.partner, BOOK, "s1", t.now());
+    await t.arrive(CANCEL);
+    expect(plans(await say(t.partner, LATER, "s1", t.now())).length).toBe(1);
+    // A non-request event moves the turn, not the request count: the repeat waits for the next request.
+    await t.partner.observe({
+      ...scope,
+      sessionId: "s1",
+      at: t.now(),
+      kind: "tool_result",
+      tool: "calendar.list",
+      output: "[]",
+    } as AgentEvent);
+    expect(plans(t.partner.takePending({ ...scope, sessionId: "s1" })).length).toBe(0);
+    expect(plans(await say(t.partner, "Anything else on the canteen lunch?", "s1", t.now())).length).toBe(1);
+    expect(plans(await say(t.partner, "And after lunch?", "s1", t.now())).length).toBe(0);
   });
 
   test("an item that ranks for no acting request, or in a pool with nothing constraint-like, is not sent", async () => {
