@@ -1282,8 +1282,12 @@ export abstract class PartnerVerdict extends PartnerCheck {
       // even after the session closed (the call was paid for), so traces sum to the calls made.
       if (fresh) {
         const t0 = performance.now();
+        const requestAt = forRequest ?? s.requests;
         void running.then(
-          (r) => r.called && this.traceCheck(s, r, t0),
+          (r) => {
+            if (r.called) this.traceCheck(s, r, t0);
+            void this.deliverLateCheck(s, cue, read, r, requestAt);
+          },
           () => undefined,
         );
       }
@@ -1336,6 +1340,31 @@ export abstract class PartnerVerdict extends PartnerCheck {
       });
     }
     return out;
+  }
+
+  /**
+   * `pushCheckLate` (D2082): a check that answered past `pushCheckWaitMs` still serves the request it read — while
+   * that request stays the session's latest, the items it named that no delivery carried go out on the session's
+   * `pending` queue, so the agent takes them at its next event instead of a paid-for answer serving nothing
+   * (lh10: 98% of check calls settled late). An item already delivered is left out (`isFresh`), copies are
+   * re-verified on the wire (`deliverChecked`), and a session that closed or moved to a newer request gets nothing.
+   */
+  private async deliverLateCheck(
+    s: Session,
+    cue: Cue,
+    read: readonly Scored[],
+    r: PushCheckRead,
+    requestAt: number,
+  ): Promise<void> {
+    try {
+      if (!r.yes?.size || s.closed || s.requests !== requestAt) return;
+      const undelivered = read.filter((x) => r.yes!.has(x.item.id) && s.ledger.isFresh(x.item.id, s.turn));
+      if (undelivered.length === 0) return;
+      const injection = await this.deliverChecked(s, undelivered, "proactive", `candidates:${cue.id}`, cue);
+      if (injection !== null && !s.closed && s.requests === requestAt) s.pending.push(injection);
+    } catch {
+      // Best-effort: a late check's delivery must never break the session it serves.
+    }
   }
 
   /** `pushCheck` (D500): a check's call that no push trace carries (late, or its session closed), traced alone. */

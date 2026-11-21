@@ -426,6 +426,55 @@ describe("packetHeedsCheck (G2, D1450): a rule path's packet the request's check
     expect(got.map((x) => x.reason.split(":")[0])).toContain("fallback");
   });
 
+  test("a late check's yes items the packet did not carry are queued for the next take (D2082)", async () => {
+    const slow: Model = {
+      id: "slow",
+      chat: async (req) => {
+        await sleep(60);
+        return says(["Harlow deposit", "Invoice archive"]).chat(req);
+      },
+    };
+    const { partner } = setup({ pushCheck: true, pushCheckWaitMs: 10 }, slow);
+    expect(await handed(partner)).toEqual(["mail:plain", "mail:dated"]);
+    await sleep(120);
+    // "Harlow deposit" was among the candidates handed; the check's other yes, "Invoice archive", arrives
+    // on pending alone.
+    const got = partner.takePending(ref).find((x) => x.reason.startsWith("candidates:"));
+    expect(got?.citations.map((c) => c.itemId)).toEqual(["mail:other"]);
+  });
+
+  test("a late check naming only delivered items queues nothing (D2082)", async () => {
+    const slow: Model = {
+      id: "slow",
+      chat: async (req) => {
+        await sleep(60);
+        return says(["Harlow invoice", "Harlow deposit"]).chat(req);
+      },
+    };
+    const { partner } = setup({ pushCheck: true, pushCheckWaitMs: 10 }, slow);
+    expect(await handed(partner)).toEqual(["mail:plain", "mail:dated"]);
+    await sleep(120);
+    expect(partner.takePending(ref).filter((x) => x.reason.startsWith("candidates:"))).toEqual([]);
+  });
+
+  test("a late check settled after a newer request queues nothing (D2082)", async () => {
+    const slow: Model = {
+      id: "slow",
+      chat: async (req) => {
+        await sleep(60);
+        return says(["Invoice archive"]).chat(req);
+      },
+    };
+    const { partner } = setup({ pushCheck: true, pushCheckWaitMs: 10 }, slow);
+    expect(await handed(partner)).toEqual(["mail:plain", "mail:dated"]);
+    await partner.observe(
+      { ...ref, at: NOW + 100, kind: "user_message", text: "What is the weather in Leeds?" } as AgentEvent,
+      { waitMs: 10 },
+    );
+    await sleep(120);
+    expect(partner.takePending(ref).filter((x) => x.reason.startsWith("candidates:"))).toEqual([]);
+  });
+
   test("a check that answers late does not take back the candidates it failed open to (review)", async () => {
     const slow: Model = {
       id: "slow",
