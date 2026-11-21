@@ -15,7 +15,7 @@ import { ASK_FAMILY, stemWord } from "./intent";
 import { gateOf } from "./conflict";
 import { cardNames, CLEARED_STATES, couldClear, type CardNames, STANDING_KINDS, type Card } from "./cards";
 import { startDay } from "./grounding";
-import { Ledger } from "./ledger";
+import { Ledger, type LedgerEntry } from "./ledger";
 import type { FrozenRecorded, FrozenSession, FrozenUnverifiable } from "./partner-freeze";
 import { MAX_FROZEN_SESSIONS, MAX_RECORDED, freezeSession } from "./partner-freeze";
 import { citationsOf, PLAN_LEAD } from "./render";
@@ -141,6 +141,7 @@ export abstract class PartnerDelivery extends PartnerCore {
     parent: number,
     shown?: string,
     frame?: PacketFrame,
+    undoWas?: Map<string, LedgerEntry | undefined>,
   ): Injection;
   protected abstract usage(u: UsageRecord): void;
 
@@ -1044,10 +1045,11 @@ export abstract class PartnerDelivery extends PartnerCore {
     cue: Cue,
     shown?: string,
     frame?: PacketFrame,
+    undoWas?: Map<string, LedgerEntry | undefined>,
   ): Injection {
     const spans = this.spans;
     const sp = spans?.open("deliver", cue.span, { items: scored.length });
-    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown, frame);
+    const injection = this.build(s, scored, mode, reason, cue, sp?.id ?? 0, shown, frame, undoWas);
     if (cue.request !== undefined) this.madeFor.set(injection, cue.request);
     if (sp) spans!.close(sp, { bytes: injection.text.length });
     return injection;

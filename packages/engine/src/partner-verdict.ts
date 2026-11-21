@@ -1363,26 +1363,40 @@ export abstract class PartnerVerdict extends PartnerCheck {
       // and an item already delivered is left out (`isFresh`).
       const undelivered = this.candidatesOf(s, cue, gate, r).items.filter((x) => s.ledger.isFresh(x.item.id, s.turn));
       if (undelivered.length === 0) return;
-      // `deliverChecked`'s re-reads take a moment: what the ledger held before them, so a discarded packet's
-      // marks can be undone the way `withdraw` undoes a replaced one's.
+      // `deliverChecked`'s re-reads take a moment: `was` is what the ledger held before them (its own kept-guard
+      // drops items marked meanwhile), and `replaced` what its own marks replace — captured at mark time, so a
+      // newer request's delivery landing during the await is never rolled back as if it were ours (review).
       const was = new Map(undelivered.map((x) => [x.item.id, s.ledger.entry(x.item.id)] as const));
+      const replaced = new Map<string, LedgerEntry | undefined>();
       // The candidates' own frame: `build` marks every item it cites, so a packet cut by the ordinary byte cap
       // would suppress items its text never carried.
       const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
       const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
-      const injection = await this.deliverChecked(s, undelivered, "proactive", `candidates:${cue.id}`, cue, was, {
-        lead: CANDIDATES_LEAD,
-        itemBytes: each,
-        maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
-      });
+      const injection = await this.deliverChecked(
+        s,
+        undelivered,
+        "proactive",
+        `candidates:${cue.id}`,
+        cue,
+        was,
+        {
+          lead: CANDIDATES_LEAD,
+          itemBytes: each,
+          maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
+        },
+        replaced,
+      );
       if (injection === null) return;
       if (s.closed || s.requests !== requestAt) {
         // A session that closed or moved to a newer request during the re-reads gets no packet — and keeps the
-        // marks undone too: the agent never saw the items, so they stay deliverable to what it asks next.
+        // marks undone too: the agent never saw the items, so they stay deliverable to what it asks next. Only
+        // what `build` marked (`replaced`) is rolled back — an item verify dropped carries another delivery's
+        // mark, which stands.
         const undo: Undo = new Map();
         for (const x of undelivered) {
+          if (!replaced.has(x.item.id)) continue;
           const set = s.ledger.entry(x.item.id);
-          const before = was.get(x.item.id);
+          const before = replaced.get(x.item.id);
           if (!set || sameEntry(set, before)) continue;
           undo.set(x.item.id, { was: before, set, sketch: x.sketch });
         }
@@ -4048,6 +4062,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     cue: Cue,
     was?: Map<string, LedgerEntry | undefined>,
     frame?: PacketFrame,
+    undoWas?: Map<string, LedgerEntry | undefined>,
   ): Promise<Injection | null> {
     // The items were ranked against the ledger before the re-reads' await; a delivery during it (the next request's
     // fast path from the cache) may have handed some out since, and `build` marks without testing again: an item
@@ -4060,7 +4075,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       return now === undefined || sameEntry(held.has(x.item.id) ? held.get(x.item.id) : now, now);
     });
     if (kept.length === 0 || s.closed) return null;
-    return this.deliver(s, kept, mode, reason, cue, undefined, frame);
+    return this.deliver(s, kept, mode, reason, cue, undefined, frame, undoWas);
   }
 
   /**
