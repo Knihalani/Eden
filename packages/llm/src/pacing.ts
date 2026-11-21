@@ -112,7 +112,7 @@ export class Pacer {
     this.retries = Math.max(0, options.retries ?? 4);
     this.baseDelayMs = options.baseDelayMs ?? 2_000;
     this.maxDelayMs = options.maxDelayMs ?? 65_000;
-    this.now = options.now ?? (() => Date.now());
+    this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? sleepFor;
     this.random = options.random ?? Math.random;
     this.inner = options.fetch ?? (((input, init) => fetch(input, init)) as typeof fetch);
@@ -231,7 +231,7 @@ export class RateHold {
   private readonly maxDelayMs: number;
 
   constructor(options: { now?: () => number; random?: () => number; baseDelayMs?: number; maxDelayMs?: number } = {}) {
-    this.now = options.now ?? (() => Date.now());
+    this.now = options.now ?? Date.now;
     this.random = options.random ?? Math.random;
     this.baseDelayMs = options.baseDelayMs ?? 2_000;
     this.maxDelayMs = options.maxDelayMs ?? 60_000;
