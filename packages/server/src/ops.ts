@@ -52,6 +52,12 @@ export interface ClusterMessage {
   epoch?: number;
   /** `release` (default): write and hand over moved users; `drop`: discard them, another machine has newer state. */
   mode?: "release" | "drop";
+  /**
+   * How long the router waits for this node's answer (S1-P6): the node plans the release and its store writes
+   * inside it — scaled by the router to the users this node is expected to move. Absent (an older router): the
+   * node's own `releaseMs` floor applies, as before.
+   */
+  deadlineMs?: number;
 }
 
 /**
@@ -74,6 +80,8 @@ export interface ClusterAnswer {
   released: number;
   written: number;
   pending: number;
+  /** Users the node held when the message landed: the router's estimate base for this node's next move (S1-P6). */
+  held: number;
   ms: number;
 }
 
@@ -144,9 +152,11 @@ export class Ops {
     return async (req) => {
       const path = pathOf(req.url);
       if (req.method === "GET" && path === "/readyz") {
+        // `held` (S1-P6): the cluster router's probe reads it to keep its per-node move estimate fresh between
+        // memberships; a machine's router sums its children's.
         return this.draining
           ? Response.json({ ready: false, error: "draining" }, { status: 503 })
-          : Response.json({ ready: true });
+          : Response.json({ ready: true, held: this.partner.heldCount() });
       }
       if (req.method === "GET" && path === "/metrics") {
         return new Response(this.metrics(), { headers: { "content-type": "text/plain; version=0.0.4" } });
@@ -201,8 +211,9 @@ export class Ops {
   async cluster(msg: ClusterMessage): Promise<ClusterAnswer> {
     const t0 = performance.now();
     const epoch = msg.epoch ?? this.epoch + 1;
-    if (epoch < this.epoch) return { released: 0, written: 0, pending: 0, ms: 0 };
+    if (epoch < this.epoch) return { released: 0, written: 0, pending: 0, held: this.partner.heldCount(), ms: 0 };
     this.epoch = epoch;
+    const held = this.partner.heldCount(); // at the message's landing: the router's base for its next estimate
     const table = new OwnerTable(msg.nodes);
     const moved = (s: Scope) => table.owner(bucketOf(s.tenantId, s.userId)) !== msg.self;
     const shared = this.disk && "handOff" in this.disk ? this.disk : null;
@@ -215,16 +226,26 @@ export class Ops {
       shared?.forgetAbsent();
       for (const s of released) this.opts.onReleased?.(s);
       this.add("eden_cluster_dropped_users_total", released.length);
-      return { released: released.length, written: 0, pending: 0, ms: Math.round(performance.now() - t0) };
+      return {
+        released: released.length,
+        written: 0,
+        pending: 0,
+        held,
+        ms: Math.round(performance.now() - t0),
+      };
     }
-    // Released under the old table, so their writes reach the store; the new table (and the fence) after.
-    const { released, written } = this.partner.releaseMoved(moved, this.opts.releaseMs);
+    // Released under the old table, so their writes reach the store; the new table (and the fence) after. The
+    // router's `deadlineMs` (scaled to the users it expects moved, S1-P6) may stretch the node's own bound —
+    // the 2 s slack keeps room for the answer itself; the floor stays the node's releaseMs.
+    const budget =
+      msg.deadlineMs !== undefined ? Math.max(this.opts.releaseMs, msg.deadlineMs - 2_000) : this.opts.releaseMs;
+    const { released, written } = this.partner.releaseMoved(moved, budget);
     let pending = 0;
     if (shared) {
       // Each released user's blob must be in the store before the router sends them to their new owner.
       const deadline = Promise.race([
         Promise.all(released.map((s) => shared.handOff(s))).then(() => 0),
-        Bun.sleep(this.opts.releaseMs).then(() => 1),
+        Bun.sleep(Math.max(0, budget - (performance.now() - t0))).then(() => 1),
       ]);
       if ((await deadline) === 1) pending = shared.backlog;
       shared.forgetAbsent();
@@ -236,7 +257,7 @@ export class Ops {
     }
     for (const s of released) this.opts.onReleased?.(s);
     this.add("eden_cluster_released_users_total", released.length);
-    return { released: released.length, written, pending, ms: Math.round(performance.now() - t0) };
+    return { released: released.length, written, pending, held, ms: Math.round(performance.now() - t0) };
   }
 
   observe(route: string, status: number, seconds: number): void {

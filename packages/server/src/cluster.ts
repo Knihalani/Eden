@@ -126,6 +126,12 @@ export interface ClusterOptions {
   recoverAfter?: number;
   /** How long nodes may take to release moved users before the router switches anyway; default 60 s. */
   rebalanceMs?: number;
+  /**
+   * Added to `rebalanceMs` per user a node is expected to move (the buckets it loses x its held per bucket,
+   * S1-P6): a big move gets a longer bound instead of the node falling silent and being taken out. Default
+   * 15 ms a user (a warm freeze ~9 ms, plus store-write room).
+   */
+  releasePerUserMs?: number;
   /** How long a request is retried while its node refuses connections (a restart); default 5 s. */
   retryRefusedMs?: number;
   /**
@@ -144,6 +150,9 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
   const failAfter = options.failAfter ?? 3;
   const recoverAfter = options.recoverAfter ?? 2;
   const rebalanceMs = options.rebalanceMs ?? 60_000;
+  const releasePerUserMs = options.releasePerUserMs ?? 15;
+  /** Users each node last reported holding — on every probe and every membership answer (S1-P6). */
+  const heldBy = new Map<string, number>();
   const retryRefusedMs = options.retryRefusedMs ?? 5_000;
   const forwardTimeoutMs = options.forwardTimeoutMs ?? 60_000;
   const grace = config.shutdownGraceMs ?? 10_000;
@@ -177,7 +186,10 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     try {
       const r = await fetch(`${n.url}/readyz?all=1`, { signal: AbortSignal.timeout(1_500) });
       if (r.ok) {
-        void r.arrayBuffer().catch(() => {});
+        // The machine's held count rides its ready answer (S1-P6): the next resize's estimate is fresh, not the
+        // count at the last membership — users accrue between them.
+        const body = (await r.json().catch(() => null)) as { held?: number } | null;
+        if (typeof body?.held === "number") heldBy.set(n.id, body.held);
         return "up";
       }
       const body = (await r.json().catch(() => null)) as { error?: string } | null;
@@ -198,19 +210,21 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
     mode: "release" | "drop",
     e: number,
     timeoutMs = rebalanceMs,
-  ): Promise<{ released: number; pending: number } | null> => {
+  ): Promise<{ released: number; pending: number; held?: number } | null> => {
     try {
       const r = await fetch(`${n.url}/internal/cluster`, {
         method: "POST",
         headers: { authorization: `Bearer ${clusterKey}`, "content-type": "application/json" },
-        body: JSON.stringify({ self: n.id, nodes: ids, epoch: e, mode }),
+        body: JSON.stringify({ self: n.id, nodes: ids, epoch: e, mode, deadlineMs: timeoutMs }),
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (!r.ok) {
         void r.arrayBuffer().catch(() => {});
         return null;
       }
-      return (await r.json()) as { released: number; pending: number };
+      const a = (await r.json()) as { released: number; pending: number; held?: number };
+      if (a.held !== undefined) heldBy.set(n.id, a.held);
+      return a;
     } catch {
       return null;
     }
@@ -238,8 +252,27 @@ export async function startCluster(options: ClusterOptions): Promise<ClusterRout
       const t0 = performance.now();
       const e = nextEpoch();
       for (const b of movedBuckets) moving[b] = 1;
+      // S1-P6: each node's bound scales to the users it is expected to move — the buckets leaving it (the old
+      // table still stands here) times the users it reported per bucket — so a big move gets a longer bound
+      // instead of the node falling silent mid-write and being taken out as reset.
+      const ownedBy = new Map<string, number>();
+      const leaving = new Map<string, number>();
+      for (let b = 0; b < BUCKETS; b++) {
+        const o = table.owner(b);
+        if (o !== null) ownedBy.set(o, (ownedBy.get(o) ?? 0) + 1);
+      }
+      for (const b of movedBuckets) {
+        const o = table.owner(b)!;
+        leaving.set(o, (leaving.get(o) ?? 0) + 1);
+      }
+      const deadlineFor = (n: NodeState) => {
+        const owned = ownedBy.get(n.id) ?? 0;
+        if (owned === 0) return rebalanceMs;
+        const est = ((leaving.get(n.id) ?? 0) / owned) * (heldBy.get(n.id) ?? 0);
+        return rebalanceMs + Math.round(est * releasePerUserMs);
+      };
       const answers = await Promise.all(
-        told.map((n) => tell(n, ids, mode, e, n.up || n.draining ? rebalanceMs : 2_000)),
+        told.map((n) => tell(n, ids, mode, e, n.up || n.draining ? deadlineFor(n) : 2_000)),
       );
       const silent = told.filter((n, i) => answers[i] === null && n.up && mode === "release");
       for (const n of silent) {
