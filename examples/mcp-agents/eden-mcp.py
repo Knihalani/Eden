@@ -124,8 +124,16 @@ def main() -> int:
                 if isinstance(info.get("name"), str) and info["name"].strip():
                     agent["name"] = info["name"].strip()[:40]
                 try:
-                    # A pull-only session is not born of a hook: tell Eden it exists.
-                    plugin.session_start(_session_id(plugin, agent["name"]))
+                    # A pull-only session is not born of a hook: tell Eden it exists. The
+                    # observe may return the session's first packet — stash it, or the server
+                    # marks it delivered and neither tool can retrieve it.
+                    sid0 = _session_id(plugin, agent["name"])
+                    c0 = plugin.client(sid0)
+                    if c0 is not None:
+                        res = c0.observe({"kind": "session_start"}, wait_ms=0)
+                        if isinstance(res, dict) and res.get("injection"):
+                            with plugin._locked_state(sid0) as state:
+                                state.setdefault("stashed", []).append(res["injection"])
                 except Exception:  # noqa: BLE001
                     pass
                 emit({"jsonrpc": "2.0", "id": msg_id, "result": {
