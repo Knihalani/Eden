@@ -156,6 +156,33 @@ describe("Eden in a Vercel AI SDK agent (D854)", () => {
     ).toBe("sent to a@b.c");
   });
 
+  test("ask_context's item arg reaches the ask; the answer cites it in Sources (D2024)", async () => {
+    const c = client("u-item");
+    const seen: ({ itemId?: string } | undefined)[] = [];
+    const realAsk = c.ask.bind(c);
+    c.ask = async (q, opts) => {
+      seen.push(opts);
+      return realAsk(q, opts);
+    };
+    const session = edenSession(c);
+    await session.started;
+    const { model, prompts } = scripted([
+      { tool: ["ask_context", { question: "When is lunch?" }] },
+      { tool: ["ask_context", { question: "When is lunch?", item: "calendar:evt-priya" }] },
+      { text: "done" },
+    ]);
+    await generateText({
+      model: session.wrap(model),
+      tools: session.tools,
+      stopWhen: stepCountIs(5),
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(seen[0]?.itemId).toBeUndefined();
+    expect(seen[1]?.itemId).toBe("calendar:evt-priya");
+    expect(JSON.stringify(prompts.at(-1))).toContain("Sources:");
+    expect(JSON.stringify(prompts.at(-1))).toContain("[item: calendar:evt-priya]");
+  });
+
   test("Eden down: the agent runs with its prompt as it came and ask_context says no context", async () => {
     const session = edenSession(client("u-four", "http://127.0.0.1:9"));
     const { model, prompts } = scripted([{ tool: ["ask_context", { question: "q" }] }, { text: "ok" }]);
