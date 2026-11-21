@@ -44,7 +44,10 @@ def devin_home(args):
     if args.devin_home:
         return Path(os.path.expandvars(args.devin_home)).expanduser().resolve()
     env = os.environ.get("DEVIN_CLI_HOME")
-    return Path(env).expanduser().resolve() if env else Path.home() / ".devin"
+    if env:
+        return Path(env).expanduser().resolve()
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return (xdg / "devin").resolve()
 
 
 def ensure_binary(root, work):
@@ -166,7 +169,7 @@ def merge_settings(home, dest):
             commands = [
                 h.get("command")
                 for entry in entries
-                for h in (entry.get("hooks") if isinstance(entry, dict) else [])
+                for h in ((entry.get("hooks") or []) if isinstance(entry, dict) else [])
                 if isinstance(h, dict)
             ]
             if command not in commands:
