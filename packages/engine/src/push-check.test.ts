@@ -134,7 +134,7 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
     expect(off.packet.text).toBe(before.packet.text);
     expect(on.packet.citations).toEqual(before.packet.citations);
     expect(on.packet.text).toContain(CHECKED_FACTS_LEAD);
-    expect(on.packet.text).toContain('"The Harlow venue deposit is due on Friday 30 October." (from: Harlow deposit;');
+    expect(on.packet.text).toContain('"The Harlow venue deposit is due on Friday 30 October." (from: Harlow deposit)');
     expect(on.packet.text).toContain('(changes: "deposit")');
     expect(on.packet.text).toContain(PACKET_COVERS_LINE);
     await on.partner.observe({ ...ref, at: NOW, kind: "context_reset" } as AgentEvent);
