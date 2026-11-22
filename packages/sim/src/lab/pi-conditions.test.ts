@@ -5,6 +5,17 @@ import { pairedWith, parseCondition, parseConditions, parseVariants } from "./pi
 const ALL = { sync: true, cards: true, densePacket: true };
 
 describe("pi-ab conditions", () => {
+  test("+packetCoversLine enables the framing trial alone or with +pushCheckedWhy", () => {
+    const options = { config: ALL, defaults: DEFAULT_CONFIG as unknown as Record<string, unknown> };
+    expect(parseCondition("both+packetCoversLine", options).config).toEqual({ ...ALL, packetCoversLine: true });
+    expect(parseCondition("both+pushCheckedWhy+packetCoversLine", options).config).toEqual({
+      ...ALL,
+      pushCheckedWhy: true,
+      packetCoversLine: true,
+    });
+    expect(() => parseCondition("both+packetCoversLines", options)).toThrow(/no engine setting/);
+  });
+
   test("+pushCheckedWhy enables the checked packet trial", () => {
     const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
     expect(parseCondition("both+pushCheckedWhy", { config: ALL, defaults }).config).toEqual({

@@ -4886,6 +4886,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const dense = compact && this.config.densePacket;
     return {
       maxBytes: 4_000,
+      packetCoversLine: this.config.packetCoversLine,
       ...(compact
         ? {
             focus: focusOf(cue),

@@ -7,6 +7,20 @@ const ALL = { sync: true, cards: true };
 const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
 
 describe("hermes-ab conditions", () => {
+  test("+packetCoversLine enables only the framing trial and stacks with +pushCheckedWhy", () => {
+    const options = { config: ALL, defaults };
+    expect(DEFAULT_CONFIG.packetCoversLine).toBe(false);
+    expect(parseHermesCondition("hermes+eden+packetCoversLine", options).config).toEqual({
+      ...ALL,
+      packetCoversLine: true,
+    });
+    const combo = parseHermesCondition("hermes+eden+pushCheckedWhy+packetCoversLine", options);
+    expect(combo.config).toEqual({ ...ALL, pushCheckedWhy: true, packetCoversLine: true });
+    expect(combo.eden).toBe(true);
+    expect(pairedWith(combo.name)).toBe("hermes");
+    expect(() => parseHermesCondition("hermes+eden+packetCoversLines", options)).toThrow(/no engine setting/);
+  });
+
   test("+pushCheckedWhy enables only the checked packet trial", () => {
     const c = parseHermesCondition("hermes+eden+pushCheckedWhy", { config: ALL, defaults });
     expect(c.config).toEqual({ ...ALL, pushCheckedWhy: true });

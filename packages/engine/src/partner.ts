@@ -1743,6 +1743,7 @@ export class ContextPartner extends PartnerAsk {
     const rendering = spans?.open("render", parent, { items: items.length });
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
+      packetCoversLine: this.config.packetCoversLine,
       ...(frame ? { lead: frame.lead, changes: frame.changes } : {}),
       ...(this.config.compactInjection || frame
         ? {
