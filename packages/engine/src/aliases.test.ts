@@ -107,6 +107,28 @@ describe("ItemCache.aliasTable (D2009): the per-user table, kept as items come a
     cache.put(SCOPE, [{ ...seed, meta: {} }]);
     expect(cache.aliasTable(SCOPE).get("webb")).toBeUndefined();
   });
+
+  test("a multi-word party's contraction joins it (D2094)", () => {
+    const cache = new ItemCache();
+    cache.put(SCOPE, [
+      item("s1", "Notice", "Card update.", 1, "American Express <notifications@americanexpress.example>"),
+      item("s2", "Notes", "Minutes.", 1, "Amenity Express; HM Passport Office"),
+    ]);
+    const t = cache.aliasTable(SCOPE);
+    // Two-letter heads of a two-word name; two names sharing a contraction both expand it.
+    expect(t.get("amex")).toEqual(new Set(["american express", "amenity express"]));
+    // A three-word name's initials; under four letters it stays out.
+    expect(t.get("hpo")).toBeUndefined();
+    // A lone part is unchanged.
+    expect(t.get("american")).toEqual(new Set(["american express"]));
+  });
+
+  test("a contraction spelling a real part keeps the part's meaning", () => {
+    const cache = new ItemCache();
+    cache.put(SCOPE, [item("s1", "Notes", "x", 1, "Ana Saco; Sam Conner")]);
+    // "sam conner" contracts to "saco", which is already Ana Saco's surname — the part wins.
+    expect(cache.aliasTable(SCOPE).get("saco")).toEqual(new Set(["ana saco"]));
+  });
 });
 
 describe("partner wiring (D2009): requests anchor through the table", () => {
@@ -164,5 +186,27 @@ describe("partner wiring (D2009): requests anchor through the table", () => {
     // The table joins "webb" to "marcus webb" only, so "Sara Webb" gains no alias and the item stays unsettled.
     await say(p, "Sign the Sara Webb contract.");
     expect(pools.at(-1)!.unsettled).toBe(true);
+  });
+
+  test("a request naming a party by contraction settles it (D2094)", async () => {
+    const pools: PushPoolReport[] = [];
+    ITEMS = [
+      item(
+        "amex",
+        "Card security",
+        "Your American Express card ending 7731 was cancelled after a reported security issue; payments on it will be declined.",
+        1,
+        "American Express <notifications@americanexpress.example>",
+      ),
+      item("seed", "Project notes", "Notes on the venue deposit work.", 400),
+    ];
+    const p = setup({}, (r) => pools.push(r));
+    await say(p, "Put the kitchen fitter's deposit on the Amex.");
+    const r = pools.at(-1)!;
+    // The item shares no term with the request as written — "Amex" only means the mail's "American Express"
+    // through the table — so without D2094's expansion it never reaches the pool at all.
+    expect(r.pool).toContain("mail:amex");
+    expect(r.handed).toContain("mail:amex");
+    expect(r.unsettled).toBe(false);
   });
 });

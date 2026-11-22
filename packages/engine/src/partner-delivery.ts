@@ -21,7 +21,7 @@ import { MAX_FROZEN_SESSIONS, MAX_RECORDED, freezeSession } from "./partner-free
 import { citationsOf, PLAN_LEAD } from "./render";
 import { MAX_PACKET_PARTIES, partiesIn, partyKey } from "./parties";
 import { safeLine } from "./line";
-import { anchored } from "./settle";
+import { aliasExpand, anchored } from "./settle";
 import { contentTerms, head, isStopword, termIds } from "./text";
 import type { Trace, UsageRecord } from "./trace";
 import { distinctiveTokens } from "./usage";
@@ -804,7 +804,11 @@ export abstract class PartnerDelivery extends PartnerCore {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
     if (!vocab) return []; // No cache for this user: nothing to rank, and nothing allocated.
-    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
+    // The entity the request names is read through the user's alias table (D2094), as the lookup's own query and
+    // `requestAnchors` read it: "Amex" means the mail's "American Express", whose words are what index holds —
+    // without them the item shares no term with the request and never ranks.
+    const expanded = aliasExpand(cache.aliasTable(s.scope), cue.entities);
+    const q = termIds(`${cue.text} ${expanded.join(" ")}`, vocab, false);
     const query: number[] = [];
     for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
     // `askExpand` (D2029): each of the question's content words stands for its stem-family in the index and its
@@ -819,7 +823,7 @@ export abstract class PartnerDelivery extends PartnerCore {
       const seen = new Set<string>();
       // Raw words, tokenized as the query was ("wi-fi" is one term) — including words the index never saw, whose
       // phrasing family may still match: "manages" meets "agent" though "manages" interns nowhere.
-      for (const w of tokenize(`${cue.text} ${cue.entities.join(" ")}`, new Vocab())) {
+      for (const w of tokenize(`${cue.text} ${expanded.join(" ")}`, new Vocab())) {
         if (isStopword(w)) continue;
         const stem = stemWord(w);
         if (seen.has(stem)) continue;
@@ -845,7 +849,7 @@ export abstract class PartnerDelivery extends PartnerCore {
     // every item that does, so the judge, when there is one, sees them only if there is room.
     const timed = cue.time?.days.size ? cache.timed(s.scope, cue.time.days, this.now(), 30, cue.offset) : [];
     if (query.length === 0 && timed.length === 0 && !options.probed?.length) return [];
-    const entities = cue.entities.map((e) => {
+    const entities = expanded.map((e) => {
       // An entity with a term no cached item holds matches nothing (never intern it: that grows the cache's vocab).
       const all = termIds(e, s.vocab, true).n;
       const t = termIds(e, vocab, false);
