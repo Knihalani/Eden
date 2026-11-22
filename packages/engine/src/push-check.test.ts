@@ -9,7 +9,7 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { CHECKED_LEAD } from "./render";
+import { CHECKED_LEAD, CHECKED_WHY_LEAD } from "./render";
 import { CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCompare, PushChecker } from "./push-check";
 
 // The push check (I3, D500; in the default since D828). One model call over the push's pool names the items that
@@ -92,6 +92,56 @@ async function handed(p: ContextPartner, at = ref, text = REQUEST): Promise<stri
 }
 
 describe("pushCheck (I3, D500): one model call picks the push's candidates", () => {
+  test("checked why is opt-in: the reply's order and links reach the packet; off stays byte-identical", async () => {
+    const packet = async (flag?: boolean) => {
+      const { partner } = setup(
+        { pushCheck: true, pushCandidatesSettled: 0, ...(flag === undefined ? {} : { pushCheckedWhy: flag }) },
+        says(["Invoice archive", "Harlow deposit"]),
+      );
+      await partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 2_000 });
+      return partner.takePending(ref).find((p) => p.reason.startsWith("candidates:"))!;
+    };
+    const before = await packet();
+    const off = await packet(false);
+    const on = await packet(true);
+    expect(off.text).toBe(before.text);
+    expect(off.text).toContain(CHECKED_LEAD);
+    expect(off.text).not.toContain("(changes:");
+    expect(off.citations.map((c) => c.itemId)).toEqual(["mail:dated", "mail:other"]);
+    expect(on.citations.map((c) => c.itemId)).toEqual(["mail:other", "mail:dated"]);
+    expect(on.text).toContain(CHECKED_WHY_LEAD);
+    expect(on.text.match(/\(changes: "the Harlow deposit"\)/g)?.length).toBe(2);
+  });
+
+  test("a late check retains its request link for the D2082 packet", async () => {
+    const model: Model = {
+      id: "late-why",
+      async chat(req) {
+        await new Promise((done) => setTimeout(done, 60));
+        return says(["Invoice archive"]).chat(req);
+      },
+    };
+    const { partner } = setup({ pushCheck: true, pushCheckWaitMs: 10, pushCheckedWhy: true }, model);
+    await handed(partner);
+    await new Promise((done) => setTimeout(done, 100));
+    const packet = partner.takePending(ref).find((p) => p.reason.startsWith("candidates:"))!;
+    expect(packet.citations.map((c) => c.itemId)).toEqual(["mail:other"]);
+    expect(packet.text).toContain(CHECKED_WHY_LEAD);
+    expect(packet.text).toContain('(changes: "the Harlow deposit")');
+  });
+
+  test("reusing a kept check retains decisive order and links", async () => {
+    const model = says(["Invoice archive", "Harlow deposit"]);
+    const { partner } = setup({ pushCheck: true, pushCheckedWhy: true, pushCandidatesSettled: 0 }, model);
+    await handed(partner);
+    const firstCalls = model.calls.length;
+    await partner.observe({ ...ref, at: NOW, kind: "context_reset" } as AgentEvent);
+    await partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 2_000 });
+    const packet = partner.takePending(ref).find((p) => p.reason.startsWith("candidates:"))!;
+    expect(model.calls.length).toBe(firstCalls);
+    expect(packet.citations.map((c) => c.itemId)).toEqual(["mail:other", "mail:dated"]);
+    expect(packet.text).toContain('(changes: "the Harlow deposit")');
+  });
   for (const [label, waitMs, adaptive, warm, checked] of [
     ["warm latency fits caller budget", 600, true, true, true],
     ["remaining budget caps the wait", 350, true, true, false],

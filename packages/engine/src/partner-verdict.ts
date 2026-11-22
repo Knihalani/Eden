@@ -133,6 +133,7 @@ import {
   ASK_LATE_LEAD,
   ASK_NUDGE,
   CHECKED_LEAD,
+  CHECKED_WHY_LEAD,
   LOOKUP_HEAD_LEAD,
   LOOKUP_LEAD,
   LOOKUP_QUIET,
@@ -1253,6 +1254,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       if (yes.size >= 5 && items.length < kept.marks.size) continue;
       return withSheet({
         yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
+        ...(kept.settled?.changes ? { changes: kept.settled.changes } : {}),
         ...(kept.settled?.rules ? { rules: kept.settled.rules } : {}),
         marks: kept.marks,
         costUsd: 0,
@@ -1391,7 +1393,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
         `candidates:${cue.id}`,
         cue,
         was,
-        this.checkedFrame(),
+        this.checkedFrame(false, r),
         replaced,
       );
       if (injection === null) return;
@@ -1480,8 +1482,13 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const staleSibling = (x: Scored) => this.staleSelf(x.item, cue) || (x.entity === true && staleOf(x.item));
     const current = open.filter((x) => !staleSibling(x));
     const gated = gate.unchecked ?? like.some(Boolean);
+    const named = [...current.filter((x) => yes?.has(x.item.id)), ...ruled];
+    if (this.config.pushCheckedWhy && check?.changes) {
+      const order = new Map([...check.changes.keys()].map((id, i) => [id, i]));
+      named.sort((a, b) => (order.get(a.item.id) ?? Infinity) - (order.get(b.item.id) ?? Infinity));
+    }
     let items = yes
-      ? [...current.filter((x) => yes.has(x.item.id)), ...ruled].slice(0, this.config.pushCandidates)
+      ? named.slice(0, this.config.pushCandidates)
       : gated
         ? current
             // A gated push still hands only what is actually tied: one shared word ("Thursday") is filler that
@@ -4083,11 +4090,13 @@ export abstract class PartnerVerdict extends PartnerCheck {
    * `CHECKED_LEAD`'s packet (D2083): how a check's named items are framed and cut — the same bounds as the
    * candidates' packet (`candidateFrame`), a lead that says the items were read against the request.
    */
-  protected checkedFrame(nudge = false): PacketFrame {
+  protected checkedFrame(nudge = false, check?: PushCheckRead | null): PacketFrame {
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
+    const lead = this.config.pushCheckedWhy ? CHECKED_WHY_LEAD : CHECKED_LEAD;
     return {
-      lead: nudge ? `${CHECKED_LEAD} ${ASK_NUDGE}` : CHECKED_LEAD,
+      lead: nudge ? `${lead} ${ASK_NUDGE}` : lead,
+      ...(this.config.pushCheckedWhy ? { changes: check?.changes } : {}),
       itemBytes: each,
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
     };

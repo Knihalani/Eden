@@ -11,6 +11,7 @@
  * The suffixes are pi-conditions.ts's: `~variant` takes `--variant-config`'s settings over `--config`, `+flag` turns
  * one engine flag on, `@w<ms>` is how long the first observe waits for Eden's slow path (default 3000). The report
  * pairs every `hermes+eden…` condition with `hermes` (`pairedWith` strips from the first `+` or `~`).
+ * `hermes+eden+pushCheckedWhy` enables the opt-in per-item check explanations and check order.
  */
 import { parseCondition, type Condition, type ConditionOptions } from "./pi-conditions";
 

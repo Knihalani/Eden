@@ -314,6 +314,27 @@ describe("pushCheckSheet (F5): the check reads the user's rule sheet", () => {
 });
 
 describe("the sheet's prompt and parser", () => {
+  test("request links preserve item and rule reply order without including rejected or duplicate entries", () => {
+    const hits: [string, number, string][] = [];
+    const reply = JSON.stringify({
+      items: [
+        { r: 2, hits: "deposit", act: true },
+        { i: 2, hits: "invoice", act: true },
+        { i: 1, hits: "none", act: true },
+        { i: 2, hits: "duplicate", act: true },
+        { i: 1, hits: "payment", act: true },
+      ],
+    });
+    expect(parseCompareSheet(reply, 2, 2, (kind, index, text) => hits.push([kind, index, text]))).toEqual({
+      items: [1, 0],
+      rules: [1],
+    });
+    expect(hits).toEqual([
+      ["rule", 1, "deposit"],
+      ["item", 1, "invoice"],
+      ["item", 0, "payment"],
+    ]);
+  });
   test("a rules-list entry is a rule even with an item number; a no there without one is skipped", () => {
     const yes = (e: string) => `{"items":[],"rules":[${e}]}`;
     expect(parseCompareSheet(yes(`{"r":1,"i":1,"on":"x","hits":"y","act":true}`), 3, 2)).toEqual({
