@@ -43,6 +43,23 @@ describe("one-hop affiliations", () => {
     expect(index.forParty("Umbrella Health", () => true)).toEqual([]);
   });
 
+  test("signature name and title may be separated by up to three newlines", () => {
+    for (const separator of ["\n", "\n\n", "\n\n\n", "\n \t\n", "\r\n \t\r\n\t\r\n"]) {
+      const body = `--\nJane Doe${separator}CTO | Acme`;
+      expect(affiliationOf(mail(body, "Jane Doe <jane.doe@acme.com>"))).toMatchObject({
+        person: "Jane Doe",
+        org: "Acme",
+        kind: "signature",
+      });
+    }
+  });
+
+  test("blank-line signature parsing retains identity and newline bounds", () => {
+    expect(affiliationOf(mail("--\nJane Doe\n\nCTO | Acme"))).toBeNull();
+    expect(affiliationOf(mail("--\nJane Doe Smith\n\nCTO | Acme", "Jane Doe <jane.doe@acme.com>"))).toBeNull();
+    expect(affiliationOf(mail("--\nJane Doe\n\n\n\nCTO | Acme", "Jane Doe <jane.doe@acme.com>"))).toBeNull();
+  });
+
   test("other senders, mismatched addresses, quoted and forwarded signatures create no edge", () => {
     for (const body of [
       `Hello\n> ${signature.replaceAll("\n", "\n> ")}`,

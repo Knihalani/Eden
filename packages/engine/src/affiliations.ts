@@ -82,7 +82,7 @@ export function affiliationOf(item: ContextItem): Affiliation | null {
   const address = from[0]![2]!.toLowerCase();
   const body = ownBody(text.slice(split).trimStart());
   const local = nameKey(address.split("@")[0]!).replace(/[^\p{L}\p{N}]/gu, "");
-  const signature = /([^|\n]{1,200}(?:\r?\n[ \t]*[^|\n]{0,80})?)\|[ \t]*([^\n]*)/uy;
+  const signature = /([^|\n]{1,200}(?:(?:\r?\n[ \t]*){1,3}[^|\n]{0,80})?)\|[ \t]*([^\n]*)/uy;
   for (const at of body.matchAll(/(?:--\s+|^|\n)[ \t]*/g)) {
     signature.lastIndex = at.index! + at[0].length;
     const sig = signature.exec(body);
