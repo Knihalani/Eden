@@ -3339,13 +3339,17 @@ export abstract class PartnerVerdict extends PartnerCheck {
         // `sourceYieldNames` (D601): a name more sources than that mention says little about any one of them; it
         // stays evidence for a source that has had an item used (the user's own mailbox names most people).
         const common = this.config.sourceYieldEarn ? this.config.sourceYieldNames : 0;
-        for (const e of cue.entities) {
+        // The entities as expanded (D2094): the source map records an item's names as its data writes them —
+        // the mail's party is "american express", which "amex" only reaches through the alias table.
+        for (const e of aliasExpand(this.deps.cache.aliasTable(s.scope), cue.entities)) {
           const holders = this.deps.sourceMap.sourcesFor(s.scope, e);
           const weak = common > 0 && holders.length > common;
           for (const m of holders) if (!weak || this.yields?.hasYielded(s.scope, m.sourceId)) named.add(m.sourceId);
         }
         if (this.config.sourceYieldEarn && this.config.sourceYieldRare > 0 && this.sync) {
-          const terms = sketchTerms(`${cue.text} ${cue.entities.join(" ")}`).slice(0, MAX_SKETCH_TERMS);
+          const terms = sketchTerms(
+            `${cue.text} ${aliasExpand(this.deps.cache.aliasTable(s.scope), cue.entities).join(" ")}`,
+          ).slice(0, MAX_SKETCH_TERMS);
           const rare = this.sync.rareHolders(s.scope, terms.map(termHashes), this.config.sourceYieldRare);
           for (const id of rare) named.add(id);
         }
@@ -4231,7 +4235,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
     if (!vocab) return undefined;
-    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
+    const q = termIds(`${cue.text} ${aliasExpand(cache.aliasTable(s.scope), cue.entities).join(" ")}`, vocab, false);
     const query: number[] = [];
     for (let i = 0; i < q.n; i++) if (!isStopword(vocab.term(q.ids[i]!))) query.push(q.ids[i]!);
     if (query.length === 0) return undefined;
@@ -4247,7 +4251,9 @@ export abstract class PartnerVerdict extends PartnerCheck {
   /** `routeSketch` (D322): each source's match of the request's terms against its vocabulary sketch (no call). */
   private sketchRouteHits(s: Session, cue: Cue): Map<string, number> | undefined {
     if (!this.sync) return undefined;
-    const terms = sketchTerms(`${cue.text} ${cue.entities.join(" ")}`).slice(0, MAX_SKETCH_TERMS);
+    const terms = sketchTerms(
+      `${cue.text} ${aliasExpand(this.deps.cache.aliasTable(s.scope), cue.entities).join(" ")}`,
+    ).slice(0, MAX_SKETCH_TERMS);
     return this.sync.sketchScores(s.scope, terms.map(termHashes));
   }
 
@@ -4725,7 +4731,11 @@ export abstract class PartnerVerdict extends PartnerCheck {
   private rareTerms(s: Session, cue: Cue): number[] {
     const vocab = this.deps.cache.peekVocab(s.scope);
     if (!vocab) return [];
-    const q = termIds(`${cue.text} ${cue.entities.join(" ")}`, vocab, false);
+    const q = termIds(
+      `${cue.text} ${aliasExpand(this.deps.cache.aliasTable(s.scope), cue.entities).join(" ")}`,
+      vocab,
+      false,
+    );
     const out: number[] = [];
     for (let i = 0; i < q.n; i++) {
       const id = q.ids[i]!;
