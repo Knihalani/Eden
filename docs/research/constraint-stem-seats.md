@@ -1,6 +1,9 @@
-# Constraint stem seats (D2100, trial)
+# Constraint stem seats (D2100, adopted D2106)
 
-`pushConstraintStemSeats` is default off. With a push checker wired, a second
+`pushConstraintStemSeats` is default on since D2106, alongside `pushPartyOrgLink`.
+Adoption uses free check-only evidence, not paid confirmation or agent uptake;
+see [check-seat-defaults.md](check-seat-defaults.md). Measurements below record
+the original default-off trial. With a push checker wired, a second
 bounded cache ranking uses D2035's stem families, without `ASK_FAMILY` synonyms.
 At most two constraint-like items outside the existing pool are seated alongside
 day seats. The pool cap is unchanged; the original pool remains the fallback for
@@ -30,8 +33,8 @@ Quality: four users, ten sessions, local judge; off and on were identical:
 
 These screens wire **no push checker**. The new path is deliberately inactive
 without one, so flat delivery is a safety result, not evidence of active retrieval
-benefit. Wall-time differences are run noise, not a speed improvement. Keep the
-flag off pending an active-check evaluation. Deterministic fake-checker tests
+benefit. Wall-time differences are run noise, not a speed improvement. At this
+stage the flag stayed off pending an active-check evaluation. Deterministic fake-checker tests
 exercise successful checked delivery, the two-seat bound, no synonyms, empty
 results/cache and absent/failed/late checker fallback. Raising the seat limit
 from two to twenty makes the bound assertion fail (expected 2, received 3);

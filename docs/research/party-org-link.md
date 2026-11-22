@@ -1,16 +1,19 @@
 # D2101: one-hop party → organisation candidates
 
-Trial, default **off** (`pushPartyOrgLink`), based on `origin/main` `1eaa51b1d`.
+`pushPartyOrgLink` is default **on** since D2106, alongside `pushConstraintStemSeats`.
+Adoption uses free check-only evidence, not paid confirmation or agent uptake;
+see [check-seat-defaults.md](check-seat-defaults.md). Measurements below record
+the original default-off trial, based on `origin/main` `1eaa51b1d`.
 This is a candidate-retrieval change, not employer/employee alias equivalence.
 
 After rebasing onto `5e77a20c4` (D2100), stem seats run first (at most two);
 org seats then exclude those items and add at most two more, within the same
-pool cap. `pushPartyOrgLink` now requires the checker dependency at config
-validation, like `pushConstraintStemSeats`.
+pool cap. Both flags retain the `NEEDS_DEP` checker declaration; their defaults
+are accepted without a checker but remain inactive, as other model-dependent defaults do.
 
 ## Bounds and provenance
 
-- Opt-in cache indexing reads each stored item's bounded text once per index update.
+- Checker-dependent cache indexing reads each stored item's bounded text once per index update.
   Explicit `Contact:` + `Company:` fields support a contact edge. A mail signature
   must name the folded `From:` display name or match the folded first+last-name
   sender local part. Any nearby explicit signature email must match the sender.
@@ -69,12 +72,12 @@ Quality, four users × ten sessions, `--judge local --brief`:
 | 7    | .753 → .753 | .513 → .513 | .067 → .067   |
 
 These harnesses do not wire a push checker. Flat numbers are an unchecked-path
-safety screen, not active-check accuracy evidence. D2101 stays trial/default off.
+safety screen, not active-check accuracy evidence. D2101 stayed trial/default off at this stage.
 Those historical runs used no paid calls, oracle checker or live uptake evaluation.
 
 Historical measurement commands (before checker-dependency enforcement; repeat
-with the flag false/true, quality seeds 13 and 7). The current no-checker CLI
-correctly rejects flag-on rather than silently measuring an inactive feature:
+with the flag false/true, quality seeds 13 and 7). Before D2106, the no-checker CLI
+rejected flag-on rather than silently measuring an inactive feature:
 
 ```sh
 bun packages/sim/src/lab/hidden-funnel.ts --suite hidden --seeds 41,42,43,44 \
@@ -130,13 +133,14 @@ Noisy rates explicitly TP=.85 / FP=.05. All counts below are out of 40.
 |  3000 | noisy   | default |          32 |               27 |               1 |
 |  3000 | noisy   | both    |          40 |               33 |               1 |
 
-Both means `pushConstraintStemSeats=true,pushPartyOrgLink=true`; default leaves
-both off. Relative to the unchanged-engine measurements, combined hidden pool
+Both means `pushConstraintStemSeats=true,pushPartyOrgLink=true`; the historical
+default in this table leaves both off (D2106 now enables both). Relative to the
+unchanged-engine measurements, combined hidden pool
 improves 38→40, oracle delivery 38→40 and noisy delivery 31→33 at either noise.
 Both formerly missing legal-hold cases now enter the pool and reach the packet.
 All eight runs made active checks, with zero failures and $0 model cost.
 These are synthetic retrieval/applicability measurements, not real-checker
-accuracy, explanation quality or agent uptake evidence. No defaults changed.
+accuracy, explanation quality or agent uptake evidence. No defaults changed in that follow-up.
 
 ```sh
 # In the PR #534 measurement worktree; CONFIG is {} or both seat flags true.
@@ -150,7 +154,7 @@ bun packages/sim/src/lab/hidden-funnel.ts --suite hidden --seeds 41,42,43,44 \
 
 Four users × ten sessions, seeds 13/7, realistic sources, time/wait 0, no model
 or judge, `pushPartyOrgLink=true` on both sides. Quality does not wire a push
-checker, and its CLI correctly rejects this checker-dependent flag. The
+checker, and its CLI then rejected this checker-dependent flag. The
 comparison therefore uses the existing `runQuality` API, not a weakened CLI
 guard. Indexing is enabled; org seats remain inactive. This tests unchecked-path
 safety only, **not active-check precision/false-fire behavior**.

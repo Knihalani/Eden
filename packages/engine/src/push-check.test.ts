@@ -96,7 +96,7 @@ async function handed(p: ContextPartner, at = ref, text = REQUEST): Promise<stri
 }
 
 describe("pushCheck (I3, D500): one model call picks the push's candidates", () => {
-  test("stem constraint seats are bounded, opt-in and check-only", async () => {
+  test("stem constraint seats are bounded, switchable and check-only", async () => {
     const rules = [
       item("stem1", "Finance approval", "Q4 renewals: discounts above 10% need CFO sign-off before offered.", 1),
       item("stem2", "Security review", "Renewals must undergo an independent security assessment before execution.", 2),

@@ -17,25 +17,18 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     expect(checkEngineConfig(off)).toEqual(off);
   });
 
-  test("party organisation seats require a checker dependency", () => {
-    expect(() => checkEngineConfig({ pushPartyOrgLink: true }, { deps: ALL_DEPS })).toThrow(/checker/);
-    expect(checkEngineConfig({ pushPartyOrgLink: true }, { deps: { ...ALL_DEPS, checker: true } })).toEqual({
-      pushPartyOrgLink: true,
-    });
-  });
-
-  test("constraint stem seats require the push check", () => {
-    expect(checkEngineConfig({ pushCheck: false, pushConstraintStemSeats: false })).toEqual({
-      pushCheck: false,
-      pushConstraintStemSeats: false,
-    });
-    expect(() =>
-      checkEngineConfig({ pushCheck: false, pushConstraintStemSeats: true }, { deps: { ...ALL_DEPS, checker: true } }),
-    ).toThrow(/pushCheck/);
-    expect(() => checkEngineConfig({ pushConstraintStemSeats: true }, { deps: ALL_DEPS })).toThrow(/checker/);
-    expect(checkEngineConfig({ pushConstraintStemSeats: true }, { deps: { ...ALL_DEPS, checker: true } })).toEqual({
-      pushConstraintStemSeats: true,
-    });
+  test("check-only seats default on, retain their checker dependency and can be disabled", () => {
+    for (const key of ["pushConstraintStemSeats", "pushPartyOrgLink"] as const) {
+      expect(DEFAULT_CONFIG[key]).toBe(true);
+      expect(CORE_CONFIG[key]).toBe(false);
+      expect(NEEDS_DEP[key]).toBe("checker");
+      expect(checkEngineConfig({ [key]: true }, { deps: ALL_DEPS })).toEqual({ [key]: true });
+      expect(checkEngineConfig({ [key]: true }, { deps: { ...ALL_DEPS, checker: true } })).toEqual({ [key]: true });
+      expect(checkEngineConfig({ pushCheck: false, [key]: false })).toEqual({ pushCheck: false, [key]: false });
+      expect(() =>
+        checkEngineConfig({ pushCheck: false, [key]: true }, { deps: { ...ALL_DEPS, checker: true } }),
+      ).toThrow(/pushCheck/);
+    }
   });
 
   test("an unknown key, a wrong type or an out-of-range number is refused, naming the key", () => {

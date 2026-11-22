@@ -2,6 +2,12 @@
 
 Measured from main `d997514da` plus the lab-only oracle implementation. No engine behavior or feature defaults changed.
 
+Historical default-off measurements: D2106 now defaults both seat flags on using
+the later signature fix's evidence in [check-seat-defaults.md](check-seat-defaults.md).
+To reproduce the seat arms below on current main, explicitly set both flags
+false for `default`, only stem true for `stem`, only org true for `org`, and both
+true for `both`; an omitted flag now defaults true.
+
 ## Modes
 
 `hidden-funnel --check oracle|noisy` feeds JSON through the real `PushChecker` parser, verdict cache and delivery path.
@@ -68,4 +74,5 @@ oracle judges IDs even if a real checker could not read enough evidence in a tru
 not test late-check behavior. Generic links exercise checked-why framing but cannot establish explanation quality.
 Delivered means citation delivery, not that an agent understood or acted on it. No agent ran here; these are not
 lh10's heldout ten-day results. Returned counts only request-time connector search, excluding sync/local answers,
-so it is not total acquisition recall. Seat flags remain default off; these results alone do not justify adoption.
+so it is not total acquisition recall. These pre-signature-fix results alone did not justify adoption;
+D2106 records the later free check-only evidence and its no-paid-confirmation caveat.

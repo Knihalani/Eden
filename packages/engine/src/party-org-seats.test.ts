@@ -53,6 +53,7 @@ async function run(
   options: {
     on?: boolean;
     stem?: boolean;
+    check?: boolean;
     model?: Model | null;
     at?: typeof ref;
     empty?: boolean;
@@ -87,8 +88,8 @@ async function run(
       askReader: true,
       readerPush: true,
       readerGate: true,
-      pushCheck: true,
-      pushPartyOrgLink: options.on ?? true,
+      pushCheck: options.check ?? true,
+      pushPartyOrgLink: options.on ?? DEFAULT_CONFIG.pushPartyOrgLink,
       pushConstraintStemSeats: options.stem ?? false,
       pushCandidates: 2,
       askReaderPool: options.poolSize ?? 6,
@@ -104,7 +105,7 @@ async function run(
   });
   const packets = partner.takePending(at);
   const ids = packets.flatMap((p) => p.citations.map((c) => c.itemId));
-  return { ids, pools, packets };
+  return { ids, pools, packets, cache };
 }
 
 describe("organisation constraints have check-only seats", () => {
@@ -147,12 +148,24 @@ describe("organisation constraints have check-only seats", () => {
     expect((await run({ model: null })).packets.every((p) => !p.text.includes("Affiliation evidence"))).toBe(true);
   });
 
-  test("default off; enabling requires push check", () => {
-    expect(DEFAULT_CONFIG.pushPartyOrgLink).toBe(false);
+  test("default on; enabling requires push check", () => {
+    expect(DEFAULT_CONFIG.pushPartyOrgLink).toBe(true);
     expect(() => checkEngineConfig({ pushCheck: false, pushPartyOrgLink: true }, { deps: { checker: true } })).toThrow(
       /pushCheck/,
     );
     expect(checkEngineConfig({ pushCheck: false, pushPartyOrgLink: false }).pushPartyOrgLink).toBe(false);
+  });
+
+  test("affiliations stay unindexed without a checker or with check-only seats off", async () => {
+    expect((await run()).cache.partyOrgs(ref, "Ahmed Hassan", NOW)).toHaveLength(1);
+    for (const options of [{ model: null }, { check: false }, { on: false }]) {
+      const result = await run(options);
+      expect(result.cache.partyOrgs(ref, "Ahmed Hassan", NOW)).toEqual([]);
+    }
+    const unchecked = await run({ model: null, stem: DEFAULT_CONFIG.pushConstraintStemSeats });
+    const off = await run({ model: null, on: false, stem: false });
+    expect(unchecked.ids).toEqual(off.ids);
+    expect(unchecked.pools.map((p) => p.pool)).toEqual(off.pools.map((p) => p.pool));
   });
 
   test("at most two organisation constraints enter the capped pool, never aliases, other orgs or a second hop", async () => {
