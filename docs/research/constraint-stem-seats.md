@@ -49,3 +49,38 @@ bun packages/sim/src/quality-cli.ts --users 4 --sessions 10 --seed 13 \
 
 Raw measurements: `/home/ubuntu/diag-1122/stem-{995,3000}-{off,on}.json`
 and `stem-quality-{13,7}-{off,on}.json`.
+
+## Active-check availability after rebase
+
+Rebased onto `origin/main` `1eaa51b1d` (including D2099). The measurements above
+remain historical results on `49fb22b9f`, not measurements of the rebased tree.
+The decision-table conflict retained D2100 above D2099; the index was regenerated.
+
+Neither requested local oracle exercises the push checker:
+
+- Quality's `--judge perfect` and `--judge noisy` construct `OracleJudge` with
+  `(tp, fp)` of `(1, 0)` and `(.85, .05)` respectively, then pass it as `model`,
+  not `checker` (`packages/sim/src/quality.ts:596–607,622–641`). Its protocol
+  answers the legacy `{"pick":...}` judge prompt, not the push check's compare
+  sheet (`packages/sim/src/judge.ts:65–96`). The partner does not turn a supplied
+  model into a checker (`packages/engine/src/partner-core.ts:163–170`).
+- The hidden funnel's `--reader oracle` creates `OracleReaderMaker` and then an
+  `AskReader`, not a `PushChecker`
+  (`packages/sim/src/lab/hidden-funnel.ts:1129–1148`). Its `--check` accepts only
+  `none`, `live`, or `replay`; a checker is constructed only from that separate
+  model/replay path (`hidden-funnel.ts:647–670,1153–1168,1180–1182`). There is no
+  existing local/oracle push-checker mode in this harness.
+- Both the new seats and the push-check dispatch require `deps.checker`
+  (`packages/engine/src/partner-verdict.ts:1121`;
+  `packages/engine/src/partner-ask.ts:539–540`). Thus these oracle modes leave
+  D2100 inactive, even with its config flag true.
+
+| Requested active-check comparison | Result |
+| --- | --- |
+| Quality perfect, seeds 13/7, off/on | Not run: no push checker wired |
+| Quality noisy, seeds 13/7, off/on | Not run: no push checker wired |
+| Hidden local/oracle checker, seeds 41–44, noise 995, off/on | Unavailable: no such checker mode |
+
+No new checker was built and no ledger rows were written. There are no active-check
+metric numbers from these modes, so the promotion condition (non-negative active
+results with at least one improvement) is not met. Keep D2100 **trial/default off**.
