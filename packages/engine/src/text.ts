@@ -233,8 +233,20 @@ export function extractTypedEntities(text: string, persistableCap = Infinity): E
     // A lone honorific is not the name ("Dr. Okafor" reads as "Dr" plus "Okafor"): kept it would make a request
     // that names the person demand items that name the honorific instead.
     if (words.length === 1 && HONORIFIC.has(words[0]!.toLowerCase())) continue;
+    // A sentence-start run opened by an auxiliary verb is the question's subject, not a name that starts with
+    // one: "Did HMRC reply?" names HMRC, "Is Robin Carter free?" names Robin Carter. ("will"/"may" stay out of
+    // the set — they are also names and months.) The tail keeps the run's admissibility: a lone word after the
+    // cut still counts though a lone word at a sentence's start never would.
+    let auxCut = false;
+    if (sentenceStart && words.length >= 2 && AUX.has(words[0]!.toLowerCase())) {
+      words = words.slice(1);
+      auxCut = true;
+    }
     const run = words.join(" ");
-    if (words.length === 1 && (sentenceStart || STOPWORDS.has(run.toLowerCase()) || isCalendar(run))) continue;
+    // The cut waives only the sentence-start floor — a lone word left by it still counts — but a calendar or
+    // stop word is no subject either way: "Is Thursday free?" names nothing.
+    if (words.length === 1 && ((sentenceStart && !auxCut) || STOPWORDS.has(run.toLowerCase()) || isCalendar(run)))
+      continue;
     // A capitalised run of common words ("What We", "It Is") names nothing: its bonus would push any item holding
     // those words past the bar with no model's say (D6).
     if (words.every((w) => STOPWORDS.has(w.toLowerCase()))) continue;
@@ -245,6 +257,19 @@ export function extractTypedEntities(text: string, persistableCap = Infinity): E
 
 /** Titles read before a name ("Dr.", "Prof."): never an entity on their own. */
 const HONORIFIC = new Set("dr mr mrs ms miss prof sir madam rev st".split(" "));
+
+/**
+ * Words that open a request without being part of its subject: auxiliary verbs ("Did HMRC…") and request verbs
+ * that are never names or nouns ("Tell UPS…", "Remind Dana…", "Cancel Amex…"). Noun-capable verbs stay out —
+ * "book", "share", "will", "chase" all read as a name's first word.
+ */
+const AUX = new Set(
+  (
+    "do does did is are was were has have had can could should would might must shall ought " +
+    "tell send ask ping remind reply respond invite notify congratulate introduce pay buy cancel reschedule " +
+    "write add approve accept decline confirm"
+  ).split(" "),
+);
 
 export function extractEntities(text: string): string[] {
   return extractTypedEntities(text).map((e) => e.text);

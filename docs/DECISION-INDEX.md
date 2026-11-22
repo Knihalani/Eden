@@ -972,3 +972,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2094 | 2026-11-22 | Adopted: a multi-word party's contraction joins its alias table, and the expanded set drives lookup and ranking. | adopted |
 | D2095 | 2026-11-22 | Adopted: a three-word party's initials join the contraction table too. | adopted |
 | D2096 | 2026-11-22 | Adopted: the request's expanded entities drive routing and rarity too. | adopted |
+| D2097 | 2026-11-22 | Adopted: a sentence-start run led by an auxiliary or request verb names its subject, not the verb. | adopted |
