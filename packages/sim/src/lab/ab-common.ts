@@ -55,6 +55,47 @@ export interface ChatOptions {
 /** OpenRouter's refusal of `response_format` (a model or endpoint without JSON mode): the call is sent without it. */
 const NO_JSON_MODE = /response_format|json[_ ]?(mode|object|schema)|structured output/i;
 
+/**
+ * A dead key fails every call the same way, and a topped-up account only recovers between runs: 401/402/403
+ * `AUTH_DEAD_STREAK` calls in a row mark the run dead. `billingDead` lets a caller stop scheduling work instead of
+ * paying a model roundtrip for each of a hundred more identical failures (lh11's resume burned 420 check calls on a
+ * key whose account was out of credit, while the key-limit endpoint still showed headroom).
+ */
+export class BillingStopped extends Error {
+  override name = "BillingStopped";
+}
+const AUTH_DEAD_STREAK = 6;
+// Per host: a run mixes accounts — a healthy Anthropic agent key beside a dead OpenRouter grader key — and one
+// account's 200s must not clear the other's streak.
+const authDead = new Map<string, number>();
+/** True once `AUTH_DEAD_STREAK` calls in a row answered 401/402/403 on one host — the run should stop. */
+export const billingDead = () => [...authDead.values()].some((n) => n >= AUTH_DEAD_STREAK);
+/** Tests only: a tripped breaker must not leak into the next test. */
+export const billingResetForTests = () => {
+  authDead.clear();
+};
+/**
+ * The counter wraps the run's model fetch (`labAccess`'s — every OpenRouter request goes through it: `chat`'s,
+ * streamSimple's, the Hermes proxy's), not `chat` alone: an agent's own calls never reach `chat`, so a dead key
+ * counted there would only show in the grader's calls a failed task skips. A 2xx clears the streak — a brief
+ * outage is not a dead key. `chat` still throws `BillingStopped` once the breaker trips, whatever fetch it used.
+ */
+export const billingFetch = (inner: typeof fetch): typeof fetch =>
+  Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const res = await inner(input, init);
+    let host = "";
+    try {
+      host = new URL(typeof input === "string" || input instanceof URL ? String(input) : input.url).host;
+    } catch {
+      // Not a URL: count it under the empty host — a malformed call's failures still belong to some streak.
+    }
+    if (res.ok) authDead.delete(host);
+    else if (res.status === 401 || res.status === 402 || res.status === 403) {
+      authDead.set(host, (authDead.get(host) ?? 0) + 1);
+    }
+    return res;
+  }, inner);
+
 /** One chat call through OpenRouter, retried on rate limits and server errors; its cost is booked on the meter. */
 export async function chat(
   key: string,
@@ -111,7 +152,10 @@ export async function chat(
       }
       const retryable = res.status === 0 || res.status === 429 || res.status >= 500;
       // A paced fetch has already retried what was worth retrying; a network failure it gave up on is final too.
-      if (attempt >= 3 || !retryable || paced) throw new Error(`${model} ${res.status}: ${text.slice(0, 300)}`);
+      if (attempt >= 3 || !retryable || paced) {
+        if (billingDead()) throw new BillingStopped(`${model} ${res.status}: ${text.slice(0, 300)}`);
+        throw new Error(`${model} ${res.status}: ${text.slice(0, 300)}`);
+      }
     }
     await Bun.sleep(1_000 * 2 ** attempt);
   }

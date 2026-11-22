@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { Context } from "@earendil-works/pi-ai";
 import { RequestCapReached } from "@eden/llm";
-import { chat, parseGrade, type Task } from "./ab-common";
+import {
+  billingDead,
+  BillingStopped,
+  billingFetch,
+  billingResetForTests,
+  chat,
+  parseGrade,
+  type Task,
+} from "./ab-common";
 import {
   anthropicThinkingOff,
   isCapError,
@@ -180,6 +188,57 @@ describe("grading on free models", () => {
     await expect(chat("k", meter, FREE, [], undefined, false, { fetch: capped })).rejects.toBeInstanceOf(
       RequestCapReached,
     );
+  });
+
+  test("the billing breaker: six 401/402/403s in a row trip it, a success resets it", async () => {
+    billingResetForTests();
+    try {
+      expect(billingDead()).toBe(false);
+      let calls = 0;
+      // `billingFetch` wraps the run's model fetch (labAccess'), so the agent's own calls count too, not chat's alone.
+      const dead = billingFetch((async () => {
+        calls++;
+        return new Response("Insufficient credits", { status: 402 });
+      }) as unknown as typeof globalThis.fetch);
+      // Below the streak: each call fails as before, counted, not fatal.
+      for (let i = 0; i < 5; i++)
+        await expect(chat("k", meter, FREE, [], undefined, false, { fetch: dead })).rejects.toThrow("402");
+      expect(billingDead()).toBe(false);
+      // A working call clears the streak: a brief outage is not a dead key.
+      const ok = billingFetch((async () =>
+        Response.json({
+          choices: [{ message: { role: "assistant", content: "x" } }],
+          usage: { cost: 0 },
+        })) as unknown as typeof globalThis.fetch);
+      await chat("k", meter, FREE, [{ role: "user", content: "x" }], undefined, false, { fetch: ok });
+      calls = 0;
+      for (let i = 0; i < 6; i++)
+        await expect(chat("k", meter, FREE, [], undefined, false, { fetch: dead })).rejects.toThrow();
+      expect(calls).toBe(6);
+      expect(billingDead()).toBe(true);
+      await expect(chat("k", meter, FREE, [], undefined, false, { fetch: dead })).rejects.toBeInstanceOf(
+        BillingStopped,
+      );
+      // Rate limits and server errors never count toward it.
+      billingResetForTests();
+      const busy = billingFetch((async () => new Response("x", { status: 429 })) as unknown as typeof globalThis.fetch);
+      for (let i = 0; i < 8; i++)
+        await expect(chat("k", meter, FREE, [], undefined, false, { fetch: busy })).rejects.toThrow("429");
+      expect(billingDead()).toBe(false);
+      // A healthy account's successes don't clear a dead one's streak — the counter is per host.
+      billingResetForTests();
+      const mixed = billingFetch((async (u: string | URL | Request) =>
+        String(u instanceof Request ? u.url : u).includes("anthropic")
+          ? Response.json({ ok: true })
+          : new Response("Insufficient credits", { status: 402 })) as unknown as typeof globalThis.fetch);
+      for (let i = 0; i < 6; i++) {
+        await expect(chat("k", meter, FREE, [], undefined, false, { fetch: mixed })).rejects.toThrow("402");
+        await mixed("https://api.anthropic.com/v1/messages");
+      }
+      expect(billingDead()).toBe(true);
+    } finally {
+      billingResetForTests();
+    }
   });
 });
 

@@ -24,6 +24,7 @@ import {
   type Model,
   type OpenRouterOptions,
 } from "@eden/llm";
+import { billingFetch } from "./ab-common";
 import { SpendLedger } from "./spend";
 import { installQueue, queueDir, queueDirFrom, withRole } from "./queue-transport";
 import { createModels, createProvider, envApiKeyAuth, type Model as PiModel } from "@earendil-works/pi-ai";
@@ -102,7 +103,9 @@ export function labAccess(args: string[], models: string[], pacing: { now?: () =
     const headroom = Number(opt("spend-headroom") ?? 0.5);
     ledger = new SpendLedger(path, cap, opt("run-label") ?? "run", headroom);
   }
-  return { allowLogging, pacer, fetch: pacer.fetch, free, ledger };
+  // `billingFetch` counts dead-key replies on every model call of the run — the agent's, the grader's, Eden's own —
+  // so `billingDead` trips on the first stream that sees them, not only where `chat` is the caller.
+  return { allowLogging, pacer, fetch: billingFetch(pacer.fetch), free, ledger };
 }
 
 /**
