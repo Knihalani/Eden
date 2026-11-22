@@ -609,6 +609,36 @@ describe("OpenRouterModel", () => {
     expect(out.truncated).toBe(true);
   });
 
+  test("request provider sort overrides only routing order and preserves privacy and model defaults", async () => {
+    const bodies: any[] = [];
+    const fake = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return Response.json({ choices: [{ message: { content: "ok" }, finish_reason: "stop" }] });
+    }) as unknown as typeof fetch;
+    const req = { messages: [], maxTokens: 50 };
+    const model = new OpenRouterModel({ apiKey: "k", model: "deepseek/deepseek-v4.1-flash", fetch: fake });
+    await model.chat(req);
+    expect(bodies[0].provider).toEqual({ data_collection: "deny", zdr: true, allow_fallbacks: true });
+    for (const sort of ["throughput", "latency", "price"] as const) {
+      const provider = { sort, zdr: false, data_collection: "allow", allow_fallbacks: false };
+      await model.chat({ ...req, provider });
+      expect(bodies.at(-1).provider).toEqual({ ...bodies[0].provider, sort });
+      const { provider: ignored, ...body } = bodies.at(-1);
+      const { provider: baseline, ...original } = bodies[0];
+      expect(body).toEqual(original);
+    }
+    const priced = new OpenRouterModel({
+      apiKey: "k",
+      model: "deepseek/deepseek-v4.1-flash",
+      fetch: fake,
+      sort: "price",
+    });
+    await priced.chat(req);
+    expect(bodies.at(-1).provider.sort).toBe("price");
+    await priced.chat({ ...req, provider: { sort: "throughput" } });
+    expect(bodies.at(-1).provider.sort).toBe("throughput");
+  });
+
   test("explicit off disables reasoning without changing the output cap or JSON request", async () => {
     for (const id of ["deepseek/deepseek-v4.1-flash", "anthropic/claude-haiku-5.5"]) {
       let sent: any;

@@ -152,6 +152,31 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
     );
   });
 
+  test("provider sort reaches only checker requests and null omits the request override", async () => {
+    for (const sort of ["throughput", "latency", "price", null] as const) {
+      const model = says(["Harlow deposit"]);
+      const { partner } = setup({ pushCheck: true, pushCheckProviderSort: sort, pushCandidatesSettled: 0 }, model);
+      await handed(partner);
+      expect(model.calls.length).toBeGreaterThan(0);
+      expect(model.calls[0]!.provider).toEqual(sort ? { sort } : undefined);
+    }
+    const model = says([]);
+    const checker = new PushChecker({ model, budget: new Budget() });
+    const input = {
+      request: REQUEST,
+      today: "2026-10-27",
+      items: [
+        { id: "one", source: "mail", title: "Deposit", text: "Deposit due Friday", from: "", date: "", hash: "one" },
+      ],
+    };
+    await checker.check(ref, "default-sort", input, new AbortController().signal);
+    expect(model.calls[0]!.provider).toEqual({ sort: "throughput" });
+    expect(checkKey(input)).toBe(checkKey({ ...input, providerSort: "price" }));
+    const offModel = says([]);
+    const off = setup({ pushCheck: false }, offModel);
+    await handed(off.partner);
+    expect(offModel.calls).toHaveLength(0);
+  });
   test("stem constraint seats are bounded, switchable and check-only", async () => {
     const rules = [
       item("stem1", "Finance approval", "Q4 renewals: discounts above 10% need CFO sign-off before offered.", 1),

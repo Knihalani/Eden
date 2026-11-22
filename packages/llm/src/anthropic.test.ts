@@ -151,6 +151,14 @@ describe("AnthropicModel", () => {
     }
   });
 
+  test("OpenRouter provider preferences do not change Anthropic requests", () => {
+    const request = { messages: [], maxTokens: 500 };
+    const options = { apiKey: "k", model: "claude-haiku-5-5" };
+    expect(anthropicBody(options, { ...request, provider: { sort: "throughput" } }, false)).toEqual(
+      anthropicBody(options, request, false),
+    );
+  });
+
   test("a user message marked cache ends a cached prefix at its own block", () => {
     const body = anthropicBody(
       { apiKey: "k" },

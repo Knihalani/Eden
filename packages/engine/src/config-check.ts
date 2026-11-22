@@ -70,6 +70,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushCheck: "checker",
   pushCheckWaitMs: "checker",
   pushCheckAdaptiveWait: "checker",
+  pushCheckProviderSort: "checker",
   pushCheckedWhy: "checker",
   pushCheckedFacts: "checker",
   pushConstraintStemSeats: "checker",
@@ -210,6 +211,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushAsk: PUSH,
   pushCheck: PUSH,
   pushCheckWaitMs: [...PUSH, "pushCheck"],
+  pushCheckProviderSort: [...PUSH, "pushCheck"],
   pushCheckedWhy: [...PUSH, "pushCheck"],
   pushCheckedFacts: [...PUSH, "pushCheck"],
   pushUnsureAskNudge: PUSH,
@@ -401,6 +403,12 @@ function checkKey(where: string, key: string, given: unknown): void {
   // `Object.hasOwn`, not `in`: "__proto__" and "constructor" are not settings.
   if (!Object.hasOwn(DEFAULT_CONFIG, key)) throw new Error(`${where}: unknown key "${key}"`);
   const fallback = DEFAULT_CONFIG[key as Key];
+  if (key === "pushCheckProviderSort") {
+    if (given !== null && given !== "throughput" && given !== "latency" && given !== "price") {
+      throw new Error(`${where}: "${key}" must be throughput, latency, price or null`);
+    }
+    return;
+  }
   if (Array.isArray(fallback)) {
     if (!Array.isArray(given) || !given.every((entry) => typeof entry === "string")) {
       throw new Error(`${where}: "${key}" must be an array of strings`);

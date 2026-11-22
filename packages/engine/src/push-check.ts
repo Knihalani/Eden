@@ -25,6 +25,7 @@ import { scopeKey, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import { READER_REQUEST_CHARS, type ReaderItem } from "./reader";
 import { inert } from "./render";
+import { DEFAULT_CONFIG, type EngineConfig } from "./config";
 import { SheetCachePolicy, SystemTtlPolicy } from "./sheet-cache";
 import { checkedFact } from "./checked-facts";
 
@@ -151,6 +152,8 @@ const SHEET_FACTS_HEAD = SHEET_HEAD.replace('"act":true}', '"says":"<the item\'s
 /** What one check is asked: the request's head, the pool's items as the reader renders them, and the user's day. */
 export interface PushCheckInput {
   checkedFacts?: boolean;
+  /** Routing only: omitted uses the default; null preserves the model's routing, not part of the replay key. */
+  providerSort?: EngineConfig["pushCheckProviderSort"];
   request: string;
   items: (ReaderItem & { affiliation?: string })[];
   today: string;
@@ -500,6 +503,7 @@ export class PushChecker {
     const sheetHash = sheet.length > 0 ? createHash("sha256").update(sheetText(sheet)).digest("hex").slice(0, 16) : "";
     const sheetCache = sheet.length > 0 && this.sheetPolicy.mark(user, sheetHash, sent);
     const systemHour = !sheetCache && this.systemPolicy.hour(scope.tenantId, sent);
+    const providerSort = input.providerSort === undefined ? DEFAULT_CONFIG.pushCheckProviderSort : input.providerSort;
     try {
       const res = await this.deps.model.chat({
         messages: checkMessages({ ...input, items, sheet }, { sheetCache, systemHour }),
@@ -509,6 +513,7 @@ export class PushChecker {
           (sheet.length > 0 ? 40 * SHEET_MAX_NAMED : 0) +
           (input.checkedFacts ? 30 * (COMPARE_MAX_ENTRIES + (sheet.length > 0 ? SHEET_MAX_NAMED : 0)) : 0),
         reasoning: "off",
+        ...(providerSort ? { provider: { sort: providerSort } } : {}),
         json: true,
         // The compare-first reply lists its rejections on purpose (a "hits": "none" entry), so it has no stop.
         ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),

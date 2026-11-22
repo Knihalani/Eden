@@ -460,6 +460,12 @@ The opt-in `pushCheckedFacts` trial (D2107) uses a separate prompt/version/cache
 to 20 words / 160 UTF-8 bytes; checked packets quote them as facts beside short source excerpts. Missing or
 unfaithful text falls back to the original excerpt; unchecked packets, lookups and ask answers are unchanged.
 
+The checker alone requests OpenRouter `provider.sort: "throughput"` (D2108), controlled by
+`pushCheckProviderSort` (`"throughput"`, `"latency"`, `"price"`, or `null`; default `"throughput"`). Null omits
+the per-request preference and leaves existing model routing intact. Other callers keep their routing; Anthropic
+ignores the preference. Sorting preserves ZDR and no-collection restrictions, but is not a price cap or a guarantee
+of lower latency/cost; see [the provider snapshot](research/check-provider-sort.md).
+
 **Check-only constraint seats** (`pushConstraintStemSeats`, `pushPartyOrgLink`, default on since D2106,
 part `check`) add at most two stem-matched constraints and two organisation-scoped constraints reached through
 explicit one-hop person affiliations, within the existing pool cap. Only a check naming a seat can hand it;

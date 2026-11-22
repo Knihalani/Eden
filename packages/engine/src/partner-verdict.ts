@@ -1318,6 +1318,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       }),
       today,
       ...(this.config.pushCheckedFacts ? { checkedFacts: true } : {}),
+      providerSort: this.config.pushCheckProviderSort,
       ...(sheet.length > 0 ? { sheet, ...(this.config.pushCheckSheetRefs ? { sheetRefs: true } : {}) } : {}),
       cacheKey: userCacheKey(s.scope),
     };

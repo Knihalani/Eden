@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { ModelHeldError, type RateHold } from "./pacing";
 import { costOf, priceFor } from "./pricing";
 import { estimateTokens } from "./tokens";
-import type { ChatMessage, ChatRequest, ChatResponse, Model, Usage } from "./types";
+import type { ChatMessage, ChatRequest, ChatResponse, Model, Usage, ProviderSort } from "./types";
 
 export interface OpenRouterOptions {
   apiKey: string;
@@ -29,7 +29,7 @@ export interface OpenRouterOptions {
    * throughput and latency). "price" tries the cheapest compliant endpoint first: for background work no user waits
    * on (card enrichment; docs/research/econ-background.md). It still honours `zdr` and `data_collection`.
    */
-  sort?: "price" | "throughput" | "latency";
+  sort?: ProviderSort;
   /**
    * LAB ONLY: route to endpoints that may log or retain prompts (`data_collection: "allow"`, no ZDR), which free
    * models need. Never set it where real user data flows; the server has no way to.
@@ -255,7 +255,7 @@ export class OpenRouterModel implements Model {
         data_collection: this.options.allowLogging ? "allow" : "deny",
         zdr: this.options.allowLogging ? false : (this.options.zdr ?? true),
         allow_fallbacks: true,
-        ...(this.options.sort ? { sort: this.options.sort } : {}),
+        ...(request.provider?.sort || this.options.sort ? { sort: request.provider?.sort ?? this.options.sort } : {}),
       },
       usage: { include: true },
       // Sticky routing: OpenRouter keeps a session_id on one provider endpoint (10 min idle), so a stable prompt

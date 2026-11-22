@@ -1,4 +1,4 @@
-export type { ChatMessage, ChatRequest, ChatResponse, Model, Usage } from "./types";
+export type { ChatMessage, ChatRequest, ChatResponse, Model, Usage, ProviderSort } from "./types";
 export {
   CACHE_TRIP_CALLS,
   MIN_CACHE_TOKENS_UNKNOWN,
