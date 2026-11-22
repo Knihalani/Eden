@@ -1003,7 +1003,7 @@ export interface PushGate {
   like: boolean[];
   /** The pool's cards, as `pushPool` read them — `candidatesOf`'s constraint test needs them for ruled items too. */
   cards: ReadonlyMap<string, Card>;
-  /** `pushDaySeats`: the pool's items seated for the request's day; handed only when the check names them. */
+  /** Supplemental day/constraint items; handed only when the check names them. */
   seats?: Set<string>;
   /** `pushDaySeats`: the pool before the seats, and whether a push with no check answer hands its candidates. */
   before?: Scored[];
@@ -1118,6 +1118,20 @@ export abstract class PartnerVerdict extends PartnerCheck {
     // rather than being pushed past the cap by the others.
     const head = Math.min(pool.length, Math.max(0, this.config.pushCandidates));
     const seated = this.daySeats(s, cue, new Set(pool.slice(0, head).map((x) => x.item.id)));
+    if (this.config.pushConstraintStemSeats && this.config.pushCheck && this.deps.checker && !byDay) {
+      const have = new Set([...pool, ...seated].map((x) => x.item.id));
+      const stemmed = this.rank(s, cue, { ignoreLedger: true, stemOnly: true }).filter(
+        (x) => x.matched > 0 && !have.has(x.item.id) && !bulkMail(x.item) && !this.contradicts(x, cue),
+      );
+      const stemCards = this.config.cards
+        ? (this.deps.cards?.cardsOf(
+            s.scope,
+            stemmed.map((x) => x.item.id),
+            at,
+          ) ?? new Map<string, Card>())
+        : new Map<string, Card>();
+      seated.push(...stemmed.filter((x) => this.constraintLike(x, stemCards)).slice(0, 2));
+    }
     if (seated.length === 0 && !byDay) return { pool, like: pool.map((x) => this.constraintLike(x, cards)), cards };
     // The pool as it stood, and its own gate: what a push with no check answer hands (`candidatesOf`), so a seat never
     // opens a hand-out no model judged. A push only the day started has no such hand-out at all.

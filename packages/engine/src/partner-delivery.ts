@@ -799,7 +799,7 @@ export abstract class PartnerDelivery extends PartnerCore {
   protected rank(
     s: Session,
     cue: Cue,
-    options: { ignoreLedger?: boolean; probed?: string[]; expand?: boolean } = {},
+    options: { ignoreLedger?: boolean; probed?: string[]; expand?: boolean; stemOnly?: boolean } = {},
   ): Scored[] {
     const cache = this.deps.cache;
     const vocab = cache.peekVocab(s.scope);
@@ -818,7 +818,7 @@ export abstract class PartnerDelivery extends PartnerCore {
     // meets "landlord agent" without a common synonym outscoring the topic. Terms no live item holds are left out:
     // a freed word's idf still weighs positive and would punish the survivors.
     let groups: { ids: number[]; idf: number }[] | undefined;
-    if (options.expand) {
+    if (options.expand || options.stemOnly) {
       groups = [];
       const seen = new Set<string>();
       // Raw words, tokenized as the query was ("wi-fi" is one term) — including words the index never saw, whose
@@ -832,7 +832,7 @@ export abstract class PartnerDelivery extends PartnerCore {
         const own = vocab.lookup(w);
         if (own >= 0 && cache.hasTerm(s.scope, own)) ids.add(own);
         for (const other of cache.stemIds(s.scope, stem) ?? []) if (cache.hasTerm(s.scope, other)) ids.add(other);
-        for (const syn of ASK_FAMILY[stem] ?? [])
+        for (const syn of options.stemOnly ? [] : (ASK_FAMILY[stem] ?? []))
           for (const other of cache.stemIds(s.scope, stemWord(syn)) ?? [])
             if (cache.hasTerm(s.scope, other)) ids.add(other);
         if (ids.size === 0) continue;

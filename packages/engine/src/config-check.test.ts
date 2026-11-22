@@ -6,6 +6,20 @@ import { CORE_CONFIG, PARTS, type Part } from "./parts";
 const ALL_DEPS = { cards: true, reader: true };
 
 describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silently)", () => {
+  test("constraint stem seats require the push check", () => {
+    expect(checkEngineConfig({ pushCheck: false, pushConstraintStemSeats: false })).toEqual({
+      pushCheck: false,
+      pushConstraintStemSeats: false,
+    });
+    expect(() =>
+      checkEngineConfig({ pushCheck: false, pushConstraintStemSeats: true }, { deps: { ...ALL_DEPS, checker: true } }),
+    ).toThrow(/pushCheck/);
+    expect(() => checkEngineConfig({ pushConstraintStemSeats: true }, { deps: ALL_DEPS })).toThrow(/checker/);
+    expect(checkEngineConfig({ pushConstraintStemSeats: true }, { deps: { ...ALL_DEPS, checker: true } })).toEqual({
+      pushConstraintStemSeats: true,
+    });
+  });
+
   test("an unknown key, a wrong type or an out-of-range number is refused, naming the key", () => {
     // The finding's typo: `fallbackAsk` for `fallbackAsks` ran the defaults silently.
     expect(() => checkEngineConfig({ fallbackAsk: true })).toThrow(/unknown key "fallbackAsk"/);

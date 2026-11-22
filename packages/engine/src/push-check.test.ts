@@ -92,6 +92,79 @@ async function handed(p: ContextPartner, at = ref, text = REQUEST): Promise<stri
 }
 
 describe("pushCheck (I3, D500): one model call picks the push's candidates", () => {
+  test("stem constraint seats are bounded, opt-in and check-only", async () => {
+    const rules = [
+      item("stem1", "Finance approval", "Q4 renewals: discounts above 10% need CFO sign-off before offered.", 1),
+      item("stem2", "Security review", "Renewals must undergo an independent security assessment before execution.", 2),
+      item(
+        "stem3",
+        "Legal review",
+        "All renewals are on hold until the outstanding litigation is resolved by external counsel.",
+        3,
+      ),
+      item("plainstem", "Sales archive", "Renewals discussed at the last sales meeting; notes attached.", 4),
+      item("synonym", "Property restriction", "The landlord must approve alterations to the property.", 5),
+    ];
+    const exact = Array.from({ length: 8 }, (_, i) =>
+      item(`exact${i}`, `Globex update ${i}`, `Globex renewal offer ${i}: approval pending until Friday.`, i + 1),
+    );
+    const titles = rules.map((x) => x.title);
+    const run = async (
+      enabled: boolean,
+      model: Model | null,
+      text = "Offer Globex 15% off for their renewal.",
+      config: Record<string, unknown> = {},
+      items = [...exact, ...rules],
+    ) => {
+      const pools: PushPoolReport[] = [];
+      const { partner } = setup(
+        {
+          pushCheck: true,
+          pushConstraintStemSeats: enabled,
+          pushCandidatesSettled: 0,
+          askReaderPool: 5,
+          ...config,
+        },
+        model,
+        pools,
+        items,
+      );
+      const got = await handed(partner, ref, text);
+      return { got, pool: pools.at(-1)! };
+    };
+    const off = await run(false, says(titles));
+    expect(off.got).toEqual([]);
+    const on = await run(true, says(titles));
+    expect(on.got.length).toBe(2);
+    expect(on.got.every((id) => rules.slice(0, 3).some((r) => r.id === id))).toBe(true);
+    expect(on.pool.pool.length).toBeLessThanOrEqual(5);
+    expect(on.pool.pool.filter((id) => rules.some((r) => r.id === id)).length).toBe(2);
+    const unchecked = await run(true, null);
+    expect(unchecked.got).toEqual((await run(false, null)).got);
+    expect(unchecked.got.some((id) => rules.some((r) => r.id === id))).toBe(false);
+    const failed = await run(
+      true,
+      new FakeModel(() => {
+        throw new Error("offline");
+      }),
+    );
+    expect(failed.got).toEqual(unchecked.got);
+    const synonyms = await run(true, says(titles), "Reply to Globex about my flat.");
+    expect(synonyms.pool.pool).not.toContain("mail:synonym");
+    expect((await run(true, says(titles), "Zzyzx quux.")).got).toEqual([]);
+    expect((await run(true, says(titles), undefined, {}, [])).got).toEqual([]);
+    const slow: Model = {
+      id: "late-stem-check",
+      async chat(request) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return new FakeModel(() => '{"items":[]}').chat(request);
+      },
+    };
+    const late = await run(true, slow, undefined, { pushCheckWaitMs: 5 });
+    expect(late.pool.check).toBe("late");
+    expect(late.got).toEqual(unchecked.got);
+  });
+
   test("checked why is opt-in: the reply's order and links reach the packet; off stays byte-identical", async () => {
     const packet = async (flag?: boolean) => {
       const { partner } = setup(
