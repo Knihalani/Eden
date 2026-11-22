@@ -970,3 +970,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2092 | 2026-11-22 | Adopted: `expect.also` — a tolerated delivery on the eval label. | adopted |
 | D2093 | 2026-11-22 | Adopted: a gated candidate tied to the request by its own reference survives the term bar. | adopted |
 | D2094 | 2026-11-22 | Adopted: a multi-word party's contraction joins its alias table, and the expanded set drives lookup and ranking. | adopted |
+| D2095 | 2026-11-22 | Adopted: a three-word party's initials join the contraction table too. | adopted |

@@ -117,8 +117,8 @@ describe("ItemCache.aliasTable (D2009): the per-user table, kept as items come a
     const t = cache.aliasTable(SCOPE);
     // Two-letter heads of a two-word name; two names sharing a contraction both expand it.
     expect(t.get("amex")).toEqual(new Set(["american express", "amenity express"]));
-    // A three-word name's initials; under four letters it stays out.
-    expect(t.get("hpo")).toBeUndefined();
+    // A three-word name's initials join too — "HM Passport Office" answering to "HPO" (D2095).
+    expect(t.get("hpo")).toEqual(new Set(["hm passport office"]));
     // A lone part is unchanged.
     expect(t.get("american")).toEqual(new Set(["american express"]));
   });
