@@ -5,6 +5,14 @@ import { pairedWith, parseCondition, parseConditions, parseVariants } from "./pi
 const ALL = { sync: true, cards: true, densePacket: true };
 
 describe("pi-ab conditions", () => {
+  test("+checkedFacts aliases the answer-form engine trial and stacks", () => {
+    const c = parseCondition("both+checkedFacts+pushCheckedWhy+packetCoversLine", {
+      config: ALL,
+      defaults: DEFAULT_CONFIG as unknown as Record<string, unknown>,
+    });
+    expect(c.config).toEqual({ ...ALL, pushCheckedFacts: true, pushCheckedWhy: true, packetCoversLine: true });
+    expect(pairedWith(c.name)).toBe("both");
+  });
   test("+edenGuide is harness-only and leaves tool availability and engine settings alone", () => {
     const options = { config: ALL, defaults: DEFAULT_CONFIG as unknown as Record<string, unknown> };
     const off = parseCondition("both", options);

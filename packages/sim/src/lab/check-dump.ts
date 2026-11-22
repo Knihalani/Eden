@@ -14,6 +14,7 @@ import { promptKey } from "./reader-disk";
 
 /** What the funnel knows of the task a session runs. */
 export interface DumpTask {
+  detail?: string;
   suite: string;
   seed: number;
   variant: string;

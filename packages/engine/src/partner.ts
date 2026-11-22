@@ -1744,7 +1744,9 @@ export class ContextPartner extends PartnerAsk {
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
       packetCoversLine: this.config.packetCoversLine,
-      ...(frame ? { lead: frame.lead, changes: frame.changes, unsureAskTopic: frame.unsureAskTopic } : {}),
+      ...(frame
+        ? { lead: frame.lead, changes: frame.changes, facts: frame.facts, unsureAskTopic: frame.unsureAskTopic }
+        : {}),
       ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),
@@ -1831,6 +1833,7 @@ export interface PacketFrame {
   lead: string;
   unsureAskTopic?: string;
   changes?: ReadonlyMap<string, string>;
+  facts?: ReadonlyMap<string, string>;
   itemBytes: number;
   maxBytes: number;
 }

@@ -135,6 +135,8 @@ export {
   SHEET_MAX_CARDS,
   type SheetCard,
   CHECK_VERSION,
+  CHECK_FACTS_VERSION,
+  CHECK_FACTS_SYSTEM,
   checkKey,
   checkMessages,
   DEFAULT_CHECK_LIMITS,

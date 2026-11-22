@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2107 | 2026-11-22 | Trial `pushCheckedFacts` (default off): checked packets state faithful source facts, not just excerpts. | adopted |
 | D2106 | 2026-11-22 | Adopt `pushConstraintStemSeats` and `pushPartyOrgLink` as default on, superseding the default-off trials D2100/D2101. | adopted |
 | D2105 | 2026-11-22 | The push check requests reasoning off; exclude only hid reasoning that shared the 620-token cap, and 78–82% of recorded replies truncated… | adopted |
 | D2104 | 2026-11-22 | Trial `edenGuide` (harness-only, opt-in): append one integrator guide line to Hermes/Pi agent system prompts. | trial |
