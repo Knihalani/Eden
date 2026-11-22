@@ -88,12 +88,16 @@ export abstract class PartnerCheck extends PartnerDelivery {
    */
   protected buildUpdate(s: Session, items: readonly ContextItem[]): { injection: Injection; items: ContextItem[] } {
     const tagged = items.map((it) => ({ ...it, title: `${UPDATED_TAG}${it.title}${this.updatedNote(s, it)}` }));
-    let text = renderPacket(tagged, { maxBytes: this.config.maxInjectionBytes });
+    let text = renderPacket(tagged, {
+      maxBytes: this.config.maxInjectionBytes,
+      packetCoversLine: this.config.packetCoversLine,
+    });
     let n = renderedCount(items, text);
     if (n === 0) {
       // Not even the first line fits a tiny `maxInjectionBytes`: it is said alone, under a cap that holds its line.
       text = renderPacket(tagged.slice(0, 1), {
         maxBytes: Math.max(this.config.maxInjectionBytes, 512),
+        packetCoversLine: this.config.packetCoversLine,
       });
       n = 1;
     }

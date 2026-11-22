@@ -324,6 +324,7 @@ export abstract class PartnerAsk extends PartnerVerdict {
       const focus = focusOf(itemCue);
       const answer = renderPacket([fresh], {
         maxBytes: ASK_ITEM_BYTES + 1_024,
+        packetCoversLine: this.config.packetCoversLine,
         focus,
         itemBytes: ASK_ITEM_BYTES,
         self: this.deps.cache.selfOf(s.scope),

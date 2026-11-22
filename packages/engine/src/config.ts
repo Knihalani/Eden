@@ -827,6 +827,8 @@ export interface EngineConfig {
   pushCheckAdaptiveWait: boolean;
   /** Trial: check order and short per-item request links on check-named packets. */
   pushCheckedWhy: boolean;
+  /** Trial: remind the agent that packet excerpts are already retrieved, without claiming search coverage. */
+  packetCoversLine: boolean;
   /** The characters of each item's most relevant parts the check reads (200, D501; at most `READER_ITEM_CHARS`). */
   pushCheckItemChars: number;
   /**
@@ -1126,6 +1128,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckAdaptiveWait: true,
   pushCheckedWhy: false,
+  packetCoversLine: false,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   packetHeedsCheck: true,

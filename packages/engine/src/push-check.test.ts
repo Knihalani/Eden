@@ -9,7 +9,7 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { CHECKED_LEAD, CHECKED_WHY_LEAD } from "./render";
+import { CHECKED_LEAD, CHECKED_WHY_LEAD, PACKET_COVERS_LINE } from "./render";
 import { CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCompare, PushChecker } from "./push-check";
 
 // The push check (I3, D500; in the default since D828). One model call over the push's pool names the items that
@@ -167,6 +167,40 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
     const late = await run(true, slow, undefined, { pushCheckWaitMs: 5 });
     expect(late.pool.check).toBe("late");
     expect(late.got).toEqual(unchecked.got);
+  });
+
+  test("packet covers line frames checked and unchecked packets; off stays byte-identical", async () => {
+    expect(DEFAULT_CONFIG.packetCoversLine).toBe(false);
+    const failed: Model = {
+      id: "failed-check",
+      chat: async () => {
+        throw new Error("down");
+      },
+    };
+    for (const model of [null, says(["Invoice archive", "Harlow deposit"]), failed]) {
+      const packet = async (flag?: boolean) => {
+        const { partner } = setup(
+          {
+            pushCheck: model !== null,
+            pushCandidatesSettled: 0,
+            ...(flag === undefined ? {} : { packetCoversLine: flag }),
+          },
+          model,
+        );
+        await partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+          waitMs: 2_000,
+        });
+        return partner.takePending(ref).find((p) => p.reason.startsWith("candidates:"));
+      };
+      const before = await packet();
+      const off = await packet(false);
+      const on = await packet(true);
+      expect(before).toBeDefined();
+      expect(off!.text).toBe(before!.text);
+      expect(off!.text).not.toContain(PACKET_COVERS_LINE);
+      expect(on!.text).toContain(`\n${PACKET_COVERS_LINE}\n`);
+      expect(on!.citations).toEqual(before!.citations);
+    }
   });
 
   test("checked why is opt-in: the reply's order and links reach the packet; off stays byte-identical", async () => {
