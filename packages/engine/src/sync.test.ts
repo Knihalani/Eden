@@ -717,6 +717,91 @@ describe("syncPush: a source that notifies is polled when told it changed", () =
   });
 });
 
+describe("syncKeepRules", () => {
+  async function retained(on: boolean, rules: number, cap = 8, engaged = false) {
+    const docs = [
+      ...mail(8),
+      ...Array.from({ length: rules }, (_, i) => ({
+        ref: `rule${i}`,
+        title: "Legal reminder",
+        text: "Do not commit delivery dates until the MSA is countersigned.",
+        at: T0 - (20 + i) * HOUR,
+      })),
+    ];
+    const sources = docs.map((doc) => new ListSource(doc.ref, [doc]));
+    const env = setup(sources, {
+      syncMaxItems: cap,
+      syncPageSize: 64,
+      syncBackfillLanes: 64,
+      syncKeepRules: on,
+      syncEngagedDeep: engaged,
+    });
+    env.partner.sync!.track(scope);
+    if (engaged) {
+      for (const src of sources) {
+        const list = src.list.bind(src);
+        src.list = async (...args) => {
+          env.partner.sync!.engage(
+            scope,
+            sources.map((s) => s.id),
+          );
+          return list(...args);
+        };
+      }
+    }
+    while (!env.partner.sync!.warm(scope)) await env.partner.sync!.tick();
+    const internal = env.partner.sync as unknown as {
+      users: Map<string, unknown>;
+      trim(user: unknown, now: number): number;
+    };
+    internal.trim(internal.users.values().next().value, env.now());
+    return env.cache;
+  }
+
+  test("keeps older constraints instead of newer noise without growing the cap; off preserves recency", async () => {
+    for (const on of [false, true]) {
+      const cache = await retained(on, 1);
+      expect(cache.syncedCount(scope)).toBe(8);
+      expect(cache.isSynced(scope, itemId("rule0", "rule0"))).toBe(on);
+      expect(cache.isSynced(scope, itemId("m7", "m7"))).toBe(!on);
+    }
+  });
+
+  test("a mailbox of constraints cannot pin more than a quarter, even with engaged-source retention", async () => {
+    for (const engaged of [false, true]) {
+      const cache = await retained(true, 24, 8, engaged);
+      expect(cache.syncedCount(scope)).toBe(8);
+      const held = Array.from({ length: 24 }, (_, i) => cache.isSynced(scope, itemId(`rule${i}`, `rule${i}`)));
+      expect(held.filter(Boolean)).toHaveLength(2);
+      expect(held.slice(0, 3)).toEqual([true, true, false]);
+    }
+  });
+
+  test("no matching rules leaves newest-item selection unchanged, and tiny caps have no reserve", async () => {
+    const plain = await retained(true, 0);
+    expect(plain.syncedCount(scope)).toBe(8);
+    expect(plain.isSynced(scope, itemId("m7", "m7"))).toBe(true);
+    const tiny = await retained(true, 3, 1);
+    expect(tiny.syncedCount(scope)).toBe(1);
+    expect(tiny.isSynced(scope, itemId("rule0", "rule0"))).toBe(false);
+    expect(tiny.isSynced(scope, itemId("m0", "m0"))).toBe(true);
+  });
+
+  test("an empty or failed listing protects nothing; recovery still respects the cap", async () => {
+    const src = new ListSource("empty", []);
+    const env = setup([src], { syncKeepRules: true, syncMaxItems: 8 });
+    src.failLists = true;
+    env.partner.sync!.track(scope);
+    await env.partner.sync!.tick();
+    expect(env.cache.syncedCount(scope)).toBe(0);
+    src.failLists = false;
+    env.advance(HOUR);
+    while (!env.partner.sync!.warm(scope)) await env.partner.sync!.tick();
+    expect(env.cache.syncedCount(scope)).toBe(0);
+    expect(env.partner.sync!.warm(scope)).toBe(true);
+  });
+});
+
 describe("storeHeld: a deletion notified between the store's slices", () => {
   test("the deleted id never re-enters s.ids, so the source is not left cut (PR #398 review)", async () => {
     const clock = { t: T0 };
