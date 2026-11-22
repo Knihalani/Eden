@@ -141,6 +141,16 @@ describe("AnthropicModel", () => {
     expect(anthropicPrice("claude-sonnet-5-5")).toMatchObject({ input: 2, output: 10 });
   });
 
+  test("request reasoning off overrides adaptive thinking with the model's supported off mode", () => {
+    const req = { messages: [], maxTokens: 500, reasoning: "off" as const };
+    for (const model of ["claude-sonnet-5-5", "claude-haiku-5-5"]) {
+      const body = anthropicBody({ apiKey: "k", model, thinking: "adaptive" }, req, false);
+      expect(body.thinking).toEqual({ type: model === "claude-sonnet-5-5" ? "between_tools" : "disabled" });
+      expect("output_config" in body).toBe(false);
+      expect(body.max_tokens).toBe(500);
+    }
+  });
+
   test("a user message marked cache ends a cached prefix at its own block", () => {
     const body = anthropicBody(
       { apiKey: "k" },

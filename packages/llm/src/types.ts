@@ -30,9 +30,10 @@ export interface ChatRequest {
   cacheKey?: string;
   /**
    * How hard a reasoning model should think. Its reasoning tokens count against `maxTokens`, so a small cap with no
-   * effort set can leave no room for the answer (D45). Models that do not reason ignore it.
+   * effort set can leave no room for the answer (D45). "off" disables reasoning rather than hiding its text.
+   * Models that do not reason ignore it.
    */
-  reasoning?: "low" | "medium" | "high";
+  reasoning?: "off" | "low" | "medium" | "high";
   /**
    * Stop sequences: the model stops before writing any of them, and the reply's text leaves it out (Anthropic
    * `stop_sequences`, OpenRouter `stop`). The caller reads a reply cut there knowing where it was cut.

@@ -411,6 +411,56 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
     });
   }
 
+  test("check reserves its output cap for the reply, with empty and failed replies still failing open", async () => {
+    const input = {
+      request: REQUEST,
+      today: "2026-10-27",
+      items: [{ id: "hold", source: "mail", date: "", from: "", hash: "h", title: "Hold", text: "Stop payment." }],
+    };
+    const signal = new AbortController().signal;
+    const replies = [
+      '{"items":[{"i":1,"on":"payment","hits":"deposit","act":true}]}',
+      '{"items":[]}',
+      "",
+      { text: '{"items":[{"i":1,"on":"payment","hits":"deposit","act":true}]}', truncated: true },
+    ];
+    for (const [i, reply] of replies.entries()) {
+      const model = new FakeModel((request) => {
+        expect(request.reasoning).toBe("off");
+        expect(request.maxTokens).toBe(500);
+        return reply;
+      });
+      const checker = new PushChecker({ model, budget: new Budget() });
+      expect((await checker.check(ref, "off", { ...input, items: [] }, signal)).called).toBe(false);
+      expect(model.calls).toHaveLength(0);
+      const result = await checker.check(ref, "off", input, signal);
+      expect(result.yes === null ? null : [...result.yes]).toEqual(i === 0 ? ["hold"] : i === 1 ? [] : null);
+      expect(checker.stats.failures).toBe(i >= 2 ? 1 : 0);
+    }
+  });
+
+  test("sheet checks also disable reasoning without increasing their existing reply cap", async () => {
+    const model = new FakeModel((request) => {
+      expect(request.reasoning).toBe("off");
+      expect(request.maxTokens).toBe(620);
+      return '{"items":[],"rules":[]}';
+    });
+    const checker = new PushChecker({ model, budget: new Budget() });
+    const result = await checker.check(
+      ref,
+      "sheet-off",
+      {
+        request: REQUEST,
+        today: "2026-10-27",
+        items: [{ id: "hold", source: "mail", date: "", from: "", hash: "h", title: "Hold", text: "Stop payment." }],
+        sheet: [{ id: "rule", kind: "constraint", statement: "No payments.", title: "Hold", source: "mail" }],
+      },
+      new AbortController().signal,
+    );
+    expect(result.yes).toEqual(new Set());
+    expect(result.rules).toEqual(new Set());
+  });
+
   test("check latency samples are bounded; empty inputs and model errors add none", async () => {
     let latencyMs = 900;
     let fail = false;

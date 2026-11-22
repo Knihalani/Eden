@@ -393,6 +393,7 @@ interface OpenRouterResponse {
 
 /** The request's `reasoning` field (see `chat`): none for an Anthropic model asked for none; else excluded, "low". */
 function reasoningField(model: string, effort: ChatRequest["reasoning"]) {
+  if (effort === "off") return { reasoning: { enabled: false, exclude: true } };
   if (effort) return { reasoning: { effort, exclude: true } };
   return model.startsWith("anthropic/") ? {} : { reasoning: { effort: "low" as const, exclude: true } };
 }
