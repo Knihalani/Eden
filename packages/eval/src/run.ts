@@ -526,17 +526,21 @@ export async function runScenarios(scenarios: Scenario[], options: RunOptions): 
           acting.handed += turn.expect.items.filter((id) => got.includes(id) || before.has(id)).length;
         }
         const want = turn.expect === "silent" ? null : new Set(turn.expect.items);
+        // `also` (D2092): deliveries the label tolerates but does not require — they leave the score entirely, no
+        // precision cost and no recall credit, on the turn that caused them.
+        const also = typeof turn.expect === "object" ? new Set(turn.expect.also ?? []) : null;
+        const counted = also ? got.filter((id) => !also.has(id)) : got;
         for (const t of tallies) {
           t.scoredTurns++;
-          t.delivered += got.length;
+          t.delivered += counted.length;
           if (!want) {
             t.silentTurns++;
-            if (got.length > 0) t.falseFires++;
+            if (counted.length > 0) t.falseFires++;
             continue;
           }
-          t.deliveredExpected += got.filter((id) => want.has(id)).length;
+          t.deliveredExpected += counted.filter((id) => want.has(id)).length;
           t.expected += want.size;
-          t.expectedFound += [...want].filter((id) => got.includes(id) || before.has(id)).length;
+          t.expectedFound += [...want].filter((id) => counted.includes(id) || before.has(id)).length;
         }
       });
       await partner.observe({ ...who, sessionId: session.id, at: clock++, kind: "session_end" });

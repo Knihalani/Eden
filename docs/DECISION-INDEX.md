@@ -967,3 +967,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2089 | 2026-11-22 | Adopted: a packet finalized after a same-turn delivery drops the item already handed. | adopted |
 | D2090 | 2026-11-22 | Rejected (measured): `intentExpand` — ASK_FAMILY OR-groups on the intent-index query. | rejected |
 | D2091 | 2026-11-22 | Adopted: a billing breaker beside the request cap. | adopted |
+| D2092 | 2026-11-22 | Adopted: `expect.also` — a tolerated delivery on the eval label. | adopted |
