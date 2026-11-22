@@ -7,6 +7,26 @@ const ALL = { sync: true, cards: true };
 const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
 
 describe("hermes-ab conditions", () => {
+  test("+edenGuide is opt-in system guidance, not engine configuration", () => {
+    const options = { config: ALL, defaults };
+    const off = parseHermesCondition("hermes+eden", options);
+    const on = parseHermesCondition("hermes+eden+edenGuide", options);
+    expect(off.edenGuide).toBe(false);
+    expect(on.edenGuide).toBe(true);
+    expect(on.config).toEqual(off.config);
+    expect(on.askTool).toBe(off.askTool);
+    const stacked = parseHermesCondition(
+      "hermes+eden+pushCheckedWhy+packetCoversLine+pushUnsureAskNudge+edenGuide",
+      options,
+    );
+    expect(stacked.edenGuide).toBe(true);
+    expect(stacked.config).toEqual({ ...ALL, pushCheckedWhy: true, packetCoversLine: true, pushUnsureAskNudge: true });
+    expect(Object.hasOwn(DEFAULT_CONFIG, "edenGuide")).toBe(false);
+    expect(pairedWith(on.name)).toBe("hermes");
+    expect(() => parseHermesCondition("hermes+edenGuide", options)).toThrow(/unknown condition/);
+    expect(() => parseHermesCondition("hermes+eden+edenGuides", options)).toThrow(/no engine setting/);
+  });
+
   test("+packetCoversLine enables only the framing trial and stacks with +pushCheckedWhy", () => {
     const options = { config: ALL, defaults };
     expect(DEFAULT_CONFIG.packetCoversLine).toBe(false);
@@ -31,7 +51,6 @@ describe("hermes-ab conditions", () => {
       /no engine setting/,
     );
   });
-
   test("+pushCheckedWhy enables only the checked packet trial", () => {
     const c = parseHermesCondition("hermes+eden+pushCheckedWhy", { config: ALL, defaults });
     expect(c.config).toEqual({ ...ALL, pushCheckedWhy: true });

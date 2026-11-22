@@ -56,6 +56,24 @@ On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below. O
 - **The SDK fails open.** A timeout or an error is "no context", never an exception in the agent's loop. Keep it that
   way in your wrapper.
 
+## Optional agent system-prompt guidance (D2104 trial)
+
+Integrators can opt into a short guide explaining that Eden context blocks are retrieved excerpts, asking the
+agent to say what they change before acting and to call `ask_context` when unsure. Import the canonical wording
+rather than maintaining a copy:
+
+```ts
+import { EDEN_CONTEXT_GUIDE } from "@eden/protocol";
+
+const systemPrompt = `${baseSystemPrompt}\n${EDEN_CONTEXT_GUIDE}`;
+```
+
+This is a **trial**, not a default or a measured improvement. Eden does not alter the agent's system prompt.
+D1160's earlier Haiku test lacked uptake headroom; weak-model benefit remains untested. The lab opts in with
+`hermes+eden+edenGuide` or `both+edenGuide`; the token changes only the prompt, not engine settings or tools.
+Expose `ask_context` yourself. Hermes's Eden arm already does; in Pi use `both+ask+edenGuide` against `both+ask`
+for an actionable comparison with the same tools. Measure uptake, false concerns and cost before adopting it.
+
 ## How long to wait on the user message (`waitMs`; D98, D105)
 
 `observe` takes a `waitMs` option: how long the server may hold the user message's observe for a fresher answer

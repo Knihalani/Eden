@@ -43,7 +43,7 @@ import {
   type MixRow,
   type WeightedRow,
 } from "./pi-ab-weighted";
-import { pairedWith } from "./pi-conditions";
+import { reportPairs } from "./pi-ab-pairs";
 import {
   cacheNeutral,
   endpointMix,
@@ -423,7 +423,7 @@ const model = runs[0]?.model ?? "";
 const listPrice = runs.every((r) => r.model === model) ? MODEL_PRICES[model] : undefined;
 const neutralPrice = listPrice && records.size ? cacheNeutral(listPrice) : undefined;
 const costRng = new Rng(2);
-const PAIRS = [
+const PAIRS = reportPairs(conditions, [
   ["eden", "tools"],
   ["both", "tools"],
   ["eden", "none"],
@@ -436,12 +436,7 @@ const PAIRS = [
   // hermes-ab (A16): Eden in place of Hermes' source tools, against Hermes alone and against Eden beside them.
   ["hermes-eden", "hermes"],
   ["hermes+eden", "hermes-eden"],
-] as [string, string][];
-// A wait, variant or flag condition ("both@w0", "eden~ALL2", "eden+askDedup") against the one it modifies.
-for (const c of conditions) {
-  const base = pairedWith(c);
-  if (base && !PAIRS.some(([a, b]) => a === c && b === base)) PAIRS.push([c, base]);
-}
+]);
 console.log("\n== paired differences (a − b), bootstrap 95% interval over tasks");
 for (const [a, b] of PAIRS) {
   for (const kind of ["hidden", "control", "neutral", "request", "arrival"] as const) {
