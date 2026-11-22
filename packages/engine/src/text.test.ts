@@ -17,6 +17,9 @@ describe("extractEntities", () => {
     expect(extractEntities("Has the Amex card arrived?")).toContain("Amex");
     // Ambiguous leading words stay: "will"/"may" are also names and months, "book"/"share"/"chase" nouns.
     expect(extractEntities("Will Smith called about the gig")).toContain("Will Smith");
+    expect(extractEntities("May Chen called about the invoice")).toContain("May Chen");
+    // The cut waives only the sentence-start floor — a leftover calendar word is still no entity.
+    expect(extractEntities("Is Thursday morning free?")).toEqual([]);
   });
 
   test("a single capitalised word that starts a sentence is not an entity", () => {

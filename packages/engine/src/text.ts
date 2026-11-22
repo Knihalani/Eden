@@ -243,7 +243,9 @@ export function extractTypedEntities(text: string, persistableCap = Infinity): E
       auxCut = true;
     }
     const run = words.join(" ");
-    if (words.length === 1 && (sentenceStart || STOPWORDS.has(run.toLowerCase()) || isCalendar(run)) && !auxCut)
+    // The cut waives only the sentence-start floor — a lone word left by it still counts — but a calendar or
+    // stop word is no subject either way: "Is Thursday free?" names nothing.
+    if (words.length === 1 && ((sentenceStart && !auxCut) || STOPWORDS.has(run.toLowerCase()) || isCalendar(run)))
       continue;
     // A capitalised run of common words ("What We", "It Is") names nothing: its bonus would push any item holding
     // those words past the bar with no model's say (D6).
@@ -263,7 +265,7 @@ const HONORIFIC = new Set("dr mr mrs ms miss prof sir madam rev st".split(" "));
  */
 const AUX = new Set(
   (
-    "do does did is are was were has have had can could should would may might must shall ought " +
+    "do does did is are was were has have had can could should would might must shall ought " +
     "tell send ask ping remind reply respond invite notify congratulate introduce pay buy cancel reschedule " +
     "write add approve accept decline confirm"
   ).split(" "),

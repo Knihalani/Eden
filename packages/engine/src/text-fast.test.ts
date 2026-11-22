@@ -60,7 +60,7 @@ function entitiesBefore(text: string): Entity[] {
       sentenceStart &&
       words.length >= 2 &&
       (
-        "do does did is are was were has have had can could should would may might must shall ought " +
+        "do does did is are was were has have had can could should would might must shall ought " +
         "tell send ask ping remind reply respond invite notify congratulate introduce pay buy cancel reschedule " +
         "write add approve accept decline confirm"
       )
@@ -71,7 +71,10 @@ function entitiesBefore(text: string): Entity[] {
       auxCut = true;
     }
     const run = words.join(" ");
-    if (words.length === 1 && (sentenceStart || isStopword(run.toLowerCase()) || isCalendarByPattern(run)) && !auxCut)
+    if (
+      words.length === 1 &&
+      ((sentenceStart && !auxCut) || isStopword(run.toLowerCase()) || isCalendarByPattern(run))
+    )
       continue;
     if (words.every((w) => isStopword(w.toLowerCase()))) continue;
     add(run, "name");
