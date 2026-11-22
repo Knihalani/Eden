@@ -72,6 +72,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   pushCheckAdaptiveWait: "checker",
   pushCheckedWhy: "checker",
   pushConstraintStemSeats: "checker",
+  pushPartyOrgLink: "checker",
   pushCheckItemChars: "checker",
   pushCheckItems: "checker",
   packetHeedsCheck: "checker",

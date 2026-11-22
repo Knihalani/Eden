@@ -49,7 +49,16 @@ function judge(): Model {
 }
 
 async function run(
-  options: { on?: boolean; model?: Model | null; at?: typeof ref; empty?: boolean; text?: string } = {},
+  options: {
+    on?: boolean;
+    stem?: boolean;
+    model?: Model | null;
+    at?: typeof ref;
+    empty?: boolean;
+    text?: string;
+    contents?: ContextItem[];
+    poolSize?: number;
+  } = {},
 ) {
   const cache = new ItemCache();
   cache.close();
@@ -60,7 +69,12 @@ async function run(
   const checker = model ? new PushChecker({ model, budget: new Budget() }) : undefined;
   const partner = new ContextPartner({
     sources: async () => [
-      { id: "mail", kind: "test", description: "Mail", search: async () => (options.empty ? [] : items) },
+      {
+        id: "mail",
+        kind: "test",
+        description: "Mail",
+        search: async () => (options.empty ? [] : (options.contents ?? items)),
+      },
     ],
     sourceMap: new SourceMap(),
     cache,
@@ -74,8 +88,9 @@ async function run(
       readerGate: true,
       pushCheck: true,
       pushPartyOrgLink: options.on ?? true,
+      pushConstraintStemSeats: options.stem ?? false,
       pushCandidates: 2,
-      askReaderPool: 6,
+      askReaderPool: options.poolSize ?? 6,
       confidentScore: 99,
       fallbackMatchedTerms: 99,
     },
@@ -93,7 +108,9 @@ async function run(
 describe("organisation constraints have check-only seats", () => {
   test("default off; enabling requires push check", () => {
     expect(DEFAULT_CONFIG.pushPartyOrgLink).toBe(false);
-    expect(() => checkEngineConfig({ pushCheck: false, pushPartyOrgLink: true })).toThrow(/pushCheck/);
+    expect(() => checkEngineConfig({ pushCheck: false, pushPartyOrgLink: true }, { deps: { checker: true } })).toThrow(
+      /pushCheck/,
+    );
     expect(checkEngineConfig({ pushCheck: false, pushPartyOrgLink: false }).pushPartyOrgLink).toBe(false);
   });
 
@@ -119,6 +136,39 @@ describe("organisation constraints have check-only seats", () => {
     expect((await run({ model: new FakeModel(() => "not json") })).ids).toEqual(off.ids);
     expect((await run({ model: new FakeModel(() => '{"items":[]}') })).ids).toEqual([]);
     expect((await run({ empty: true })).ids).toEqual([]);
+  });
+
+  test("stem and organisation seats coexist, bounded and de-duplicated, with the same unchecked fallback", async () => {
+    const shared = ["north", "south"].map((id) =>
+      item(id, `Umbrella Health renewals ${id}`, "Umbrella Health renewals are on hold."),
+    );
+    const legal = ["east", "west", "central"].map((id) =>
+      item(id, `Legal ${id}`, "Umbrella Health contract commitments are on hold until MSA countersignature."),
+    );
+    const options = {
+      text: "Reply to Ahmed Hassan about the renewal.",
+      contents: [...items.slice(0, 2), ...shared, ...legal],
+      poolSize: 8,
+    };
+    const base = (await run({ ...options, on: false })).pools.at(-1)!.pool;
+    const stem = (await run({ ...options, on: false, stem: true })).pools.at(-1)!.pool;
+    const org = (await run(options)).pools.at(-1)!.pool;
+    expect(stem.filter((id) => !base.includes(id))).toEqual(expect.arrayContaining(shared.map((x) => x.id)));
+    expect(stem.filter((id) => !base.includes(id))).toHaveLength(2);
+    expect(org.filter((id) => !base.includes(id))).toHaveLength(2);
+    expect(org.some((id) => shared.some((x) => x.id === id))).toBe(true);
+    const both = await run({ ...options, stem: true });
+    expect(both.pools.length).toBeGreaterThan(0);
+    for (const { pool } of both.pools) {
+      expect(new Set(pool).size).toBe(pool.length);
+      expect(pool.length).toBeLessThanOrEqual(options.poolSize);
+      expect(pool.filter((id) => shared.some((x) => x.id === id))).toHaveLength(2);
+      expect(pool.filter((id) => legal.some((x) => x.id === id))).toHaveLength(2);
+      expect(pool.filter((id) => !base.includes(id))).toHaveLength(4);
+    }
+    const unchecked = await run({ ...options, on: false, model: null });
+    expect((await run({ ...options, stem: true, model: null })).ids).toEqual(unchecked.ids);
+    expect((await run({ ...options, stem: true, model: new FakeModel(() => "not json") })).ids).toEqual(unchecked.ids);
   });
 
   test("full party names are recognised even when entity extraction includes a leading verb", async () => {

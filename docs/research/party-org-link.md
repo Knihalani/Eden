@@ -3,6 +3,11 @@
 Trial, default **off** (`pushPartyOrgLink`), based on `origin/main` `1eaa51b1d`.
 This is a candidate-retrieval change, not employer/employee alias equivalence.
 
+After rebasing onto `5e77a20c4` (D2100), stem seats run first (at most two);
+org seats then exclude those items and add at most two more, within the same
+pool cap. `pushPartyOrgLink` now requires the checker dependency at config
+validation, like `pushConstraintStemSeats`.
+
 ## Bounds and provenance
 
 - Opt-in cache indexing reads each stored item's bounded text once per index update.
@@ -60,7 +65,9 @@ These harnesses do not wire a push checker. Flat numbers are an unchecked-path
 safety screen, not active-check accuracy evidence. D2101 stays trial/default off.
 No paid calls, new oracle checker or live uptake evaluation.
 
-Reproduction (repeat with the flag false/true, quality seeds 13 and 7):
+Historical measurement commands (before checker-dependency enforcement; repeat
+with the flag false/true, quality seeds 13 and 7). The current no-checker CLI
+correctly rejects flag-on rather than silently measuring an inactive feature:
 
 ```sh
 bun packages/sim/src/lab/hidden-funnel.ts --suite hidden --seeds 41,42,43,44 \
