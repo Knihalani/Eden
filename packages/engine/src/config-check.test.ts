@@ -6,6 +6,27 @@ import { CORE_CONFIG, PARTS, type Part } from "./parts";
 const ALL_DEPS = { cards: true, reader: true };
 
 describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silently)", () => {
+  test("checker provider sorting accepts only supported sorts or null and retains dependency gates", () => {
+    expect(DEFAULT_CONFIG.pushCheckProviderSort).toBe("throughput");
+    expect(CORE_CONFIG.pushCheckProviderSort).toBeNull();
+    for (const value of ["throughput", "latency", "price", null] as const) {
+      expect(checkEngineConfig({ pushCheckProviderSort: value }, { deps: { checker: true } })).toEqual({
+        pushCheckProviderSort: value,
+      });
+    }
+    for (const value of ["", "fast", true, 0, [], {}, undefined]) {
+      expect(() => checkEngineConfig({ pushCheckProviderSort: value })).toThrow(/pushCheckProviderSort/);
+    }
+    expect(checkEngineConfig({ pushCheck: false, pushCheckProviderSort: null })).toEqual({
+      pushCheck: false,
+      pushCheckProviderSort: null,
+    });
+    expect(() => checkEngineConfig({ pushCheckProviderSort: "price" })).toThrow(/checker/);
+    expect(() =>
+      checkEngineConfig({ pushCheck: false, pushCheckProviderSort: "throughput" }, { deps: { checker: true } }),
+    ).toThrow(/pushCheck/);
+  });
+
   test("unchecked ask nudge needs candidates, not a checker", () => {
     const on = { pushUnsureAskNudge: true, pushCheck: false };
     expect(checkEngineConfig(on, { deps: ALL_DEPS })).toEqual(on);

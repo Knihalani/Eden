@@ -16,6 +16,8 @@ export interface ChatMessage {
   cacheTtl?: "1h";
 }
 
+export type ProviderSort = "throughput" | "latency" | "price";
+
 export interface ChatRequest {
   messages: ChatMessage[];
   maxTokens: number;
@@ -34,6 +36,8 @@ export interface ChatRequest {
    * Models that do not reason ignore it.
    */
   reasoning?: "off" | "low" | "medium" | "high";
+  /** OpenRouter-only routing preference; other adapters ignore it. Privacy restrictions are not overridden. */
+  provider?: { sort: ProviderSort };
   /**
    * Stop sequences: the model stops before writing any of them, and the reply's text leaves it out (Anthropic
    * `stop_sequences`, OpenRouter `stop`). The caller reads a reply cut there knowing where it was cut.

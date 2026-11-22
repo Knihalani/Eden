@@ -5,6 +5,7 @@ import type { AgentEvent, ContextItem, Scope } from "@eden/protocol";
 import { StaticSource, type ListPage, type SearchQuery, type Source } from "@eden/sources";
 import { ItemCache } from "./cache";
 import { DEFAULT_CONFIG, type EngineConfig } from "./config";
+import { checkEngineConfig } from "./config-check";
 import { ContextPartner } from "./partner";
 import { CORE_CONFIG, PARTS, withoutParts, type Part } from "./parts";
 import type { Trace } from "./trace";
@@ -108,6 +109,7 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   // D710 (O3): the candidates' push also starts for a request that opens like an instruction on an unlisted verb.
   pushOpen: true,
   pushCheck: true,
+  pushCheckProviderSort: "throughput",
   // D1450 (G2): a rule path's packet the request's check turned down is not handed.
   packetHeedsCheck: true,
   pushIndirect: true,
@@ -138,7 +140,9 @@ describe("the unified default and its parts (D112)", () => {
         expect(Object.hasOwn(DEFAULT_CONFIG, key)).toBe(true);
         // A part's setting that equals the default would take nothing out.
         expect(same(value, DEFAULT_CONFIG[key as keyof EngineConfig])).toBe(false);
-        expect(typeof value).toBe(typeof DEFAULT_CONFIG[key as keyof EngineConfig]);
+        expect(() =>
+          checkEngineConfig({ [key]: value }, { parents: false, deps: { cards: true, reader: true, checker: true } }),
+        ).not.toThrow();
       }
       // Taking one part out changes exactly its own settings.
       const without = withoutParts(part);
@@ -154,11 +158,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(90);
+    expect(differ.length).toBe(91);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(90);
+    expect(partKeys.size).toBe(91);
   });
 });
 

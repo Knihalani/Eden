@@ -1,3 +1,5 @@
+import type { ProviderSort } from "@eden/llm";
+
 /** Every threshold the engine uses, in one place. Tuned by the eval harness (packages/eval), not by hand-waving. */
 export interface EngineConfig {
   /**
@@ -825,6 +827,8 @@ export interface EngineConfig {
   pushCheckWaitMs: number;
   /** Extend the check wait from observed model latency within the caller's remaining push budget. */
   pushCheckAdaptiveWait: boolean;
+  /** OpenRouter routing for the checker only; null leaves the model's existing routing unchanged. */
+  pushCheckProviderSort: ProviderSort | null;
   /** Trial: check order and short per-item request links on check-named packets. */
   pushCheckedWhy: boolean;
   /** Trial: check-named packets state faithful source facts before their excerpts. */
@@ -1131,6 +1135,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheck: true,
   pushCheckWaitMs: 1_500,
   pushCheckAdaptiveWait: true,
+  pushCheckProviderSort: "throughput",
   pushCheckedWhy: false,
   pushCheckedFacts: false,
   packetCoversLine: false,

@@ -19,6 +19,16 @@ const file = (name: string, body: string): string => {
 };
 
 describe("EDEN_ENGINE_CONFIG (D103)", () => {
+  test("checker provider order parses supported strings and null, rejecting invalid settings", () => {
+    for (const sort of ["throughput", "latency", "price", null] as const) {
+      expect(parseEngineConfig({ pushCheckProviderSort: sort })).toEqual({ pushCheckProviderSort: sort });
+    }
+    for (const sort of ["", "fastest", false, 123, {}]) {
+      expect(() => parseEngineConfig({ pushCheckProviderSort: sort })).toThrow(/pushCheckProviderSort/);
+    }
+    expect(DEFAULT_CONFIG.pushCheckProviderSort).toBe("throughput");
+  });
+
   test("unset: the partner runs on the default exactly", () => {
     expect(engineConfig({})).toEqual({});
     expect(engineConfig({ EDEN_ENGINE_CONFIG: "" })).toEqual({});
