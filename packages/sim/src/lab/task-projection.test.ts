@@ -66,3 +66,18 @@ test("budget-stopped references with observations in every arm/kind still need e
     "complete successful grading",
   );
 });
+
+test("projection requires matching recap boundaries and day clock configuration", () => {
+  const project = (s: ProjectionSource, schedule = {}) =>
+    projectTasks(s, tasks, conditions, taskSelection(null, tasks), models, schedule);
+  expect(() => project({ ...source, day: 4, recapNotice: "push" }, { day: 8, recapNotice: "push" })).toThrow(
+    "recap schedule",
+  );
+  expect(() => project({ ...source, day: 4, recapNotice: "push" }, { day: 4, recapNotice: "push" })).not.toThrow();
+  const user = { gapMin: 30, nightH: 12, worlds: [{ seed: 41, daySizes: [1, 2] }] };
+  expect(() => project({ ...source, user }, { user: { ...user, worlds: [{ seed: 41, daySizes: [2, 1] }] } })).toThrow(
+    "recap schedule",
+  );
+  expect(() => project({ ...source, user }, { user: { ...user, nightH: 8 } })).toThrow("recap schedule");
+  expect(() => project({ ...source, days: [{ partial: true }] })).toThrow("complete");
+});

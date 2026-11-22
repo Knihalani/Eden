@@ -1,11 +1,18 @@
 import type { RunResult, Task } from "./ab-common";
 import { kindSlots, type TaskSelection } from "./task-kinds";
 
-export interface ProjectionSource {
+export interface ProjectionSchedule {
+  day?: number;
+  recapNotice?: string;
+  user?: { gapMin: number; nightH: number; worlds: { seed: number; daySizes?: number[] }[] };
+}
+
+export interface ProjectionSource extends ProjectionSchedule {
   model: string;
   grader: string;
   spent: number;
   partial?: boolean;
+  days?: { partial?: boolean }[];
   spend?: { grader: number };
   tasks: Pick<Task, "id" | "kind" | "must">[];
   results: Pick<RunResult, "task" | "condition" | "costUsd" | "edenCostUsd" | "error" | "facts">[];
@@ -18,11 +25,31 @@ export function projectTasks(
   conditions: readonly string[],
   selection: TaskSelection,
   models: { model: string; grader: string },
+  schedule: ProjectionSchedule = {},
 ) {
   if (source.model !== models.model || source.grader !== models.grader)
     throw new Error("--project-from needs the same agent and grader models");
-  if (source.partial || !source.results.length || source.results.some((r) => r.error))
+  if (
+    source.partial ||
+    source.days?.some((d) => d.partial) ||
+    !source.results.length ||
+    source.results.some((r) => r.error)
+  )
     throw new Error("--project-from needs a complete, error-free reference run");
+  const scheduleKey = (s: ProjectionSchedule) =>
+    JSON.stringify({
+      day: s.day ?? 0,
+      recapNotice: s.recapNotice ?? null,
+      user: s.user
+        ? {
+            gapMin: s.user.gapMin,
+            nightH: s.user.nightH,
+            worlds: s.user.worlds.map((w) => ({ seed: w.seed, daySizes: w.daySizes })),
+          }
+        : null,
+    });
+  if (scheduleKey(source) !== scheduleKey(schedule))
+    throw new Error("--project-from needs the same recap schedule/day configuration");
   const priorConditions = [...new Set(source.results.map((r) => r.condition))];
   if (conditions.length !== priorConditions.length || conditions.some((c) => !priorConditions.includes(c)))
     throw new Error("--project-from needs the same conditions (fixed recap/background costs are retained)");

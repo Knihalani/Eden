@@ -1964,6 +1964,18 @@ if (opt("project-from", "")) {
     CONDITIONS.map((c) => c.name),
     SELECTION,
     { model: MODEL, grader: GRADER },
+    {
+      ...(DAYS_ON ? { ...(DAY > 0 ? { day: DAY } : {}), recapNotice: RECAP_NOTICE } : {}),
+      ...(USER_DAYS > 0
+        ? {
+            user: {
+              gapMin: GAP_MS / 60_000,
+              nightH: NIGHT_MS / 3_600_000,
+              worlds: worlds.map((w) => ({ seed: w.seed, daySizes: w.daySizes })),
+            },
+          }
+        : {}),
+    },
   );
   console.error(
     `PROJECTED COST: $${p.projectedUsd.toFixed(4)}; ${p.tasks} graded tasks; ` +
