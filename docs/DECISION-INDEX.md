@@ -17,7 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
-| D2099 | 2026-11-22 | Trial `syncKeepRules` (default off): bounded standing-rule retention in sync trim. | adopted |
+| D2099 | 2026-11-22 | Adopted `syncKeepRules` (default on): bounded standing-rule retention in sync trim. | adopted |
 | D2098 | 2026-11-22 | Trial `pushCheckedWhy` (off by default): check-named packets carry short quoted request links and decisive-first order. | trial |
 | D2097 | 2026-11-22 | Adopted: adaptive push-check wait within the caller's push deadline. | adopted |
 | D1 | 2026-10-27 | Target personal and proactive agents built by tenants, not coding agents. | adopted |

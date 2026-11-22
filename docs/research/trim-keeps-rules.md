@@ -1,6 +1,6 @@
 # Bounded rule retention (2026-11-22)
 
-`syncKeepRules` is a default-off trial. It uses the reader gate's cached constraint-wording test (`gateOf`, without
+`syncKeepRules` is adopted, on by default. It uses the reader gate's cached constraint-wording test (`gateOf`, without
 visits) to reserve up to one quarter of `syncMaxItems`, newest first. The existing engaged-source reserve then takes
 up to half the cap; at least a quarter remains for recency. This adds a linear pass, not another sort, to the trim's
 existing recency sort. It does not enlarge the cap, extend TTLs, change admission or fetch older pages to find rules.
@@ -14,11 +14,11 @@ These are not live-reader uptake measurements. Calls/task includes hidden and co
 backfill. Sources use `--time 0`.
 
 ```sh
-bun packages/sim/src/lab/hidden-funnel.ts --suite hidden --seeds 41,42,43,44 --noise-sources 995 --serial --time 0 --label diag-1122-trim --no-record --json before.json
+bun packages/sim/src/lab/hidden-funnel.ts --suite hidden --seeds 41,42,43,44 --noise-sources 995 --serial --time 0 --config '{"syncKeepRules":false}' --label diag-1122-trim --no-record --json before.json
 bun packages/sim/src/lab/hidden-funnel.ts --suite hidden --seeds 41,42,43,44 --noise-sources 995 --serial --time 0 --config '{"syncKeepRules":true}' --label diag-1122-trim --no-record --json after.json
 ```
 
-Repeat with `--noise-sources 3000` (3,005 total sources). Main's default flag value is false. An external preload
+Repeat with `--noise-sources 3000` (3,005 total sources). The adopted default flag value is true. An external preload
 observed trim victims and cache presence at each user-message arrival; the harness's `hiddenCached` is later, after
 the request's work, so background/probe recovery can make it higher than arrival-time cache presence.
 
@@ -47,7 +47,7 @@ calendar items lack the constraint wording this reserve uses. The legal policies
 their request names a person and SSO, while the policy names the company and MSA. Retention alone does not bridge
 that lexical gap. Both discount-cap misses likewise persist in this no-card push screen.
 
-Quality commands, each before and with `--config '{"syncKeepRules":true}'`:
+Quality commands, each with `--config '{"syncKeepRules":false}'` and `--config '{"syncKeepRules":true}'`:
 
 ```sh
 bun packages/sim/src/quality-cli.ts --users 4 --sessions 10 --seed 13 --judge local --brief
@@ -59,6 +59,7 @@ bun packages/sim/src/quality-cli.ts --users 4 --sessions 10 --seed 7 --judge loc
 | 13   | .826 → .826 | .532 → .532 | .071 → .071     |
 | 7    | .753 → .753 | .513 → .513 | .067 → .067     |
 
-All quality overall metrics were unchanged. Better retention and fewer request-window calls, but **no delivered
-recall gain** on either scale: keep the trial default-off. These synthetic noise sources contain no policy language;
-the bounded-reserve test, not this corpus, covers an adversarial abundance of constraint wording.
+All quality overall metrics were unchanged. Adopted default-on: at 3000 noise sources, hidden cached rises from
+37/40 to 40/40 and request-window calls fall from 7.8250 to 6.2375 (20.3%), with delivery and precision flat. There is
+**no delivered recall gain** on either scale. These synthetic noise sources contain no policy language; the
+bounded-reserve test, not this corpus, covers an adversarial abundance of constraint wording.

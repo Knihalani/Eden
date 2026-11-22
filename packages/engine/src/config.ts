@@ -240,7 +240,7 @@ export interface EngineConfig {
   sync: boolean;
   /** Items synced per user, the newest across their sources (the cache's `maxSyncedPerUser` should allow them). */
   syncMaxItems: number;
-  /** Reserve at most a quarter of the sync cap for reader-gate constraint wording. Trial, off by default. */
+  /** Reserve at most a quarter of the sync cap for reader-gate constraint wording. On by default. */
   syncKeepRules: boolean;
   /** Items asked per listing page. */
   syncPageSize: number;
@@ -1022,7 +1022,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   spans: false,
   sync: true,
   syncMaxItems: 3_000,
-  syncKeepRules: false,
+  syncKeepRules: true,
   syncPageSize: 100,
   syncPollPageSize: 5,
   syncStaleChance: 0.15,
