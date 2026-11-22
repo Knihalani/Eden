@@ -490,6 +490,7 @@ export class PushChecker {
         messages: checkMessages({ ...input, items, sheet }, { sheetCache, systemHour }),
         // A sheet's rule entries are about 35 tokens each, past the items' cap.
         maxTokens: sheet.length > 0 ? COMPARE_MAX_TOKENS + 40 * SHEET_MAX_NAMED : COMPARE_MAX_TOKENS,
+        reasoning: "off",
         json: true,
         // The compare-first reply lists its rejections on purpose (a "hits": "none" entry), so it has no stop.
         ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),

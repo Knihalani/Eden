@@ -609,6 +609,39 @@ describe("OpenRouterModel", () => {
     expect(out.truncated).toBe(true);
   });
 
+  test("explicit off disables reasoning without changing the output cap or JSON request", async () => {
+    for (const id of ["deepseek/deepseek-v4.1-flash", "anthropic/claude-haiku-5.5"]) {
+      let sent: any;
+      const fake = (async (_url: string, init: RequestInit) => {
+        sent = JSON.parse(String(init.body));
+        return Response.json({ choices: [{ message: { content: '{"items":[]}' }, finish_reason: "stop" }] });
+      }) as unknown as typeof fetch;
+      const model = new OpenRouterModel({ apiKey: "k", model: id, fetch: fake });
+      const result = await model.chat({
+        messages: [{ role: "user", content: "check" }],
+        maxTokens: 500,
+        json: true,
+        reasoning: "off",
+      });
+      expect(sent.reasoning).toEqual({ enabled: false, exclude: true });
+      expect(sent.max_tokens).toBe(500);
+      expect(sent.response_format).toEqual({ type: "json_object" });
+      expect(result.text).toBe('{"items":[]}');
+      expect(result.truncated).toBe(false);
+    }
+  });
+
+  test("a provider refusal of reasoning off fails rather than retrying with reasoning enabled", async () => {
+    let calls = 0;
+    const fake = (async () => {
+      calls++;
+      return new Response("unsupported reasoning setting", { status: 400 });
+    }) as unknown as typeof fetch;
+    const model = new OpenRouterModel({ apiKey: "k", model: "deepseek/deepseek-v4.1-flash", fetch: fake });
+    await expect(model.chat({ messages: [], maxTokens: 500, reasoning: "off" })).rejects.toThrow();
+    expect(calls).toBe(1);
+  });
+
   test("reads the hidden reasoning's share of the output when reported, and leaves it unset when not", async () => {
     const replies = [
       { prompt_tokens: 300, completion_tokens: 310, completion_tokens_details: { reasoning_tokens: 120 } },

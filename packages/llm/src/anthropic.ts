@@ -159,7 +159,7 @@ export function anthropicBody(options: AnthropicOptions, request: ChatRequest, s
     else messages.push({ role: m.role, content: [block] });
   }
   if (messages[0]?.role !== "user") messages.unshift({ role: "user", content: "(begin)" });
-  const thinking = options.thinking ?? "off";
+  const thinking = request.reasoning === "off" ? "off" : (options.thinking ?? "off");
   const model = options.model ?? "claude-haiku-5-5";
   const off = OFF_IS_BETWEEN_TOOLS.has(model) ? { type: "between_tools" } : { type: "disabled" };
   return {
