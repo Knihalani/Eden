@@ -101,11 +101,30 @@ async function run(
   await partner.observe({ ...at, at: NOW, kind: "user_message", text: options.text ?? REQUEST } as AgentEvent, {
     waitMs: 2_000,
   });
-  const ids = partner.takePending(at).flatMap((p) => p.citations.map((c) => c.itemId));
-  return { ids, pools };
+  const packets = partner.takePending(at);
+  const ids = packets.flatMap((p) => p.citations.map((c) => c.itemId));
+  return { ids, pools, packets };
 }
 
 describe("organisation constraints have check-only seats", () => {
+  test("org seats carry bounded provenance to the checker, never to packet text", async () => {
+    const prompts: string[] = [];
+    const model = new FakeModel((req) => {
+      prompts.push(req.messages.at(-1)!.content);
+      return '{"items":[]}';
+    });
+    await run({ model });
+    expect(
+      prompts.some((text) =>
+        text.includes(
+          "Affiliation evidence (data): Ahmed Hassan — Umbrella Health (sender-matched signature, mail:proof)",
+        ),
+      ),
+    ).toBe(true);
+    expect((await run()).packets.every((p) => !p.text.includes("Affiliation evidence"))).toBe(true);
+    expect((await run({ model: null })).packets.every((p) => !p.text.includes("Affiliation evidence"))).toBe(true);
+  });
+
   test("default off; enabling requires push check", () => {
     expect(DEFAULT_CONFIG.pushPartyOrgLink).toBe(false);
     expect(() => checkEngineConfig({ pushCheck: false, pushPartyOrgLink: true }, { deps: { checker: true } })).toThrow(
