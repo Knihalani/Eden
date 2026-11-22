@@ -1845,7 +1845,9 @@ export abstract class PartnerVerdict extends PartnerCheck {
       // when it is at least twice as sure as the floor. Scores fall monotonically, so the first candidate below the
       // bar ends the scan.
       if (sure.length > cap) break;
-      if (sure.length === cap && x.score < this.config.confidentScore * 2) break;
+      // A zero cap turns the path off (COUNT configs read 0 as off); no overflow slot opens then.
+      // A zero cap turns the path off (COUNT configs read 0 as off); no overflow slot opens then.
+      if (sure.length === cap && (cap === 0 || x.score < this.config.confidentScore * 2)) break;
       if (x.score < this.config.confidentScore || x.matched < this.config.minMatchedTerms) continue;
       // Bulk mail is never pushed without a model's say: a newsletter arriving is no reason to speak.
       if (bulkMail(x.item)) continue;

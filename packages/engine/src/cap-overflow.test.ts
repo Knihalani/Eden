@@ -31,7 +31,7 @@ const item = (id: string, title: string, text: string): ContextItem => ({
 const strong = (id: string, tail: string) => item(id, tail, `${ALL} — ${tail}`);
 const weak = (id: string, tail: string) => item(id, tail, `${SOME} — ${tail}`);
 
-function partner(items: ContextItem[], config: Record<string, unknown> = {}) {
+function partner(items: ContextItem[], config: Record<string, unknown> = {}, hows: string[] = []) {
   const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => items };
   return new ContextPartner({
     sources: async () => [source],
@@ -40,6 +40,7 @@ function partner(items: ContextItem[], config: Record<string, unknown> = {}) {
     budget: new Budget(),
     model: null,
     now: () => NOW,
+    onCandidates: (d: { how: string }) => hows.push(d.how),
     config: {
       ...CORE_CONFIG,
       confidentScore: 0.4,
@@ -80,6 +81,24 @@ describe("the confident packet's overflow slot (D2088)", () => {
     ]);
     const ids = await packet(p);
     expect(ids).toEqual(["mail:a", "mail:b", "mail:c"]);
+  });
+
+  test("a zero cap still turns the confident picks off — no 'sure' delivery", async () => {
+    const hows: string[] = [];
+    const p = partner(
+      [
+        strong("a", "Treasury memo on liquidity buffers and gilt exposure ahead of the refinancing window"),
+        strong("b", "Office lease renewal comparison across the shortlisted Manchester and Leeds properties"),
+      ],
+      { maxItemsPerInjection: 0 },
+      hows,
+    );
+    const result = await p.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+      waitMs: 2_000,
+    });
+    expect(result.injection?.reason.startsWith("cache:") ?? false).toBe(false);
+    // Other paths (grounded) may still deliver — the confident picks may not: nothing labelled `sure`.
+    expect(hows).not.toContain("sure");
   });
 
   test("the packet never grows past cap + 1", async () => {
