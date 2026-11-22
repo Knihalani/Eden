@@ -164,11 +164,14 @@ export function renderPacket(
     let fact = checkedFact(options.facts?.get(item.id), item.text);
     if (fact) {
       const excerpt = safeLine(truncateUtf8(text, 120));
+      const comparable = (value: string) => value.normalize("NFKC").toLowerCase().replace(/"/g, "'");
+      const repeated =
+        comparable(excerpt).startsWith(comparable(fact)) || comparable(fact).startsWith(comparable(excerpt));
+      const origin = truncateUtf8(named, 60) + (excerpt && !repeated ? `; ${truncateUtf8(excerpt, 120)}` : "");
       const start = `- [${item.sourceId}] "${fact}"`;
       const originRoom = room - utf8Length(start) - utf8Length(suffix) - 10;
       if (originRoom < 12) fact = undefined;
-      else
-        line = `${start} (from: ${truncateUtf8(`${truncateUtf8(named, 60)}; ${truncateUtf8(excerpt, 120)}`, originRoom)})`;
+      else line = `${start} (from: ${truncateUtf8(origin, originRoom)})`;
     }
     if (suffix) {
       const bodyRoom = Math.max(0, room - utf8Length(suffix));

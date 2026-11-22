@@ -33,6 +33,21 @@ byte-identical. Rule statements follow the same convention. Long sentences retai
 
 ## Free measurements
 
+### Provenance deduplication follow-up
+
+Provenance now omits the excerpt when it equals or starts with the quoted fact (or is a truncated prefix of it).
+An independently informative excerpt is retained. Normalization ignores case, Unicode compatibility forms and
+quote escaping. The same 995-noise command above was rerun with seeds 41–44, both flags and both checkers:
+
+| Checker | Hidden off → on | Decoys off → on | Mean packet bytes/hidden task off → on |
+| ------- | --------------: | --------------: | -------------------------------------: |
+| oracle  |         40 → 40 |           0 → 0 |                      558.750 → 548.950 |
+| noisy   |         33 → 33 |           1 → 1 |                      687.275 → 676.600 |
+
+All denominators are 40; zero checker failures and $0 cost. Artifacts use the `dedup-995-*` prefix.
+The legal-hold example's provenance is now simply `(from: #legal)`; the samples and table below record the
+original pre-dedup implementation. Noise 3000 was not remeasured for this follow-up.
+
 All runs use the newly adopted seat defaults, suite `hidden`, seeds 41–44, serial execution, time scale zero,
 `--no-record`, and the **same** packet/check-dump instrumentation in both arms. The previous seat-default
 study found noisy-check timing sensitivity to `--check-dump`; do not pool these with undumped measurements.

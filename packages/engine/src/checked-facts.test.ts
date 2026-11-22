@@ -129,6 +129,26 @@ test("fact lines keep order, quoted data, excerpt fallback and stacked byte budg
   expect(renderPacket([updated], { maxBytes: 1000, facts })).not.toContain('"Harlow deposit');
 });
 
+test("fact provenance omits repeated and prefix excerpts but retains additional context", () => {
+  const fact = "The Harlow deposit is due on Friday 30 October.";
+  for (const source of [fact, `${fact} It is still pending.`, `${fact} ${"More context. ".repeat(20)}`]) {
+    const packet = renderPacket([{ ...item, text: source }], { maxBytes: 1200, facts: new Map([[item.id, fact]]) });
+    expect(packet).toContain(`"${fact}" (from: Harlow deposit)`);
+    expect(packet.split(fact)).toHaveLength(2);
+  }
+  const long =
+    "Notification: Harlow contractual settlement obligations remain suspended pending independently verified countersignature confirmations on Friday 30 October.";
+  expect(utf8Length(long)).toBeGreaterThan(120);
+  expect(renderPacket([{ ...item, text: long }], { maxBytes: 1200, facts: new Map([[item.id, long]]) })).toContain(
+    "(from: Harlow deposit)",
+  );
+  const extra = `Payments are on hold. ${fact}`;
+  expect(renderPacket([{ ...item, text: extra }], { maxBytes: 1200, facts: new Map([[item.id, fact]]) })).toContain(
+    "(from: Harlow deposit; Payments are on hold.",
+  );
+  expect(renderPacket([item], { maxBytes: 1200, facts: new Map() })).toBe(renderPacket([item], { maxBytes: 1200 }));
+});
+
 test("truncation and budget refusal still fail open with facts enabled", async () => {
   const model = new FakeModel(() => ({ text: reply(text), truncated: true }));
   const checker = new PushChecker({ model, budget: new Budget() });
