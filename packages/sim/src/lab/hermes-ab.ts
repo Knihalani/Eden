@@ -87,6 +87,8 @@ import { connectorHeader, connectorOptions, pushNotifier, recapNotice, sourceFie
 import type { World } from "../world";
 import {
   armPromptsHash,
+  billingDead,
+  BillingStopped,
   emptyResult,
   grade,
   gradeWith,
@@ -221,6 +223,7 @@ const PACER = ACCESS.pacer;
 /** A task starts only while the cap leaves room for all of it: its model requests (one spare) and its grading. */
 const TASK_REQUESTS = MAX_ITERATIONS + 2;
 let capStopped = 0;
+let billingStopped = 0;
 // `--coverage` (D878): shipped coverage by default where it covers the run, replayed as cards and intent; a run that
 // names its own `--cards`/`--intent` pins `--coverage full`.
 const COVERAGE = harnessCoverage({
@@ -771,6 +774,11 @@ async function runWorld(
       if (unit?.complete) flush();
       const fromJournal = JOURNAL?.done.get(unitId(t, DAYS_ON && newDay ? dayNo + 1 : dayNo));
       if (!fromJournal && exhausted()) break;
+      // A dead key fails every model call the same way: stop scheduling units, keep what ran (PARTIAL below).
+      if (!fromJournal && billingDead()) {
+        billingStopped++;
+        break;
+      }
       if (!fromJournal && PACER.remaining < TASK_REQUESTS) {
         capStopped++;
         break;
@@ -962,7 +970,12 @@ async function runWorld(
       task = null;
       const reply = sent.msg;
       const error = typeof reply.error === "string" && reply.error ? reply.error : undefined;
-      if (error) r.error = PACER.exhausted ? `request cap reached: ${error.slice(0, 120)}` : error;
+      if (error)
+        r.error = PACER.exhausted
+          ? `request cap reached: ${error.slice(0, 120)}`
+          : billingDead()
+            ? `billing stopped: ${error.slice(0, 120)}`
+            : error;
       r.answer = typeof reply.answer === "string" ? reply.answer : "";
       if (!r.error && !r.answer.trim()) r.error = "empty answer";
       if (DAYS_ON && Array.isArray(reply.messages)) dayMessages = reply.messages;
@@ -1057,7 +1070,14 @@ async function gradeTask(t: Task, r: RunResult, tl: Timeline, unit: OpenUnit | n
       : (await grade(KEY!, meter, GRADER, t, r.answer, { fetch: ACCESS.fetch, allowLogging: ACCESS.allowLogging }))
           .facts;
   } catch (e) {
-    failure = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 60) : "error";
+    failure =
+      e instanceof BillingStopped
+        ? "billing stopped"
+        : isCapError(e)
+          ? "request cap reached"
+          : e instanceof Error
+            ? e.message.slice(0, 60)
+            : "error";
   } finally {
     if (reserved) settle(est, cost, "grader");
     tl.end(g, { cost, ...(failure ? { error: failure } : {}) });
@@ -1293,7 +1313,7 @@ writeFileSync(
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),
       requests: PACER.summary(),
       orphanRequests,
-      partial: capStopped > 0 || PACER.refused > 0 || stoppedStreams > 0,
+      partial: capStopped > 0 || billingStopped > 0 || PACER.refused > 0 || stoppedStreams > 0,
       stoppedStreams,
       maxIterations: MAX_ITERATIONS,
       spend,
@@ -1349,6 +1369,7 @@ console.error(
     `time-scale ${TIME_SCALE}; ${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)}), ` +
     `${orphanRequests} orphan` +
     (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
+    (billingStopped ? `; PARTIAL: billing stopped (${billingStopped} streams stopped on a dead key)` : "") +
     (stoppedStreams ? `; PARTIAL: ${stoppedStreams} streams stopped on a failure (logged above)` : "") +
     (INTENT_WANTED ? `; ${INTENT_LINE}` : ""),
 );

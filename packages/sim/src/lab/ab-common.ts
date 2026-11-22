@@ -55,6 +55,24 @@ export interface ChatOptions {
 /** OpenRouter's refusal of `response_format` (a model or endpoint without JSON mode): the call is sent without it. */
 const NO_JSON_MODE = /response_format|json[_ ]?(mode|object|schema)|structured output/i;
 
+/**
+ * A dead key fails every call the same way, and a topped-up account only recovers between runs: 401/402/403
+ * `AUTH_DEAD_STREAK` calls in a row mark the run dead. `billingDead` lets a caller stop scheduling work instead of
+ * paying a model roundtrip for each of a hundred more identical failures (lh11's resume burned 420 check calls on a
+ * key whose account was out of credit, while the key-limit endpoint still showed headroom).
+ */
+export class BillingStopped extends Error {
+  override name = "BillingStopped";
+}
+const AUTH_DEAD_STREAK = 6;
+let authDead = 0;
+/** True once `AUTH_DEAD_STREAK` calls in a row answered 401/402/403 — the run should stop, not count failures. */
+export const billingDead = () => authDead >= AUTH_DEAD_STREAK;
+/** Tests only: a tripped breaker must not leak into the next test. */
+export const billingResetForTests = () => {
+  authDead = 0;
+};
+
 /** One chat call through OpenRouter, retried on rate limits and server errors; its cost is booked on the meter. */
 export async function chat(
   key: string,
@@ -99,6 +117,7 @@ export async function chat(
         const usage = body.usage ?? { prompt_tokens: 0, completion_tokens: 0 };
         // A free model reports cost 0, which stands (`??`, not `||`).
         meter.after(usage.cost ?? 0);
+        authDead = 0;
         return { msg: body.choices[0].message, usage };
       }
       if (attempt >= 3) throw new Error(`no choice: ${body.error?.message ?? "empty"}`);
@@ -110,8 +129,12 @@ export async function chat(
         continue;
       }
       const retryable = res.status === 0 || res.status === 429 || res.status >= 500;
+      if (res.status === 401 || res.status === 402 || res.status === 403) authDead++;
       // A paced fetch has already retried what was worth retrying; a network failure it gave up on is final too.
-      if (attempt >= 3 || !retryable || paced) throw new Error(`${model} ${res.status}: ${text.slice(0, 300)}`);
+      if (attempt >= 3 || !retryable || paced) {
+        if (billingDead()) throw new BillingStopped(`${model} ${res.status}: ${text.slice(0, 300)}`);
+        throw new Error(`${model} ${res.status}: ${text.slice(0, 300)}`);
+      }
     }
     await Bun.sleep(1_000 * 2 ** attempt);
   }

@@ -141,6 +141,8 @@ import {
 import {
   armPromptsHash,
   ASK_DESCRIPTION,
+  billingDead,
+  BillingStopped,
   chatModel,
   emptyResult,
   grade,
@@ -465,6 +467,7 @@ if (OPENROUTER_ROLES.length && !KEY && !DRY)
 /** A task starts only while the cap leaves room for all of it: its model requests and its grading. */
 const TASK_REQUESTS = MAX_STEPS + 1;
 let capStopped = 0;
+let billingStopped = 0;
 // Cards replayed from disk: the replay file is only read, new cards go to their own file (cards-disk.ts).
 // `--coverage` (D878): shipped coverage by default where it covers the run, replayed as cards and intent; a run that
 // names its own `--cards`/`--intent` pins `--coverage full`.
@@ -1222,7 +1225,14 @@ async function runWorld(
       } catch (e) {
         // A failed grading call leaves the result ungraded (reported), never scored as a miss. The status line
         // only: an error body can quote the request.
-        failure = isCapError(e) ? "request cap reached" : e instanceof Error ? e.message.slice(0, 60) : "error";
+        failure =
+          e instanceof BillingStopped
+            ? "billing stopped"
+            : isCapError(e)
+              ? "request cap reached"
+              : e instanceof Error
+                ? e.message.slice(0, 60)
+                : "error";
       } finally {
         if (reserved) settle(est, cost, "grader");
         tl.end(g, { cost, ...(failure ? { error: failure } : {}) });
@@ -1268,6 +1278,11 @@ async function runWorld(
     if (unit?.complete) flush();
     const fromJournal = JOURNAL?.done.get(unitId(task, DAYS_ON && newDay ? dayNo + 1 : dayNo));
     if (!fromJournal && exhausted()) break;
+    // A dead key fails every model call the same way: stop scheduling units, keep what ran (PARTIAL below).
+    if (!fromJournal && billingDead()) {
+      billingStopped++;
+      break;
+    }
     if (!fromJournal && PACER.remaining < TASK_REQUESTS) {
       capStopped++;
       break;
@@ -2163,7 +2178,7 @@ writeFileSync(
       ...(ACCESS.allowLogging ? { allowLogging: true } : {}),
       // Every HTTP request the run sent (retries included), and whether the cap cut it short.
       requests: PACER.summary(),
-      partial: capStopped > 0 || PACER.refused > 0,
+      partial: capStopped > 0 || billingStopped > 0 || PACER.refused > 0,
       toolExecution: TOOL_EXEC,
       spend,
       // Eden's spend no task is charged for, per stream: the report's backfill and all-in columns (ab-common.ts).
@@ -2237,6 +2252,7 @@ console.error(
     `$${spend.grader.toFixed(4)}); ${results.length} runs, ${ungraded} ungraded → ${OUT}, timeline ${TIMELINE}, ` +
     `time-scale ${TIME_SCALE}; ${PACER.sent} requests (${PACER.retried} retried, ${JSON.stringify(PACER.statuses)})` +
     (capStopped || PACER.refused ? `; PARTIAL: request cap reached (${capStopped} streams stopped early)` : "") +
+    (billingStopped ? `; PARTIAL: billing stopped (${billingStopped} streams stopped on a dead key)` : "") +
     (REPLAY_DIR ? `; ${replayLine()}` : "") +
     (REUSE_FILE ? `; reused ${reused.results.length} runs (${reused.conditions.join(",")}) at $0` : "") +
     (resumed.units
