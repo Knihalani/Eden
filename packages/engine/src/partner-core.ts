@@ -252,6 +252,7 @@ export abstract class PartnerCore {
           },
           {
             maxItems: c.syncMaxItems,
+            keepRules: c.syncKeepRules,
             pageSize: c.syncPageSize,
             backfillLanes: c.syncBackfillLanes,
             kickLanes: c.syncKick ? c.syncKickLanes : 0,

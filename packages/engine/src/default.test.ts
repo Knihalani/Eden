@@ -47,6 +47,7 @@ const DEFAULT_PARTS_ON: Partial<EngineConfig> = {
   syncKeepCut: true,
   routeSketch: true,
   syncEngagedDeep: true,
+  syncKeepRules: true,
   cardsSourceAware: true,
   cardsOrder: true,
   // D521, D522 (N4): a new user's backfill is read by up to four card calls at once.
@@ -151,11 +152,11 @@ describe("the unified default and its parts (D112)", () => {
       (key) => !same(DEFAULT_CONFIG[key], CORE_CONFIG[key]),
     );
     expect(Object.fromEntries(differ.map((key) => [key, DEFAULT_CONFIG[key]]))).toEqual(DEFAULT_PARTS_ON);
-    expect(differ.length).toBe(87);
+    expect(differ.length).toBe(88);
     // Each of them is some part's, and the core has the part's value.
     const partKeys = new Set(Object.values(PARTS).flatMap((settings) => Object.keys(settings)));
     for (const key of differ) expect(partKeys.has(key)).toBe(true);
-    expect(partKeys.size).toBe(87);
+    expect(partKeys.size).toBe(88);
   });
 });
 

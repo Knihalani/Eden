@@ -143,6 +143,7 @@ async function partnerFor(
       sourceYieldEarn: false,
       syncPageSize: 10,
       syncMaxItems: 20,
+      syncKeepRules: false,
       syncCallsPerMin: 6_000,
       ...config,
     },

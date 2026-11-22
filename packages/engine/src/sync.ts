@@ -27,6 +27,7 @@ import { scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { Source, SourceFanout, SourceResolver } from "@eden/sources";
 import type { ItemCache } from "./cache";
+import { gateOf } from "./conflict";
 import { RareTerms } from "./rare-terms";
 import { nextEpoch, secondHash, sketchTerms, termHash, TermSketch } from "./sketch";
 import type { Tracer } from "./spans";
@@ -34,6 +35,8 @@ import type { Tracer } from "./spans";
 export interface SyncOptions {
   /** Items synced per user at most, across sources: the newest. */
   maxItems: number;
+  /** Reserve at most a quarter of the cap for items with reader-gate constraint wording. */
+  keepRules?: boolean;
   /** Items asked per listing page. */
   pageSize: number;
   /**
@@ -1641,9 +1644,9 @@ export class SyncManager {
   }
 
   /**
-   * Keeps the user's newest `maxItems` synced items across sources (by `updatedAt`; an item without one counts as
-   * oldest) and drops the rest from the cache. Returns the oldest kept time: the backfill's cut. Pages are read
-   * whole, so the merge is exact only after this trim.
+   * Keeps `maxItems` synced items across sources, newest first within each reserve. `keepRules` reserves at most
+   * a quarter for reader-gate constraints; `engagedDeep` reserves at most half for used sources. Returns the oldest
+   * item kept by recency: the backfill's cut. Pages are read whole, so the merge is exact only after this trim.
    */
   private trim(u: UserSync, now: number): number {
     const all: { id: string; at: number; s: SourceSync }[] = [];
@@ -1655,19 +1658,27 @@ export class SyncManager {
     // `engagedDeep`: the newest items of sources the user's lookups use, up to half the cap in all, are kept before any
     // other's; the rest compete by recency. A bound, or two large used mailboxes filled the whole cap and no other
     // source's new item could be stored again (the review: `cutAt` went to Infinity).
-    const first = this.o.engagedDeep === true;
     const kept: typeof all = [];
+    const rules = this.o.keepRules ? Math.floor(this.o.maxItems / 4) : 0;
+    const ordinary: typeof all = rules > 0 ? [] : all;
+    if (rules > 0) {
+      for (const x of all) {
+        const item = kept.length < rules ? this.deps.cache.get(u.scope, x.id, now) : undefined;
+        if (item && gateOf(item, false)) kept.push(x);
+        else ordinary.push(x);
+      }
+    }
     const rest: typeof all = [];
-    if (first) {
+    if (this.o.engagedDeep) {
       let used = 0;
       const share = Math.floor(this.o.maxItems / 2);
-      for (const x of all) {
+      for (const x of ordinary) {
         if (x.s.engaged && used < share) {
           kept.push(x);
           used++;
         } else rest.push(x);
       }
-    } else rest.push(...all);
+    } else rest.push(...ordinary);
     const room = Math.max(0, this.o.maxItems - kept.length);
     const gone = rest.slice(room);
     for (const g of gone) {
@@ -1680,8 +1691,7 @@ export class SyncManager {
       u.scope,
       gone.map((g) => g.id),
     );
-    // The recency cut: the oldest kept of what competed by recency (all of it without `engagedDeep`). Half the cap or
-    // more competes, so it is finite once the user is at the cap.
+    // At least a quarter of the cap competes by recency, even with both reserves full.
     const oldest = room > 0 ? (rest[Math.min(rest.length, room) - 1]?.at ?? -Infinity) : -Infinity;
     u.cutAt = all.length >= this.o.maxItems ? oldest : -Infinity;
     return oldest;

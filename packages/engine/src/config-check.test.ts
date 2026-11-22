@@ -126,6 +126,15 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     });
   });
 
+  test("syncKeepRules can be disabled with sync, but cannot be enabled without it", () => {
+    expect(CORE_CONFIG.syncKeepRules).toBe(false);
+    expect(checkEngineConfig({ sync: false, syncKeepRules: false })).toEqual({
+      sync: false,
+      syncKeepRules: false,
+    });
+    expect(() => checkEngineConfig({ sync: false, syncKeepRules: true })).toThrow(/"syncKeepRules" acts only/);
+  });
+
   test("every PARENTS and NEEDS_DEP entry names real settings; every parent is a flag", () => {
     for (const [key, parents] of Object.entries(PARENTS)) {
       expect(Object.hasOwn(DEFAULT_CONFIG, key)).toBe(true);
