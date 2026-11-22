@@ -72,6 +72,19 @@ export const billingDead = () => authDead >= AUTH_DEAD_STREAK;
 export const billingResetForTests = () => {
   authDead = 0;
 };
+/**
+ * The counter wraps the run's model fetch (`labAccess`'s — every OpenRouter request goes through it: `chat`'s,
+ * streamSimple's, the Hermes proxy's), not `chat` alone: an agent's own calls never reach `chat`, so a dead key
+ * counted there would only show in the grader's calls a failed task skips. A 2xx clears the streak — a brief
+ * outage is not a dead key. `chat` still throws `BillingStopped` once the breaker trips, whatever fetch it used.
+ */
+export const billingFetch = (inner: typeof fetch): typeof fetch =>
+  Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const res = await inner(input, init);
+    if (res.ok) authDead = 0;
+    else if (res.status === 401 || res.status === 402 || res.status === 403) authDead++;
+    return res;
+  }, inner);
 
 /** One chat call through OpenRouter, retried on rate limits and server errors; its cost is booked on the meter. */
 export async function chat(
@@ -117,7 +130,6 @@ export async function chat(
         const usage = body.usage ?? { prompt_tokens: 0, completion_tokens: 0 };
         // A free model reports cost 0, which stands (`??`, not `||`).
         meter.after(usage.cost ?? 0);
-        authDead = 0;
         return { msg: body.choices[0].message, usage };
       }
       if (attempt >= 3) throw new Error(`no choice: ${body.error?.message ?? "empty"}`);
@@ -129,7 +141,6 @@ export async function chat(
         continue;
       }
       const retryable = res.status === 0 || res.status === 429 || res.status >= 500;
-      if (res.status === 401 || res.status === 402 || res.status === 403) authDead++;
       // A paced fetch has already retried what was worth retrying; a network failure it gave up on is final too.
       if (attempt >= 3 || !retryable || paced) {
         if (billingDead()) throw new BillingStopped(`${model} ${res.status}: ${text.slice(0, 300)}`);
