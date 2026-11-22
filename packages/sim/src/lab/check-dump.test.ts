@@ -1,7 +1,7 @@
 /** `--check-dump` (M7, D932): one row a check call, with the pool as read, the answer, the reply and the task. */
 import { expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkMessages, type PushCheckInput } from "@eden/engine";
 import { Budget, type Model } from "@eden/llm";
@@ -21,7 +21,7 @@ const model: Model = {
 };
 
 test("a check call becomes one row with its items, answer, reply and task", async () => {
-  const file = join(mkdtempSync(join(tmpdir(), "check-dump-")), "rows.jsonl");
+  const file = join(tmpDir("check-dump-"), "rows.jsonl");
   const kept = replyKeeping(model);
   const checker = new DumpingChecker(
     { model: kept.model, budget: new Budget() },
@@ -66,7 +66,7 @@ test("a check call becomes one row with its items, answer, reply and task", asyn
 });
 
 test("--check-log: with a rule sheet, the logged prompt holds the sheet, the request and the pool", async () => {
-  const file = join(mkdtempSync(join(tmpdir(), "check-log-")), "log.jsonl");
+  const file = join(tmpDir("check-log-"), "log.jsonl");
   const failing: Model = { id: "fake", chat: async () => Promise.reject(new Error("replay miss")) };
   const input: PushCheckInput = {
     request: "Book the Ashby room for Thursday's lunch.",

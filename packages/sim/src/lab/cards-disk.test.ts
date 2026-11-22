@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpDir } from "@eden/primitives";
 import { gzipSync } from "node:zlib";
 import { CARD_FORM_REQUESTS, cardKey, type Card, type CardMaker } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
@@ -51,7 +51,7 @@ const reqs = (got: Awaited<ReturnType<CardMaker["make"]>>) => ("requests" in got
 
 describe("DiskCardMaker", () => {
   test("a replay with an output file never writes the replay file (a run cannot mutate its own input)", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const dir = tmpDir("cards-");
     const replay = join(dir, "cards.jsonl");
     writeFileSync(replay, `${JSON.stringify({ h: cardKey(item(1)), c: card(1) })}\n`);
     const before = readFileSync(replay, "utf8");
@@ -75,7 +75,7 @@ describe("DiskCardMaker", () => {
   });
 
   test("makers sharing one map read the file once and see each other's new cards", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const dir = tmpDir("cards-");
     const replay = join(dir, "cards.jsonl");
     const out = join(dir, "new.jsonl");
     const first = liveMaker();
@@ -89,7 +89,7 @@ describe("DiskCardMaker", () => {
   });
 
   test("with no output file, new cards are appended to the cache itself (cards-enrich builds its file so)", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const dir = tmpDir("cards-");
     const file = join(dir, "cards.jsonl");
     const { maker } = liveMaker();
     await new DiskCardMaker(file, maker).make([item(4)], "2026-10-31", signal);
@@ -97,7 +97,7 @@ describe("DiskCardMaker", () => {
   });
 
   test("makers sharing one map make a card once when they miss it at the same time (pi-ab's paired arms)", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const dir = tmpDir("cards-");
     const replay = join(dir, "cards.jsonl");
     const out = join(dir, "new.jsonl");
     // A slow live maker, so both streams miss the item before either has its card.
@@ -124,7 +124,7 @@ describe("DiskCardMaker", () => {
   });
 
   test("a live maker that fails leaves the waiting streams uncovered, and a later call asks again", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const dir = tmpDir("cards-");
     let calls = 0;
     const flaky: CardMaker = {
       async make(items) {
@@ -149,7 +149,7 @@ describe("DiskCardMaker", () => {
 
 describe("samePath", () => {
   test("two spellings of one file are the same path, whether or not it exists yet", () => {
-    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const dir = tmpDir("cards-");
     const file = join(dir, "a.cards.jsonl");
     writeFileSync(file, "");
     expect(samePath(file, join(dir, ".", "a.cards.jsonl"))).toBe(true);
@@ -166,7 +166,7 @@ describe("samePath", () => {
   });
 
   test("a live miss's requests go to the output file with its card ({h, c, r}) and replay from it", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const dir = tmpDir("cards-");
     const replay = join(dir, "cards.jsonl");
     const out = join(dir, "new.jsonl");
     const asked: string[] = [];
@@ -216,7 +216,7 @@ describe("samePath", () => {
   });
 
   test("an item read for requests only, its requests replayed, is not sent live (its card would be thrown away)", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const dir = tmpDir("cards-");
     const reqFile = join(dir, "intent.jsonl");
     const plain: ContextItem = { id: "p", sourceId: "gmail", ref: "p", title: "Lunch", text: "Lunch on Friday?" };
     const worded: ContextItem = {
@@ -256,7 +256,7 @@ describe("samePath", () => {
   });
 
   test("an explicit requests file wins over requests in the card files, and a .gz one is read as is", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const dir = tmpDir("cards-");
     const replay = join(dir, "cards.jsonl");
     writeFileSync(replay, `${JSON.stringify({ h: cardKey(item(8)), c: null, r: ["from cards"] })}\n`);
     const gz = join(dir, "intent.jsonl.gz");
@@ -271,7 +271,7 @@ describe("samePath", () => {
 
 describe("opting out of replayed intent (cardRequests: false)", () => {
   test("a card file's `r` line with --intent none replays no requests, and the header says inert", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "cards-"));
+    const dir = tmpDir("cards-");
     const replay = join(dir, "cards.jsonl");
     const out = join(dir, "earlier-run.cards.jsonl");
     writeFileSync(replay, `${JSON.stringify({ h: cardKey(item(9)), c: card(9), r: ["from cards"] })}\n`);

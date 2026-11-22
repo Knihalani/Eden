@@ -28,7 +28,7 @@
  * text of docs/ (`prosePieces`). No model, no network.
  */
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpDir } from "@eden/primitives";
 import { join } from "node:path";
 import type { ContextItem, Scope } from "@eden/protocol";
 import { SourceMap } from "@eden/graph";
@@ -219,7 +219,7 @@ cache.close(); // The bench runs the expiry ticks itself.
 // `--persist`: frozen users are also written to a temp directory, encrypted (D425).
 if (PERSIST) {
   const disk = new EncryptedFrozenDisk({
-    dir: mkdtempSync(join(tmpdir(), "eden-users-frozen-")),
+    dir: tmpDir("eden-users-frozen-"),
     key: new Uint8Array(32).map((_, i) => (i * 37 + 11) & 0xff),
     maxBytes: 64 * 1024 ** 3,
     maxAgeMs: 7 * 24 * 3_600_000,
@@ -232,7 +232,7 @@ const partner = new ContextPartner({
   ...(enricher ? { cards: enricher } : {}),
   sources: async (scope) => byUser.get(scope.userId)!,
   // A file, as the servers open (in memory its pages would count in RSS as user state; a file's page cache is bounded).
-  sourceMap: new SourceMap(join(mkdtempSync(join(tmpdir(), "eden-users-")), "source-map.db")),
+  sourceMap: new SourceMap(join(tmpDir("eden-users-"), "source-map.db")),
   cache,
   budget: new Budget(DEFAULT_LIMITS),
   model: null,

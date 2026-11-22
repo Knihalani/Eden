@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SourceMap } from "./source-map";
 
@@ -125,7 +125,7 @@ describe("Thompson routing", () => {
   });
 
   test("outcomes are written behind but every read sees them, and they reach the file", async () => {
-    const path = join(mkdtempSync(join(tmpdir(), "eden-map-")), "map.db");
+    const path = join(tmpDir("eden-map-"), "map.db");
     const map = new SourceMap(path, { explore: false });
     map.recordOutcome(alice, "chat", "crm", true);
     expect(map.utility(alice, "chat", "crm")).toBe(2 / 3); // Read flushes first.
@@ -174,7 +174,7 @@ describe("Thompson routing", () => {
   test("two processes writing one file at once both open it and neither write throws (busy_timeout)", async () => {
     // Two MCP clients launching mcp-stdio for one user share one file. Without a busy timeout one process failed in
     // the constructor with "database is locked" and the other lost writes to SQLITE_BUSY.
-    const path = join(mkdtempSync(join(tmpdir(), "eden-sm-lock-")), "map.db");
+    const path = join(tmpDir("eden-sm-lock-"), "map.db");
     const writer = `
       const { SourceMap } = await import(${JSON.stringify(join(import.meta.dir, "source-map.ts"))});
       let errors = 0, writes = 0, opened = true, map;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "../../packages/primitives/src/tmpdir";
 import { mkdtempSync, mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 // The unified installer (examples/install.py) detects which agent homes exist and delegates each to that
@@ -17,7 +17,7 @@ const run = (args: string[], home: string) =>
 
 describe.skipIf(!python)("the unified installer", () => {
   test("detects the agent homes present and reports the absent ones", () => {
-    const home = mkdtempSync(join(tmpdir(), "eden-install-all-"));
+    const home = tmpDir("eden-install-all-");
     mkdirSync(join(home, ".pi"));
     mkdirSync(join(home, ".config", "opencode"), { recursive: true });
     const out = run(["--list"], home);
@@ -49,7 +49,7 @@ describe.skipIf(!python)("the unified installer", () => {
   });
 
   test("--agents selects absent homes too, and rejects names it does not know", () => {
-    const home = mkdtempSync(join(tmpdir(), "eden-install-all-"));
+    const home = tmpDir("eden-install-all-");
     const dry = run(["--agents", "pi,opencode", "--dry-run"], home);
     expect(dry.exitCode, dry.stderr.toString()).toBe(0);
     expect(dry.stdout.toString()).toContain("examples/pi/install.py");
@@ -61,7 +61,7 @@ describe.skipIf(!python)("the unified installer", () => {
   });
 
   test("each agent's own home flag is forwarded, and --list shows an override's path", () => {
-    const home = mkdtempSync(join(tmpdir(), "eden-install-all-"));
+    const home = tmpDir("eden-install-all-");
     const dry = run(["--claude-code-home", "/opt/cc", "--dry-run"], home);
     // claude-code's installer takes --claude-home, not --claude-code-home.
     expect(dry.stdout.toString()).toContain("claude-code/install.py --claude-home /opt/cc");

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { appendFileSync, existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main, type DaysCallsOptions, type DaysCallsUser, type PlantedRow } from "./days-calls";
 import { JournalRefused, partialPath } from "./run-journal";
@@ -45,7 +45,7 @@ describe("days-calls --resume (D813)", () => {
   ];
 
   test("a killed run resumes with only the users it had not finished, and reports as an unbroken one", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "days-resume-"));
+    const dir = tmpDir("days-resume-");
     const whole = join(dir, "whole.json");
     const wholeCalls: number[] = [];
     await main(argv(whole), fake(wholeCalls), quiet);
@@ -75,7 +75,7 @@ describe("days-calls --resume (D813)", () => {
   });
 
   test("another seed list after a kill reuses the finished users: the key leaves --seeds out", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "days-resume-"));
+    const dir = tmpDir("days-resume-");
     const out = join(dir, "out.json");
     await expect(main(argv(out), fake([], 42), quiet)).rejects.toThrow("killed");
     const calls: number[] = [];
@@ -88,7 +88,7 @@ describe("days-calls --resume (D813)", () => {
   });
 
   test("--pool-diag on the resume only still has every user's rows: they are journalled either way", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "days-resume-"));
+    const dir = tmpDir("days-resume-");
     const whole = join(dir, "whole.json");
     await main(argv(whole), fake([]), quiet);
     const cut = join(dir, "cut.json");

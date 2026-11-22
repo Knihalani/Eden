@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Trace } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
@@ -295,7 +295,7 @@ describe("request body size (D100)", () => {
 
 describe("gate pool", () => {
   test("by default lookups go through the planner; its learning is per user and forget drops only theirs", async () => {
-    const path = join(mkdtempSync(join(tmpdir(), "eden-planner-")), "source-map.db");
+    const path = join(tmpDir("eden-planner-"), "source-map.db");
     const sourceMap = new SourceMap(path);
     const traces: Trace[] = [];
     const p = buildPartner({

@@ -6,8 +6,8 @@
  * spent; a failed live call leaves no unhandled rejection; `--reconcile` exits 1 when the columns do not add up.
  */
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AskReader, ContextPartner, CORE_CONFIG, ItemCache, ModelReaderMaker } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
@@ -145,7 +145,7 @@ async function run(dir: string, tasks: Task[], options: { live: boolean; harness
 
 describe("pi-ab --replay: the reader and the grader", () => {
   test("a second run makes no reader or grader call and gives the same results, costs as made", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ab-replay-"));
+    const dir = tmpDir("ab-replay-");
     const first = await run(dir, TASKS);
     expect(first.readerLive.calls).toBe(3);
     expect(first.graderLive.calls).toBe(3);
@@ -166,7 +166,7 @@ describe("pi-ab --replay: the reader and the grader", () => {
   });
 
   test("a one-task change calls again for that task's prompts only", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ab-replay-"));
+    const dir = tmpDir("ab-replay-");
     await run(dir, TASKS);
     const changed = [TASKS[0]!, task(1, "Wire Harlow the deposit for the venue invoice this morning."), TASKS[2]!];
     const again = await run(dir, changed);
@@ -177,7 +177,7 @@ describe("pi-ab --replay: the reader and the grader", () => {
   });
 
   test("--replay-only: a prompt with no line is a miss, not a call; another harness's lines do not answer", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ab-replay-"));
+    const dir = tmpDir("ab-replay-");
     await run(dir, TASKS);
     const only = await run(dir, TASKS, { live: false });
     expect(only.reader.missed + only.grader.missed).toBe(0);
@@ -359,7 +359,7 @@ describe("pi-ab-report --reconcile", () => {
     .map((l) => JSON.stringify(l))
     .join("\n");
   const reconcile = (total: string) => {
-    const dir = mkdtempSync(join(tmpdir(), "reconcile-"));
+    const dir = tmpDir("reconcile-");
     writeFileSync(join(dir, "report.txt"), report(total));
     writeFileSync(join(dir, "ledger.jsonl"), ledger);
     const args = ["--reconcile", join(dir, "report.txt"), "--ledger", join(dir, "ledger.jsonl"), "--run", "r-"];

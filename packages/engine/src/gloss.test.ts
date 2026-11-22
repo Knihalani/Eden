@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync, openSync, statSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync, openSync, statSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpDir } from "@eden/primitives";
 import { glossOf, languagesOf, loadGlossary, MAX_GLOSS_WORDS, packGlossary, warmGlossary } from "./gloss";
 import glossaryFile from "./gloss.bin" with { type: "file" };
 
@@ -62,7 +62,7 @@ const packed = {
     pt: { fn: ["de", "um", "para", "preciso", "o"], tsv: "voo\tflight" },
   },
 };
-const file = join(mkdtempSync(join(tmpdir(), "gloss-")), "gloss.bin");
+const file = join(tmpDir("gloss-"), "gloss.bin");
 writeFileSync(file, pack(packed.langs));
 const langs = loadGlossary(file)!;
 
@@ -96,7 +96,7 @@ describe("glossOf", () => {
         },
       },
     };
-    const f = join(mkdtempSync(join(tmpdir(), "gloss-")), "gloss.bin");
+    const f = join(tmpDir("gloss-"), "gloss.bin");
     writeFileSync(f, pack(many.langs));
     const text = `il di ${Array.from({ length: 40 }, (_, i) => `w${"a".repeat(i + 1)}`).join(" ")}`;
     expect(glossOf(text, loadGlossary(f)).split(" ").length).toBe(MAX_GLOSS_WORDS);
@@ -139,7 +139,7 @@ describe("glossOf on the shipped glossary", () => {
   });
 
   test("a version 1 file (gzip of JSON) is no glossary", () => {
-    const f = join(mkdtempSync(join(tmpdir(), "gloss-")), "gloss.bin");
+    const f = join(tmpDir("gloss-"), "gloss.bin");
     writeFileSync(f, Bun.gzipSync(JSON.stringify({ v: 1, langs: packed.langs })));
     expect(loadGlossary(f)).toBeNull();
   });

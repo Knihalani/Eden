@@ -4,9 +4,9 @@
  * and the float, on random streams of every public call, across users, files and a second connection.
  */
 import { Database } from "bun:sqlite";
+import { tmpDir } from "@eden/primitives";
 import { describe, expect, test } from "bun:test";
 import { copyFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Xoshiro128 } from "@eden/primitives";
 import type { Scope } from "@eden/protocol";
@@ -14,7 +14,7 @@ import { normalizeEntity, normalizeEntitySlow, SourceMap } from "./source-map";
 import { differential, randomEntity, SCOPES, SOURCES } from "./source-map.fuzz";
 import { SourceMap as ReferenceMap } from "./source-map.reference";
 
-const dir = mkdtempSync(join(tmpdir(), "eden-map-fast-"));
+const dir = tmpDir("eden-map-fast-");
 let files = 0;
 const fileOf = () => join(dir, `m${files++}.db`);
 

@@ -21,8 +21,9 @@
  * their items on demand, so the item text a connector would hold elsewhere is not in this process's memory.
  * No model, no network.
  */
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { tmpDir } from "@eden/primitives";
 import { join } from "node:path";
 import { EncryptedFrozenDisk, type ContextPartner, type ItemCache } from "@eden/engine";
 import type { ContextItem, Scope } from "@eden/protocol";
@@ -403,7 +404,7 @@ function rssMB(pid: number): number {
 }
 
 async function orchestrate(): Promise<void> {
-  const root = mkdtempSync(join(tmpdir(), "eden-soak-"));
+  const root = tmpDir("eden-soak-");
   const dirs = Array.from({ length: PROCS }, (_, i) => join(root, `p${i}`));
   for (const d of dirs) mkdirSync(d, { recursive: true });
   const t0 = Date.now();
@@ -465,7 +466,9 @@ async function orchestrate(): Promise<void> {
       );
     });
   const all = { event: [] as number[], message: [] as number[], ask: [] as number[] };
-  const journal = `${arg("out", join(root, "report.json"))}.jsonl`;
+  // A fixed journal name is appended, not overwritten: a second run without --out must not keep the last run's lines.
+  const journal = `${arg("out", join(tmpdir(), "eden-soak-report.json"))}.jsonl`;
+  rmSync(journal, { force: true });
   const totals = { errors: 0, status4xx: 0, requests: 0 };
   const sampler = setInterval(() => {
     const sample = {
@@ -559,7 +562,9 @@ async function orchestrate(): Promise<void> {
     windows,
     events,
   };
-  const out = arg("out", join(root, "report.json"));
+  // The report and journal are the run's artifacts, not scratch: fixed names — overwritten each run — outside the
+  // cleaned root (root and the per-child dirs it holds are the scratch).
+  const out = arg("out", join(tmpdir(), "eden-soak-report.json"));
   await Bun.write(out, JSON.stringify(report, null, 1));
   log(`report: ${out}`);
   console.log(JSON.stringify({ ...report, samples: undefined, windows: undefined, events: undefined }));

@@ -3,14 +3,14 @@
  * everything that decides Prettier's verdict. Each case edits one input in a scratch repository and expects a new key.
  */
 import { describe, expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpDir } from "../packages/primitives/src/tmpdir";
 
 const script = join(import.meta.dir, "format.sh");
 
 function repo(): { dir: string; key: () => string; write: (path: string, text: string) => void } {
-  const dir = mkdtempSync(join(tmpdir(), "eden-format-key-"));
+  const dir = tmpDir("eden-format-key-");
   const write = (path: string, text: string) => {
     mkdirSync(join(dir, path, ".."), { recursive: true });
     writeFileSync(join(dir, path), text);

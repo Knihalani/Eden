@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
+import { tmpDir } from "../../primitives/src/tmpdir";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { findLocalBinary, LocalEden, resolveLocalEden } from "./local";
 import type { EdenClient } from "./client";
@@ -8,7 +8,7 @@ import type { EdenClient } from "./client";
 const root = resolve(import.meta.dir, "../../..");
 
 test("a local child answers on loopback with its fresh token, then closes", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "eden-local-client-"));
+  const dir = tmpDir("eden-local-client-");
   const eden = new LocalEden([process.execPath, join(root, "packages/server/src/main.ts")], {
     home: join(dir, "data"),
     sourcesFile: undefined,
@@ -38,7 +38,7 @@ test("a local child answers on loopback with its fresh token, then closes", asyn
 });
 
 test("sharePath: a second owner attaches to the recorded daemon, which outlives the first", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "eden-local-shared-"));
+  const dir = tmpDir("eden-local-shared-");
   const share = join(dir, "eden", "local-endpoint.json");
   const command = [process.execPath, join(root, "packages/server/src/main.ts")];
   const opts = {
@@ -88,7 +88,7 @@ test("sharePath: a second owner attaches to the recorded daemon, which outlives 
 });
 
 test("sharePath: a daemon recorded before the sources changed is replaced, a dead one is dropped", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "eden-local-stale-"));
+  const dir = tmpDir("eden-local-stale-");
   const share = join(dir, "eden", "local-endpoint.json");
   const sourcesFile = join(dir, "sources.json");
   writeFileSync(sourcesFile, JSON.stringify({ sources: [] }));
@@ -157,7 +157,7 @@ test("sharePath: a daemon recorded before the sources changed is replaced, a dea
 });
 
 test("a missing binary fails open: null endpoint, one warning, a retry backoff", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "eden-local-missing-"));
+  const dir = tmpDir("eden-local-missing-");
   const warnings: string[] = [];
   const eden = new LocalEden([join(dir, "no-such-binary")], {
     home: join(dir, "data"),
@@ -176,7 +176,7 @@ test("a missing binary fails open: null endpoint, one warning, a retry backoff",
 });
 
 test("binary discovery: EDEN_LOCAL_BINARY, then the plugin's bin/, then the home's plugins/eden/bin", () => {
-  const dir = mkdtempSync(join(tmpdir(), "eden-bin-"));
+  const dir = tmpDir("eden-bin-");
   try {
     const plugin = join(dir, "plugin");
     const home = join(dir, "home", "plugins", "eden");
@@ -197,7 +197,7 @@ test("binary discovery: EDEN_LOCAL_BINARY, then the plugin's bin/, then the home
 });
 
 test("resolveLocalEden: EDEN_URL wins with its key and tenant; else a found binary; else null", () => {
-  const dir = mkdtempSync(join(tmpdir(), "eden-resolve-"));
+  const dir = tmpDir("eden-resolve-");
   try {
     const hosted = resolveLocalEden(
       { EDEN_URL: "https://eden.example", EDEN_API_KEY: "k", EDEN_TENANT_ID: "acme", EDEN_USER_ID: "u 1" },

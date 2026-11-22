@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { tmpDir } from "@eden/primitives";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CARD_FORM_REQUESTS, cardMessages, parseCards, parseRequests, requestMessages } from "@eden/engine";
 import type { ContextItem } from "@eden/protocol";
@@ -15,7 +15,7 @@ const items = [
 
 describe("card-queue (F8, D1102): the subagent card transport", () => {
   test("a miss writes each item pending and fails; answered, the reply parses as the model's would", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "card-queue-"));
+    const dir = tmpDir("card-queue-");
     const req = { messages: cardMessages(items, "2026-10-27", true, CARD_FORM_REQUESTS), maxTokens: 3000 };
     await expect(queueModel(dir).chat(req)).rejects.toThrow(/2 of 2 items unanswered/);
     const pending = readdirSync(join(dir, "pending"));
@@ -52,7 +52,7 @@ describe("card-queue (F8, D1102): the subagent card transport", () => {
   });
 
   test("cold-start records on the world's clock: the card prompt's day is the world's (F5's finding)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "card-queue-cs-"));
+    const dir = tmpDir("card-queue-cs-");
     const r = Bun.spawnSync(
       ["bun", join(import.meta.dir, "cold-start.ts"), "--users", "train1:41", "--queue-dir", dir],
       { stdout: "pipe", stderr: "pipe" },
