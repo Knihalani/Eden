@@ -821,6 +821,8 @@ export interface EngineConfig {
   pushCheck: boolean;
   /** How long the push waits for its check before it hands the default's candidates (ms). */
   pushCheckWaitMs: number;
+  /** Extend the check wait from observed model latency within the caller's remaining push budget. */
+  pushCheckAdaptiveWait: boolean;
   /** The characters of each item's most relevant parts the check reads (200, D501; at most `READER_ITEM_CHARS`). */
   pushCheckItemChars: number;
   /**
@@ -1113,6 +1115,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCandidatesSettled: 2,
   pushCheck: true,
   pushCheckWaitMs: 1_500,
+  pushCheckAdaptiveWait: true,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   packetHeedsCheck: true,

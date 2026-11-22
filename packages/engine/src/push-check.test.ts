@@ -9,6 +9,7 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
+import { CHECKED_LEAD } from "./render";
 import { CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCompare, PushChecker } from "./push-check";
 
 // The push check (I3, D500; in the default since D828). One model call over the push's pool names the items that
@@ -91,6 +92,112 @@ async function handed(p: ContextPartner, at = ref, text = REQUEST): Promise<stri
 }
 
 describe("pushCheck (I3, D500): one model call picks the push's candidates", () => {
+  for (const [label, waitMs, adaptive, warm, checked] of [
+    ["warm latency fits caller budget", 600, true, true, true],
+    ["remaining budget caps the wait", 350, true, true, false],
+    ["no deadline keeps the fixed wait", 0, true, true, false],
+    ["disabled keeps the fixed wait", 600, false, true, false],
+    ["cold checker keeps the fixed wait", 600, true, false, false],
+    ["short caller wait is not extended", 100, true, true, false],
+  ] as const) {
+    test(`adaptive check wait: ${label}`, async () => {
+      let delayed = false;
+      const inner = says(["Harlow deposit"]);
+      const model: Model = {
+        id: "timed",
+        async chat(request) {
+          if (delayed) await new Promise((done) => setTimeout(done, 420));
+          return { ...(await inner.chat(request)), latencyMs: 420 };
+        },
+      };
+      const pools: PushPoolReport[] = [];
+      const { partner, checker } = setup(
+        { pushCheck: true, pushCheckWaitMs: 300, pushCheckAdaptiveWait: adaptive },
+        model,
+        pools,
+      );
+      expect(checker!.expectedLatencyMs()).toBe(0);
+      const input = {
+        request: REQUEST,
+        today: "2026-10-27",
+        items: [
+          {
+            id: "warm",
+            source: "mail",
+            date: "",
+            from: "",
+            hash: "warm",
+            title: "Harlow deposit",
+            text: "Hold the deposit.",
+          },
+        ],
+      };
+      if (warm) for (let i = 0; i < 3; i++) await checker!.check(ref, "warm", input, new AbortController().signal);
+      expect(checker!.expectedLatencyMs()).toBe(warm ? 420 : 0);
+      delayed = true;
+      const start = performance.now();
+      const result = await partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+        waitMs,
+      });
+      const elapsed = performance.now() - start;
+      if (waitMs > 0) expect(elapsed).toBeLessThan(waitMs + 30);
+      if (waitMs < 300) await new Promise((done) => setTimeout(done, 330 - elapsed));
+      const packets = [...(result.injection ? [result.injection] : []), ...partner.takePending(ref)];
+      expect(pools.at(-1)!.check).toBe(checked ? "yes" : "late");
+      expect(packets.some((p) => p.text.includes(CHECKED_LEAD))).toBe(checked);
+      if (checked) expect(elapsed).toBeGreaterThan(400);
+      await new Promise((done) => setTimeout(done, Math.max(0, 450 - (performance.now() - start))));
+    });
+  }
+
+  test("check latency samples are bounded; empty inputs and model errors add none", async () => {
+    let latencyMs = 900;
+    let fail = false;
+    const model: Model = {
+      id: "samples",
+      async chat() {
+        if (fail) throw new Error("offline");
+        return {
+          text: '{"items":[]}',
+          model: "samples",
+          costUsd: 0,
+          latencyMs,
+          usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
+        };
+      },
+    };
+    const checker = new PushChecker({
+      model,
+      budget: new Budget({ callsPerSession: 100, usdPerSession: 1, usdPerUserDay: 1 }),
+    });
+    const input = {
+      request: REQUEST,
+      today: "2026-10-27",
+      items: [
+        {
+          id: "warm",
+          source: "mail",
+          date: "",
+          from: "",
+          hash: "warm",
+          title: "Harlow deposit",
+          text: "Hold the deposit.",
+        },
+      ],
+    };
+    const signal = new AbortController().signal;
+    await checker.check(ref, "samples", { ...input, items: [] }, signal);
+    fail = true;
+    await checker.check(ref, "samples", input, signal);
+    expect(checker.expectedLatencyMs()).toBe(0);
+    fail = false;
+    for (let i = 0; i < 3; i++) await checker.check(ref, "samples", input, signal);
+    expect(checker.expectedLatencyMs()).toBe(900);
+    latencyMs = 100;
+    for (let i = 0; i < 64; i++) await checker.check(ref, "samples", input, signal);
+    expect(checker.expectedLatencyMs()).toBe(100);
+  });
+
   test("on in the default (D828); off (the core), the model is never called", async () => {
     expect(DEFAULT_CONFIG.pushCheck).toBe(true);
     const model = says(["Invoice archive"]);

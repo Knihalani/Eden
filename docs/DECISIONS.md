@@ -1,5 +1,9 @@
 # Decisions
 
+| # | Date | Decision |
+|---|---|---|
+| D2097 | 2026-11-22 | **Adopted: adaptive push-check wait within the caller's push deadline.** `pushCheckAdaptiveWait` (default on) uses the checker's last 64 real model-response latencies, p95 after three samples plus 50 ms, never below `pushCheckWaitMs` and capped by the caller's remaining push budget minus 25 ms for delivery. Cold checkers, callers with no wait, insufficient remaining budget and the off switch retain the fixed wait; D2082 still delivers late answers. This lets a warmed DeepSeek check answer in the same turn rather than failing open at 1.5 s despite a caller willing to wait 3 s. |
+
 Numbered, dated, never renumbered. A later decision that reverses one says so and links back. When code and this
 file disagree, fix one of them in the same change. Gaps in the numbers (D496–D499, D525–D539) are ranges handed to
 parallel branches that took fewer; they stay unused.
