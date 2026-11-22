@@ -9,7 +9,7 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { CHECKED_LEAD, CHECKED_WHY_LEAD, PACKET_COVERS_LINE } from "./render";
+import { CANDIDATES_LEAD, CHECKED_LEAD, CHECKED_WHY_LEAD, PACKET_COVERS_LINE } from "./render";
 import { CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCompare, PushChecker } from "./push-check";
 
 // The push check (I3, D500; in the default since D828). One model call over the push's pool names the items that
@@ -200,6 +200,64 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
       expect(off!.text).not.toContain(PACKET_COVERS_LINE);
       expect(on!.text).toContain(`\n${PACKET_COVERS_LINE}\n`);
       expect(on!.citations).toEqual(before!.citations);
+    }
+  });
+
+  test("unsure ask nudge is off by default and only invites asks for absent, failed or late checks", async () => {
+    expect(DEFAULT_CONFIG.pushUnsureAskNudge).toBe(false);
+    for (const kind of ["absent", "failed", "late", "checked"] as const) {
+      const packet = async (flag?: boolean) => {
+        const finished = Promise.withResolvers<void>();
+        const model: Model | null =
+          kind === "absent"
+            ? null
+            : {
+                id: `nudge-${kind}`,
+                async chat(req) {
+                  if (kind === "failed") throw new Error("down");
+                  if (kind === "late") await new Promise((done) => setTimeout(done, 30));
+                  try {
+                    return await says(["Invoice archive", "Harlow deposit"]).chat(req);
+                  } finally {
+                    finished.resolve();
+                  }
+                },
+              };
+        const pools: PushPoolReport[] = [];
+        const { partner } = setup(
+          {
+            pushCheck: kind !== "absent",
+            pushCheckWaitMs: 5,
+            pushCheckLate: false,
+            pushCandidatesSettled: 0,
+            ...(flag === undefined ? {} : { pushUnsureAskNudge: flag }),
+          },
+          model,
+          pools,
+        );
+        await partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+          waitMs: 2_000,
+        });
+        const got = partner.takePending(ref).find((p) => p.reason.startsWith("candidates:"))!;
+        expect(got).toBeDefined();
+        if (kind !== "absent") expect(pools.at(-1)!.check).toBe(kind === "checked" ? "yes" : kind);
+        if (kind === "late") await finished.promise;
+        return got;
+      };
+      const before = await packet();
+      const off = await packet(false);
+      const on = await packet(true);
+      expect(off.text).toBe(before.text);
+      expect(off.text).not.toContain("Eden: unsure these apply");
+      expect(on.citations).toEqual(before.citations);
+      if (kind === "checked") {
+        expect(on.text).toBe(before.text);
+        expect(on.text).toContain(CHECKED_LEAD);
+      } else {
+        expect(on.text).toContain(CANDIDATES_LEAD);
+        expect(on.text).toMatch(/Eden: unsure these apply — ask_context "[^"]*Harlow[^"]*" before acting\./);
+        expect(on.text).not.toContain("AKIAIOSFODNN7EXAMPLE");
+      }
     }
   });
 

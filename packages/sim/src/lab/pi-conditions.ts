@@ -58,6 +58,7 @@ export interface Condition {
 const ASK_FLAG = "ask";
 // `+pushCheckedWhy` is an engine flag: check order and short request links, off in the default.
 // `+packetCoversLine` adds retrieved-excerpt framing; both flags can stack on a condition.
+// `+pushUnsureAskNudge` adds a request-specific ask invitation only to unchecked candidates.
 /** The harness flag `+nokey`: the partner gets no model roles, never sent to the engine as a setting. */
 const NOKEY_FLAG = "nokey";
 /** The harness flags of D336's packet layouts, never sent to the engine. */

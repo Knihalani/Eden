@@ -16,6 +16,12 @@ describe("pi-ab conditions", () => {
     expect(() => parseCondition("both+packetCoversLines", options)).toThrow(/no engine setting/);
   });
 
+  test("+pushUnsureAskNudge enables only the unchecked ask-nudge trial", () => {
+    const options = { config: ALL, defaults: DEFAULT_CONFIG as unknown as Record<string, unknown> };
+    expect(parseCondition("both+pushUnsureAskNudge", options).config).toEqual({ ...ALL, pushUnsureAskNudge: true });
+    expect(() => parseCondition("both+pushUnsureAskNudges", options)).toThrow(/no engine setting/);
+  });
+
   test("+pushCheckedWhy enables the checked packet trial", () => {
     const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
     expect(parseCondition("both+pushCheckedWhy", { config: ALL, defaults }).config).toEqual({

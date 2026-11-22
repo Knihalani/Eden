@@ -656,7 +656,7 @@ export abstract class PartnerAsk extends PartnerVerdict {
                   ? this.lookupFrame(candidates.lookup)
                   : candidates.checked
                     ? this.checkedFrame(candidates.unsettled !== undefined, check)
-                    : this.candidateFrame(candidates.unsettled !== undefined),
+                    : this.candidateFrame(candidates.unsettled !== undefined, cue),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)
           : null;
@@ -1030,12 +1030,13 @@ export abstract class PartnerAsk extends PartnerVerdict {
    * `pushCandidates` (D236): how the candidates' packet is framed and cut — `CANDIDATES_LEAD`'s "nothing has
    * checked them" hedge; a check-named packet takes `checkedFrame`'s `CHECKED_LEAD` instead (D2083).
    */
-  private candidateFrame(nudge = false): PacketFrame {
+  private candidateFrame(nudge = false, cue?: Cue): PacketFrame {
     // At most the pool's items (`candidatesOf`), each at most `MAX_CANDIDATE_BYTES`: the packet's size is bounded too.
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
     return {
       lead: nudge ? `${CANDIDATES_LEAD} ${ASK_NUDGE}` : CANDIDATES_LEAD,
+      ...(this.config.pushUnsureAskNudge && cue ? { unsureAskTopic: cue.entities[0] || cue.text } : {}),
       itemBytes: each,
       // Room for every candidate's excerpt and its `- [source] title: ` line, beyond the usual packet's cap.
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),

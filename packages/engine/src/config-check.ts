@@ -107,6 +107,7 @@ const READER: Key[] = ["askReader"];
 const PUSH: Key[] = ["askReader", "readerPush"];
 /** Settings that act only while a number setting is above 0 (its off value), checked as `PARENTS` are. */
 export const NUMBER_PARENTS: Partial<Record<Key, Key>> = {
+  pushUnsureAskNudge: "pushCandidates",
   // D1252: they shape what `pushLookup` hands, so they act only with it above 0.
   pushLookupAny: "pushLookup",
   pushLookupQuiet: "pushLookup",
@@ -209,6 +210,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   pushCheck: PUSH,
   pushCheckWaitMs: [...PUSH, "pushCheck"],
   pushCheckedWhy: [...PUSH, "pushCheck"],
+  pushUnsureAskNudge: PUSH,
   pushCheckItemChars: [...PUSH, "pushCheck"],
   pushCheckItems: [...PUSH, "pushCheck"],
   packetHeedsCheck: [...PUSH, "pushCheck"],

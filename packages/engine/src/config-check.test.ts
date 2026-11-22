@@ -6,6 +6,17 @@ import { CORE_CONFIG, PARTS, type Part } from "./parts";
 const ALL_DEPS = { cards: true, reader: true };
 
 describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silently)", () => {
+  test("unchecked ask nudge needs candidates, not a checker", () => {
+    const on = { pushUnsureAskNudge: true, pushCheck: false };
+    expect(checkEngineConfig(on, { deps: ALL_DEPS })).toEqual(on);
+    for (const parent of ["readerPush", "askReader", "pushCandidates"]) {
+      const off = parent === "pushCandidates" ? 0 : false;
+      expect(() => checkEngineConfig({ ...on, [parent]: off }, { deps: ALL_DEPS })).toThrow(new RegExp(parent));
+    }
+    const off = { readerPush: false, pushUnsureAskNudge: false };
+    expect(checkEngineConfig(off)).toEqual(off);
+  });
+
   test("party organisation seats require a checker dependency", () => {
     expect(() => checkEngineConfig({ pushPartyOrgLink: true }, { deps: ALL_DEPS })).toThrow(/checker/);
     expect(checkEngineConfig({ pushPartyOrgLink: true }, { deps: { ...ALL_DEPS, checker: true } })).toEqual({

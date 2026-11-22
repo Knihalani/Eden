@@ -21,6 +21,17 @@ describe("hermes-ab conditions", () => {
     expect(() => parseHermesCondition("hermes+eden+packetCoversLines", options)).toThrow(/no engine setting/);
   });
 
+  test("+pushUnsureAskNudge enables only the unchecked ask-nudge trial", () => {
+    expect(DEFAULT_CONFIG.pushUnsureAskNudge).toBe(false);
+    expect(parseHermesCondition("hermes+eden+pushUnsureAskNudge", { config: ALL, defaults }).config).toEqual({
+      ...ALL,
+      pushUnsureAskNudge: true,
+    });
+    expect(() => parseHermesCondition("hermes+eden+pushUnsureAskNudges", { config: ALL, defaults })).toThrow(
+      /no engine setting/,
+    );
+  });
+
   test("+pushCheckedWhy enables only the checked packet trial", () => {
     const c = parseHermesCondition("hermes+eden+pushCheckedWhy", { config: ALL, defaults });
     expect(c.config).toEqual({ ...ALL, pushCheckedWhy: true });
