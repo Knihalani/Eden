@@ -2046,7 +2046,9 @@ export class ItemCache {
         // contraction both expand it.
         const con =
           ws.length === 2 ? ws[0]!.slice(0, 2) + ws[1]!.slice(0, 2) : ws.length > 2 ? ws.map((w) => w[0]).join("") : "";
-        if (con.length >= 4) {
+        // Three letters is the common acronym length ("HMRC", "UPS"): short enough that a collision with a real
+        // part is rare, and the part wins when it happens (above).
+        if (con.length >= 3) {
           let set = contractions.get(con);
           if (set === undefined) contractions.set(con, (set = new Set()));
           set.add(name);
