@@ -56,7 +56,8 @@ describe("probes: what a request implies", () => {
   });
 
   test("any capital starts a name, not only ASCII ones", () => {
-    expect(extractEntities("Ask Łukasz Nowak to review it")).toContain("Ask Łukasz Nowak");
+    // The leading request verb is cut at extraction (D2097): "Łukasz Nowak" directly.
+    expect(extractEntities("Ask Łukasz Nowak to review it")).toContain("Łukasz Nowak");
     expect(cleanEntities(extractEntities("Ask Łukasz Nowak to review it"))).toEqual(["Łukasz Nowak"]);
   });
 

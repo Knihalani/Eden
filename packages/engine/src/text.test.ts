@@ -10,6 +10,15 @@ describe("extractEntities", () => {
     expect(e).toEqual(expect.arrayContaining(["Dana Lee", "dana@acme.com", "OPS-142", "Q3 pricing deck", "sam"]));
   });
 
+  test("a sentence-start run led by an auxiliary or request verb names its subject (D2097)", () => {
+    expect(extractEntities("Did HMRC reply to the VAT letter?")).toEqual(["HMRC", "VAT"]);
+    expect(extractEntities("Is Robin Carter free Thursday?")).toContain("Robin Carter");
+    expect(extractEntities("Tell UPS the parcel arrived")).toEqual(["UPS"]);
+    expect(extractEntities("Has the Amex card arrived?")).toContain("Amex");
+    // Ambiguous leading words stay: "will"/"may" are also names and months, "book"/"share"/"chase" nouns.
+    expect(extractEntities("Will Smith called about the gig")).toContain("Will Smith");
+  });
+
   test("a single capitalised word that starts a sentence is not an entity", () => {
     expect(extractEntities("Book a table for tonight.")).toEqual([]);
     expect(extractEntities("lunch with Priya tomorrow")).toEqual(["Priya"]);

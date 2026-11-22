@@ -54,8 +54,25 @@ function entitiesBefore(text: string): Entity[] {
     // Same lone-honorific skip as extractTypedEntities ("Dr" of "Dr. Okafor" is no name).
     if (words.length === 1 && "dr mr mrs ms miss prof sir madam rev st".split(" ").includes(words[0]!.toLowerCase()))
       continue;
+    // Same leading-auxiliary cut (D2097): "Did HMRC…" names HMRC.
+    let auxCut = false;
+    if (
+      sentenceStart &&
+      words.length >= 2 &&
+      (
+        "do does did is are was were has have had can could should would may might must shall ought " +
+        "tell send ask ping remind reply respond invite notify congratulate introduce pay buy cancel reschedule " +
+        "write add approve accept decline confirm"
+      )
+        .split(" ")
+        .includes(words[0]!.toLowerCase())
+    ) {
+      words = words.slice(1);
+      auxCut = true;
+    }
     const run = words.join(" ");
-    if (words.length === 1 && (sentenceStart || isStopword(run.toLowerCase()) || isCalendarByPattern(run))) continue;
+    if (words.length === 1 && (sentenceStart || isStopword(run.toLowerCase()) || isCalendarByPattern(run)) && !auxCut)
+      continue;
     if (words.every((w) => isStopword(w.toLowerCase()))) continue;
     add(run, "name");
   }
