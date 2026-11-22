@@ -6,6 +6,13 @@ import { CORE_CONFIG, PARTS, type Part } from "./parts";
 const ALL_DEPS = { cards: true, reader: true };
 
 describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silently)", () => {
+  test("party organisation seats require a checker dependency", () => {
+    expect(() => checkEngineConfig({ pushPartyOrgLink: true }, { deps: ALL_DEPS })).toThrow(/checker/);
+    expect(checkEngineConfig({ pushPartyOrgLink: true }, { deps: { ...ALL_DEPS, checker: true } })).toEqual({
+      pushPartyOrgLink: true,
+    });
+  });
+
   test("constraint stem seats require the push check", () => {
     expect(checkEngineConfig({ pushCheck: false, pushConstraintStemSeats: false })).toEqual({
       pushCheck: false,

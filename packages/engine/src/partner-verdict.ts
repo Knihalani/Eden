@@ -1008,6 +1008,7 @@ export interface PushGate {
   /** `pushDaySeats`: the pool before the seats, and whether a push with no check answer hands its candidates. */
   before?: Scored[];
   unchecked?: boolean;
+  affiliations?: ReadonlyMap<string, string>;
 }
 
 /** `pushDaySeats`: the fewest words of a turn that starts the push by its day, and how far ahead that day may be. */
@@ -1130,8 +1131,14 @@ export abstract class PartnerVerdict extends PartnerCheck {
             at,
           ) ?? new Map<string, Card>())
         : new Map<string, Card>();
-      seated.push(...stemmed.filter((x) => this.constraintLike(x, stemCards)).slice(0, 2));
+      seated.push(
+        ...stemmed.filter((x) => this.constraintLike(x, stemCards) && !this.staleSelf(x.item, cue)).slice(0, 2),
+      );
     }
+    const affiliations = new Map<string, string>();
+    seated.push(
+      ...this.partyOrgSeats(s, cue, new Set([...pool, ...seated].map((x) => x.item.id)), byDay, affiliations),
+    );
     if (seated.length === 0 && !byDay) return { pool, like: pool.map((x) => this.constraintLike(x, cards)), cards };
     // The pool as it stood, and its own gate: what a push with no check answer hands (`candidatesOf`), so a seat never
     // opens a hand-out no model judged. A push only the day started has no such hand-out at all.
@@ -1153,7 +1160,66 @@ export abstract class PartnerVerdict extends PartnerCheck {
     // constraint-like: the day's own evidence, not a pool the request's words happened to fill (D1401).
     const quiet = byDay && !pool.some((x, i) => seats.has(x.item.id) && all[i] === true);
     const like = quiet ? all.map(() => false) : all;
-    return { pool, like, seats, before, unchecked, cards };
+    return { pool, like, seats, before, unchecked, cards, affiliations };
+  }
+
+  private partyOrgSeats(
+    s: Session,
+    cue: Cue,
+    have: ReadonlySet<string>,
+    byDay: boolean,
+    affiliations: Map<string, string>,
+  ): Scored[] {
+    if (!this.config.pushPartyOrgLink || !this.config.pushCheck || !this.deps.checker || byDay) return [];
+    const cache = this.deps.cache;
+    const vocab = cache.peekVocab(s.scope);
+    if (!vocab) return [];
+    const now = this.now();
+    const orgs = new Set<string>();
+    const found = new Map<string, Scored>();
+    const blocks = new Set<string>();
+    const evidence = new Map<string, string>();
+    const people = new Set([
+      ...cache.affiliationParties(s.scope, cue.raw),
+      ...aliasExpand(cache.aliasTable(s.scope), cue.entities),
+    ]);
+    for (const person of [...people].slice(0, 8)) {
+      for (const edge of cache.partyOrgs(s.scope, person, now)) {
+        const org = edge.org.toLowerCase();
+        if (orgs.has(org) || orgs.size >= 4) continue;
+        orgs.add(org);
+        const terms = termIds(edge.org, vocab, false);
+        if (terms.n === 0) continue;
+        const ties = new Set(edge.org.toLowerCase().split(/\s+/));
+        for (const h of cache.search(s.scope, terms.ids, terms.n, 48, now)) {
+          if (have.has(h.item.id) || bulkMail(h.item) || !cache.containsAll(s.scope, h.doc, terms.ids, terms.n))
+            continue;
+          const x: Scored = { item: h.item, doc: h.doc, sketch: h.sketch, score: 0, matched: 0 };
+          if (!this.contradicts(x, cue)) {
+            found.set(h.item.id, x);
+            evidence.set(
+              h.item.id,
+              sanitizeForStore(
+                `${edge.person} — ${edge.org} (${edge.kind === "signature" ? "sender-matched signature" : "contact Company field"}, ${edge.sourceId}:${edge.ref})`,
+              )
+                .replace(/\s+/g, " ")
+                .slice(0, 240),
+            );
+            if (assess(this.frame(cue), h.item, localNow(cue), ties) === "conflict") blocks.add(h.item.id);
+          }
+        }
+      }
+    }
+    const candidates = [...found.values()];
+    const cards = this.config.cards
+      ? (this.deps.cards?.cardsOf(s.scope, [...found.keys()], cue.arrived ?? now) ?? new Map<string, Card>())
+      : new Map<string, Card>();
+    const seats = candidates
+      .filter((x) => this.constraintLike(x, cards) && !this.staleSelf(x.item, cue))
+      .sort((a, b) => Number(blocks.has(b.item.id)) - Number(blocks.has(a.item.id)))
+      .slice(0, 2);
+    for (const x of seats) affiliations.set(x.item.id, evidence.get(x.item.id)!);
+    return seats;
   }
 
   /**
@@ -1244,7 +1310,11 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const read = gate.pool.slice(0, Math.min(this.config.pushCheckItems, CHECK_MAX_ITEMS));
     const input = {
       request,
-      items: read.map((x) => readerItem(x.item, focus, undefined, this.config.pushCheckItemChars)),
+      items: read.map((x) => {
+        const item = readerItem(x.item, focus, undefined, this.config.pushCheckItemChars);
+        const evidence = gate.affiliations?.get(x.item.id);
+        return evidence ? { ...item, affiliation: evidence } : item;
+      }),
       today,
       ...(sheet.length > 0 ? { sheet, ...(this.config.pushCheckSheetRefs ? { sheetRefs: true } : {}) } : {}),
       cacheKey: userCacheKey(s.scope),
@@ -1253,10 +1323,13 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const ids = sheet.map((c) => c.id);
     const withSheet = (r: PushCheckRead): PushCheckRead => (ids.length > 0 ? { ...r, sheet: ids } : r);
     // A kept answer read this sheet too: a card landing or expiring between passes asks again.
+    const affiliationKey = read.map((x) => gate.affiliations?.get(x.item.id) ?? "").join("");
+    const context = affiliationKey ? `\n${createHash("sha256").update(affiliationKey).digest("hex")}` : "";
     const asked =
-      sheet.length > 0
+      context +
+      (sheet.length > 0
         ? `${input.today}\n${request}\n${createHash("sha256").update(sheetText(sheet)).digest("hex").slice(0, 16)}`
-        : `${input.today}\n${request}`;
+        : `${input.today}\n${request}`);
     const checks: Map<string, KeptCheck> = (s.pushChecks ??= new Map());
     // A settled check of this request that read every item of this pool, unchanged, answers it with no call: a second
     // pass (`readerPushBehind`) often only reorders the pool or drops an item.

@@ -162,6 +162,7 @@ export abstract class PartnerCore {
 
   constructor(protected readonly deps: PartnerDeps) {
     this.config = { ...DEFAULT_CONFIG, ...deps.config };
+    if (this.config.pushPartyOrgLink) deps.cache.enablePartyOrgs();
     // The turn gate's weights are read here, once a process, not on a user's first message (D1014).
     this.gate = this.config.pushGate ? (deps.turnGate === undefined ? turnGate() : deps.turnGate) : null;
     // `requestGloss` (F1, D1153): the glossary's prefix is read here too, once a process (D1710: function words,

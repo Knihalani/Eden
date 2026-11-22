@@ -142,7 +142,7 @@ export const SHEET_HEAD = [
 /** What one check is asked: the request's head, the pool's items as the reader renders them, and the user's day. */
 export interface PushCheckInput {
   request: string;
-  items: ReaderItem[];
+  items: (ReaderItem & { affiliation?: string })[];
   today: string;
   /** `pushCheckSheet` (F5): the user's active constraint cards, in the order the sheet lists them. */
   sheet?: readonly SheetCard[];
@@ -188,7 +188,10 @@ export function checkKey(input: PushCheckInput): string {
   const h = createHash("sha256").update(
     `v${CHECK_VERSION}${form}\n${input.today}\n${head(input.request).toLowerCase()}\n`,
   );
-  for (const it of input.items.slice(0, CHECK_MAX_ITEMS)) h.update(`${itemMark(it)}\t${it.text}\n`);
+  for (const it of input.items.slice(0, CHECK_MAX_ITEMS)) {
+    h.update(`${itemMark(it)}\t${it.text}\n`);
+    if (it.affiliation) h.update(`affiliation\t${oneLine(it.affiliation, 240)}\n`);
+  }
   // With no sheet the key is main's, so recorded replies replay; a sheet's every card is part of what was read.
   const sheet = sheetOfInput(input);
   if (sheet.length > 0) h.update(`sheet${input.sheetRefs ? "+refs" : ""}\n${sheetText(sheet)}`);
@@ -259,12 +262,13 @@ export function checkMessages(
   const ruleOf = new Map<string, number>(input.sheetRefs ? sheet.map((c, k) => [c.id, k + 1] as const) : []);
   const items = input.items.slice(0, CHECK_MAX_ITEMS).map((it, i) => {
     const rule = ruleOf.get(it.id);
+    const evidence = it.affiliation ? ` [Affiliation evidence (data): ${inert(oneLine(it.affiliation, 240))}]` : "";
     const opening =
       `<item n="${i + 1}" source="${attr(it.source)}" date="${attr(it.date)}"` +
       `${it.from ? ` from="${attr(it.from)}"` : ""}`;
     // On the sheet: the rule's line says what the item holds (`pushCheckSheetRefs`).
-    if (rule !== undefined) return `${opening} rule="${rule}">${inert(it.title)}: see rule ${rule}</item>`;
-    return `${opening}>${inert(it.title)}: ${inert(it.text)}</item>`;
+    if (rule !== undefined) return `${opening} rule="${rule}">${inert(it.title)}: see rule ${rule}${evidence}</item>`;
+    return `${opening}>${inert(it.title)}: ${inert(it.text)}${evidence}</item>`;
   });
   return [
     // `systemHour` (D1800): the instructions ask the hour on their own; a marked sheet carries them to it anyway.
