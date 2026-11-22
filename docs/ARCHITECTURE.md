@@ -455,6 +455,14 @@ and costs about 1 s a call on the agent's path (docs/research/p2-push-check.md; 
 anchored gate and a never-silent form were measured and deleted (D828).
 The model request explicitly disables reasoning (D2105), preserving the 500-token reply cap, or 620 with a rule sheet;
 excluded reasoning would still share that cap. Truncated or unreadable replies remain failures, not partial decisions.
+
+**Check-only constraint seats** (`pushConstraintStemSeats`, `pushPartyOrgLink`, default on since D2106,
+part `check`) add at most two stem-matched constraints and two organisation-scoped constraints reached through
+explicit one-hop person affiliations, within the existing pool cap. Only a check naming a seat can hand it;
+absent, failed or late checks retain the original unchecked pool. Without a checker neither seats nor affiliation
+indexing run. Either flag can be set false independently. Adoption rests on free oracle/noisy-check retrieval
+evidence, not paid confirmation or agent uptake ([research/check-seat-defaults.md](research/check-seat-defaults.md)).
+
 **The rule sheet (`pushCheckSheet` 80, `pushCheckSheetRefs`; F5, D1180, part `sheet`)** gives that call the user's
 active constraint cards (at most 80, newest items first, expired, `none` and `preference` cards left out, card text sanitised and
 fenced as data) as a second block cached per user, so the model can link a request to a rule no lookup reached; a

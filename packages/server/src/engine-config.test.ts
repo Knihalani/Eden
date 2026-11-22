@@ -24,6 +24,19 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect(engineConfig({ EDEN_ENGINE_CONFIG: "" })).toEqual({});
     const partner = buildPartner({ sources: async () => [], model: null, engine: engineConfig({}) });
     expect(partner.config).toEqual(DEFAULT_CONFIG);
+    expect(partner.config.pushConstraintStemSeats).toBe(true);
+    expect(partner.config.pushPartyOrgLink).toBe(true);
+  });
+
+  test("check-only retrieval seats can be disabled over the server defaults", () => {
+    const off = { pushConstraintStemSeats: false, pushPartyOrgLink: false };
+    const path = file("check-seats-off.json", JSON.stringify(off));
+    const partner = buildPartner({
+      sources: async () => [],
+      model: null,
+      engine: engineConfig({ EDEN_ENGINE_CONFIG: path }),
+    });
+    expect(partner.config).toEqual({ ...DEFAULT_CONFIG, ...off });
   });
 
   test("a valid file is applied over the defaults", () => {

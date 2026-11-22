@@ -1,4 +1,6 @@
 {
   "pushCheck": false,
-  "packetHeedsCheck": false
+  "packetHeedsCheck": false,
+  "pushConstraintStemSeats": false,
+  "pushPartyOrgLink": false
 }

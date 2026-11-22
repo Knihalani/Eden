@@ -161,7 +161,12 @@ export const PARTS = {
    * names none sends no packet: silence on most requests with nothing to add (D500, D527, D823, promoted by D828).
    * Inert with no model key (no checker wired).
    */
-  check: { pushCheck: false, packetHeedsCheck: false },
+  check: {
+    pushCheck: false,
+    packetHeedsCheck: false,
+    pushConstraintStemSeats: false,
+    pushPartyOrgLink: false,
+  },
   /**
    * A request phrased as a need, a plan, a wish or a question about acting starts the push as its imperative, and the
    * open shape refuses log lines and chatter (D820, promoted by D828).
