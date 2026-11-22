@@ -844,6 +844,8 @@ export interface EngineConfig {
    * within their intervals, checked pushes +7% (docs/research/g1-facts.md).
    */
   pushDaySeats: number;
+  /** Up to two stem-matched constraints seated for the push check only. */
+  pushConstraintStemSeats: boolean;
   /**
    * How many of the pool's items, from its first, the check reads (at most `CHECK_MAX_ITEMS`); when it answers, only
    * those can be candidates.
@@ -1126,6 +1128,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckItems: 15,
   packetHeedsCheck: true,
   pushDaySeats: 3,
+  pushConstraintStemSeats: false,
   pushCheckSheet: 80,
   pushCheckSheetRefs: true,
   pushOpen: true,
