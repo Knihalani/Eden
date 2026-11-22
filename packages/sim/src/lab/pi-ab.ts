@@ -52,6 +52,7 @@
  *     [--conditions none,tools,eden,both] [--config H|'{"probes":true}'] [--model z-ai/glm-5.3-flash]
  *     [--grader anthropic/claude-haiku-5.5] [--budget 0.6] [--out pi-ab.json] [--timeline dir] [--time-scale 1]
  *     [--tool-exec parallel|sequential] [--tasks 30] [--offworld 5] [--limit n] [--dry]
+ *     [--kinds hidden,control] [--project-from completed-results.json]
  *     [--variant-config '{"name":{...}}'] [--act] [--dress] [--cards FILE [--cards-out FILE]] [--card-sort price]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--intent default|none|FILE[,FILE]]
  *     [--replay DIR [--replay-timing] [--replay-only]] [--reuse-arms earlier.json] [--resume]
@@ -164,6 +165,8 @@ import {
   type Task,
 } from "./ab-common";
 import { variantsFor } from "./neutral";
+import { kindSlots, parseKinds, selectionLine, taskSelection } from "./task-kinds";
+import { projectTasks, type ProjectionSource } from "./task-projection";
 import { ACTIONS, actionParams, coerceArgs, executed, type ActionRecord } from "./act";
 import { DiskCardMaker, harnessCoverage, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
 import {
@@ -264,6 +267,7 @@ if (USER_DAYS > 0) {
 const VARIANTS = (USER_DAYS > 0 ? "hidden,control,neutral" : opt("variants", "hidden,control")).split(",") as (
   "hidden" | "control" | "neutral"
 )[];
+const KINDS = args.includes("--kinds") ? parseKinds(opt("kinds", "")) : null;
 const ACT = args.includes("--act");
 // `--dress` (A6, D287): one ordinary message per person or firm a request names that no item of its world names.
 const DRESS = args.includes("--dress");
@@ -1273,7 +1277,7 @@ async function runWorld(
   let dayMessages: AgentMessage[] = [];
   const dayPackets: string[][] = [];
   let asked = -1;
-  for (const task of tasks) {
+  for (const { task, run } of kindSlots(tasks, KINDS)) {
     asked++;
     if (unit?.complete) flush();
     const fromJournal = JOURNAL?.done.get(unitId(task, DAYS_ON && newDay ? dayNo + 1 : dayNo));
@@ -1315,6 +1319,7 @@ async function runWorld(
     const startsDay = newDay;
     newDay = DAYS_ON && isRecap(task);
     day?.turn();
+    if (DAYS_ON && !LATE && !isRecap(task) && task.planted) dayPlanted.add(task.planted);
     const sessionId = DAYS_ON ? daySession : task.id;
     if (DAYS_ON && day && isRecap(task)) {
       // The world changes before the recap: the times of the day's planted items move, the sources serve the new
@@ -1364,6 +1369,10 @@ async function runWorld(
           adopt(fromJournal);
         }
       } else adopt(fromJournal);
+      continue;
+    }
+    if (!run) {
+      if (startsDay) await closePrevious();
       continue;
     }
     if (JOURNAL && !unit) {
@@ -1939,6 +1948,41 @@ const worlds: { seed: number; world: World; tasks: Task[]; daySizes?: number[]; 
       );
 // What the intent index will have: the requests replayed for the items the run's sources hold (`intent: replayed n of
 // m items`), counted before anything is spent so `--dry` shows it.
+const SELECTION = taskSelection(
+  KINDS,
+  worlds.flatMap((w) => w.tasks),
+);
+const selectedCount = (tasks: Task[]) => tasks.filter((t) => !KINDS || KINDS.includes(t.kind)).length;
+if (KINDS && (CONNECT || LATE || ACT || NOISE_EDITS > 0 || worlds.some((w) => w.tasks.some((t) => t.before))))
+  throw new Error("--kinds cannot combine with connect, late, act or silent-edit tasks");
+console.error(selectionLine(SELECTION));
+if (opt("project-from", "")) {
+  const reference = JSON.parse(readFileSync(opt("project-from", ""), "utf8")) as ProjectionSource;
+  const p = projectTasks(
+    reference,
+    worlds.flatMap((w) => w.tasks),
+    CONDITIONS.map((c) => c.name),
+    SELECTION,
+    { model: MODEL, grader: GRADER },
+    {
+      ...(DAYS_ON ? { ...(DAY > 0 ? { day: DAY } : {}), recapNotice: RECAP_NOTICE } : {}),
+      ...(USER_DAYS > 0
+        ? {
+            user: {
+              gapMin: GAP_MS / 60_000,
+              nightH: NIGHT_MS / 3_600_000,
+              worlds: worlds.map((w) => ({ seed: w.seed, daySizes: w.daySizes })),
+            },
+          }
+        : {}),
+    },
+  );
+  console.error(
+    `PROJECTED COST: $${p.projectedUsd.toFixed(4)}; ${p.tasks} graded tasks; ` +
+      `$${p.fixedUsd.toFixed(4)} recap/background fixed; historical kind means incl. grader, not a cap`,
+  );
+} else if (DRY) console.error("PROJECTED COST: unavailable (pass --project-from completed-results.json)");
+if (KINDS && !worlds.some((w) => selectedCount(w.tasks))) throw new Error("--kinds selects no tasks");
 const intentCount =
   INTENT_WANTED && diskCards
     ? intentCoverage(
@@ -1950,7 +1994,8 @@ const intentCount =
     : { found: 0, of: 0 };
 const INTENT_LINE = intentLine({ wanted: INTENT_WANTED, cardsReplayed: !!CARDS_FILE, ...INTENT, ...intentCount });
 console.error(
-  `pi-ab: ${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions ` +
+  `pi-ab: ${KINDS ? `${worlds.reduce((n, w) => n + selectedCount(w.tasks), 0)} selected of ` : ""}` +
+    `${worlds.reduce((n, w) => n + w.tasks.length, 0)} ${KINDS ? "planned " : ""}tasks × ${CONDITIONS.length} conditions ` +
     `(${CONDITIONS.map((c) => c.name).join(",")}), model ${MODEL}, grader ${GRADER}, cap $${BUDGET}, suites ` +
     `${SUITE_LIST.join(",")}, time-scale ${TIME_SCALE}${TIME_SCALE === 0 ? " (connectors at 0 ms)" : ""}, ` +
     `config ${JSON.stringify(CONFIG)}` +
@@ -1988,6 +2033,7 @@ if (REUSE_FILE) {
       model: MODEL,
       grader: GRADER,
       harness: "pi",
+      taskSelection: SELECTION,
       harnessVersion: HARNESS_VERSION,
       promptsHash: PROMPTS_HASH,
       seeds: SEEDS,
@@ -1995,7 +2041,7 @@ if (REUSE_FILE) {
       timeScale: TIME_SCALE,
       toolExecution: TOOL_EXEC,
       act: ACT,
-      tasks: worlds.flatMap((w) => w.tasks),
+      tasks: worlds.flatMap((w) => w.tasks.filter((t) => !KINDS || KINDS.includes(t.kind))),
     },
     reused.conditions,
   );
@@ -2164,6 +2210,7 @@ writeFileSync(
       spent,
       harness: "pi",
       harnessVersion: HARNESS_VERSION,
+      taskSelection: SELECTION,
       ...(AGENT_SIM === "single" ? { agentSim: "single (one call, tools run up front; F9, D1101)" } : {}),
       ...(queueDir() ? { transport: TRANSPORT } : {}),
       promptsHash: PROMPTS_HASH,
@@ -2237,7 +2284,7 @@ if (JOURNAL) {
           ? w.daySizes.filter((k) => k > 0).length
           : DAY > 0
             ? Math.ceil(w.tasks.length / DAY)
-            : w.tasks.length),
+            : selectedCount(w.tasks)),
     0,
   );
   const have = JOURNAL.done.size + JOURNAL.written;

@@ -50,6 +50,21 @@ bytes, ask items, calls, ms per task) and a JSON `neutral` block, never mixed in
 a neutral task as a false one, and `pi-ab-report.ts` adds a `neutral` table and the RealUse-1 traffic mix (1 hidden,
 1 control, 8 neutral in 10; an assumption). An older suite asked for `neutral` throws.
 
+For cheaper Hermes/Pi A/Bs, `--kinds hidden,control` executes only those kinds, after constructing the **full**
+world and schedule. Original clock slots, day boundaries and recap mutations are retained; recaps still run and
+cost money. This is a **reduced-traffic counterfactual**, not the same history with neutral scores hidden: omitted
+agent turns change the transcript, Eden state and connector RNG/quota state. All arms must use the same filter.
+Results, paired reports and benchmark ledger rows record `taskSelection`; reports, ledger comparisons and arm
+reuse reject unlike filters (including filtered versus unfiltered/legacy runs). Pi refuses filtering with connect,
+late, action or silent-edit modes rather than silently dropping their task-driven mutations.
+
+`--dry --project-from completed-results.json` projects spend from a complete, error-free reference with the same
+full task plan, arms and agent/grader models. It applies historical per-kind agent/Eden means plus mean grading
+cost only to selected tasks, retaining the reference's recap/backfill/background spend as fixed overhead. This
+is a historical estimate, **not a cap or a forecast of changed-history effects**; keep `--budget`. Without a
+reference, dry-run prints selected/planned counts and says cost is unavailable. See
+[task-kind filtering](research/task-kind-filtering.md) for the state caveat and ten-day projection recipe.
+
 - **Never tune on `heldout*`.** `bun run funnel` refuses them without `--blind`. A new blind round needs a new suite
   written by an author who saw no engine code.
 - `UNRUN_BLIND` (held-out 9–16) keeps them out of `--suite all` so a tuning command cannot spend them, but all five

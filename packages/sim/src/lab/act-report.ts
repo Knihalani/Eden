@@ -19,6 +19,7 @@ import { measures } from "./act";
 import { pairedWith } from "./pi-conditions";
 import { bootstrap, quantile } from "./pi-timeline";
 import { Rng } from "../rng";
+import { sameSelection, selectionLine, type TaskSelection } from "./task-kinds";
 
 const args = process.argv.slice(2);
 const files = args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
@@ -34,8 +35,14 @@ interface Row {
 }
 
 const rows: Row[] = [];
+const selections: (TaskSelection | undefined)[] = [];
 for (const file of files) {
-  const run = JSON.parse(readFileSync(file, "utf8")) as { tasks: Task[]; results: RunResult[] };
+  const run = JSON.parse(readFileSync(file, "utf8")) as {
+    tasks: Task[];
+    results: RunResult[];
+    taskSelection?: TaskSelection;
+  };
+  selections.push(run.taskSelection);
   const byId = new Map(run.tasks.map((t) => [t.id, t]));
   for (const r of run.results) {
     const task = byId.get(r.task);
@@ -44,11 +51,13 @@ for (const file of files) {
 }
 
 type M = ReturnType<typeof measures>;
+sameSelection(selections);
+console.log(selectionLine(selections[0]));
 
 const conditions = [...new Set(rows.map((x) => x.r.condition))];
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 const f3 = (x: number) => x.toFixed(3);
-const out: Record<string, unknown> = {};
+const out: Record<string, unknown> = { taskSelection: selections[0] };
 
 for (const kind of ["hidden", "control"] as const) {
   console.log(`\n## ${kind} tasks`);

@@ -67,8 +67,10 @@ import {
   type TimelineEvent,
 } from "./pi-timeline";
 import { resumedNote } from "./run-journal";
+import { sameSelection, selectionLine, type TaskSelection } from "./task-kinds";
 
 interface RunFile {
+  taskSelection?: TaskSelection;
   /** `--resume` (D813): what an earlier attempt's journal supplied (`resumedNote`). */
   resumed?: Parameters<typeof resumedNote>[1];
   model: string;
@@ -139,6 +141,8 @@ const files = argv.filter((a, i) => a.endsWith(".json") && !argv[i - 1]?.startsW
 if (!files.length) throw new Error("usage: pi-ab-report.ts pi-ab.json [more.json ...] [--timeline dir]");
 const SECONDS = Number(flag("seconds") ?? "20");
 const runs = files.map((f) => JSON.parse(readFileSync(f, "utf8")) as RunFile);
+sameSelection(runs.map((r) => r.taskSelection));
+console.log(selectionLine(runs[0]?.taskSelection));
 const tasks = new Map(runs.flatMap((r) => r.tasks).map((t) => [t.id, t]));
 const key = (task: string, condition: string) => `${task}\u0000${condition}`;
 const results = [...new Map(runs.flatMap((r) => r.results).map((r) => [key(r.task, r.condition), r])).values()];
