@@ -453,6 +453,8 @@ dependency (no model key: no checker, and the part is inert), waits at most `pus
 error or a refusal hands the unchecked candidates; a late answer is traced "check-late" and kept for a second pass),
 and costs about 1 s a call on the agent's path (docs/research/p2-push-check.md; COST-MODEL.md). A widened pool, an
 anchored gate and a never-silent form were measured and deleted (D828).
+The model request explicitly disables reasoning (D2105), preserving the 500-token reply cap, or 620 with a rule sheet;
+excluded reasoning would still share that cap. Truncated or unreadable replies remain failures, not partial decisions.
 **The rule sheet (`pushCheckSheet` 80, `pushCheckSheetRefs`; F5, D1180, part `sheet`)** gives that call the user's
 active constraint cards (at most 80, newest items first, expired, `none` and `preference` cards left out, card text sanitised and
 fenced as data) as a second block cached per user, so the model can link a request to a rule no lookup reached; a
