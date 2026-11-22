@@ -65,12 +65,14 @@ export class BillingStopped extends Error {
   override name = "BillingStopped";
 }
 const AUTH_DEAD_STREAK = 6;
-let authDead = 0;
-/** True once `AUTH_DEAD_STREAK` calls in a row answered 401/402/403 — the run should stop, not count failures. */
-export const billingDead = () => authDead >= AUTH_DEAD_STREAK;
+// Per host: a run mixes accounts — a healthy Anthropic agent key beside a dead OpenRouter grader key — and one
+// account's 200s must not clear the other's streak.
+const authDead = new Map<string, number>();
+/** True once `AUTH_DEAD_STREAK` calls in a row answered 401/402/403 on one host — the run should stop. */
+export const billingDead = () => [...authDead.values()].some((n) => n >= AUTH_DEAD_STREAK);
 /** Tests only: a tripped breaker must not leak into the next test. */
 export const billingResetForTests = () => {
-  authDead = 0;
+  authDead.clear();
 };
 /**
  * The counter wraps the run's model fetch (`labAccess`'s — every OpenRouter request goes through it: `chat`'s,
@@ -81,8 +83,16 @@ export const billingResetForTests = () => {
 export const billingFetch = (inner: typeof fetch): typeof fetch =>
   Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const res = await inner(input, init);
-    if (res.ok) authDead = 0;
-    else if (res.status === 401 || res.status === 402 || res.status === 403) authDead++;
+    let host = "";
+    try {
+      host = new URL(typeof input === "string" || input instanceof URL ? String(input) : input.url).host;
+    } catch {
+      // Not a URL: count it under the empty host — a malformed call's failures still belong to some streak.
+    }
+    if (res.ok) authDead.delete(host);
+    else if (res.status === 401 || res.status === 402 || res.status === 403) {
+      authDead.set(host, (authDead.get(host) ?? 0) + 1);
+    }
     return res;
   }, inner);
 

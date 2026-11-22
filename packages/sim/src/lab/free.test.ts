@@ -225,6 +225,17 @@ describe("grading on free models", () => {
       for (let i = 0; i < 8; i++)
         await expect(chat("k", meter, FREE, [], undefined, false, { fetch: busy })).rejects.toThrow("429");
       expect(billingDead()).toBe(false);
+      // A healthy account's successes don't clear a dead one's streak — the counter is per host.
+      billingResetForTests();
+      const mixed = billingFetch((async (u: string | URL | Request) =>
+        String(u instanceof Request ? u.url : u).includes("anthropic")
+          ? Response.json({ ok: true })
+          : new Response("Insufficient credits", { status: 402 })) as unknown as typeof globalThis.fetch);
+      for (let i = 0; i < 6; i++) {
+        await expect(chat("k", meter, FREE, [], undefined, false, { fetch: mixed })).rejects.toThrow("402");
+        await mixed("https://api.anthropic.com/v1/messages");
+      }
+      expect(billingDead()).toBe(true);
     } finally {
       billingResetForTests();
     }
