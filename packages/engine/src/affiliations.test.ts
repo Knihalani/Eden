@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ContextItem } from "@eden/protocol";
 import { affiliationOf, AffiliationIndex, MAX_AFFILIATION_EVIDENCE } from "./affiliations";
 import { ItemCache } from "./cache";
+import type { FrozenDisk, PersistedUser } from "./persist";
 
 const scope = { tenantId: "tenant", userId: "user" };
 const NOW = Date.parse("2026-10-27T09:00:00Z");
@@ -121,5 +122,60 @@ describe("one-hop affiliations", () => {
     expect(cache.partyOrgs(scope, "Ahmed Hassan", NOW + 2)).toEqual(before);
     cache.forget(scope);
     expect(cache.partyOrgs(scope, "Ahmed Hassan", NOW + 2)).toEqual([]);
+  });
+
+  test("capped admissions use entry sequence, not LRU order, at enable and cold/warm/drain thaw", () => {
+    const records = Array.from({ length: MAX_AFFILIATION_EVIDENCE }, (_, i) =>
+      contact("Globex", "Alice Smith", `crm:bulk${i}`),
+    );
+    for (const form of ["cold", "warm", "drain"]) {
+      for (const enableBefore of [false, true]) {
+        const limits = {
+          freezeIdleMs: form === "warm" ? 1_000 : 1,
+          warmIdleMs: form === "warm" ? 1 : 0,
+          expireEveryMs: 1,
+          maxItemsPerUser: MAX_AFFILIATION_EVIDENCE + 10,
+        };
+        const cache = new ItemCache(limits);
+        cache.close();
+        if (enableBefore) cache.enablePartyOrgs();
+        cache.put(scope, [...records, contact()], NOW);
+        cache.put(scope, [cache.get(scope, records[0]!.id, NOW)!], NOW, true);
+        if (!enableBefore) cache.enablePartyOrgs();
+        const before = cache.partyOrgs(scope, "Alice Smith", NOW);
+        expect(before[0]!.itemId).toBe(records[0]!.id);
+        expect(cache.partyOrgs(scope, "Ahmed Hassan", NOW)).toEqual([]);
+        if (form === "drain") {
+          let saved: PersistedUser | null = null;
+          const disk: FrozenDisk = {
+            has: () => saved !== null,
+            read: () => saved,
+            write: (_scope, user) => {
+              saved = user;
+              return true;
+            },
+            delete: () => {
+              saved = null;
+            },
+            sweep: () => 0,
+          };
+          cache.persist(disk);
+          expect(cache.flush()).toBe(1);
+          const restored = new ItemCache(limits);
+          restored.close();
+          restored.enablePartyOrgs();
+          restored.persist(disk);
+          expect(restored.partyOrgs(scope, "Alice Smith", NOW + 2)).toEqual(before);
+          expect(restored.partyOrgs(scope, "Ahmed Hassan", NOW + 2)).toEqual([]);
+          continue;
+        }
+        cache.expireIdle(NOW + 2);
+        cache.expireIdle(NOW + 2);
+        expect(cache.frozenCount).toBe(1);
+        expect(cache.warmCount).toBe(form === "warm" ? 1 : 0);
+        expect(cache.partyOrgs(scope, "Alice Smith", NOW + 2)).toEqual(before);
+        expect(cache.partyOrgs(scope, "Ahmed Hassan", NOW + 2)).toEqual([]);
+      }
+    }
   });
 });

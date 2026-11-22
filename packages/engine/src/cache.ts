@@ -624,9 +624,11 @@ function factDays(f: DayFacts): number[] {
   return out;
 }
 
-function indexEntry(u: UserCache, e: Entry, by: 1 | -1): void {
-  if (by === 1) u.affiliations?.put(e.item);
-  else u.affiliations?.remove(e.item.id);
+function indexEntry(u: UserCache, e: Entry, by: 1 | -1, affiliations = true): void {
+  if (affiliations) {
+    if (by === 1) u.affiliations?.put(e.item);
+    else u.affiliations?.remove(e.item.id);
+  }
   const start = e.item.meta?.start;
   const raw = start && rawStartDay(start);
   if (raw) bucket(u.starts, raw, e, by);
@@ -1737,7 +1739,7 @@ export class ItemCache {
     for (const u of this.users.values()) {
       if (u instanceof FrozenUser) continue;
       u.affiliations = new AffiliationIndex();
-      for (const e of u.items.values()) u.affiliations.put(e.item);
+      for (const e of [...u.items.values()].sort((a, b) => a.seq - b.seq)) u.affiliations.put(e.item);
     }
   }
 
@@ -2687,9 +2689,16 @@ export class ItemCache {
       }
       u.items.set(item.id, entry);
       link(u, entry);
-      indexEntry(u, entry, 1);
+      indexEntry(u, entry, 1, false);
       u.byDoc[r.d] = entry;
       if (j % STEP_ITEMS === STEP_ITEMS - 1) yield;
+    }
+    if (u.affiliations) {
+      const ordered = [...u.items.values()].sort((a, b) => a.seq - b.seq);
+      for (let j = 0; j < ordered.length; j++) {
+        u.affiliations.put(ordered[j]!.item);
+        if (j % STEP_ITEMS === STEP_ITEMS - 1) yield;
+      }
     }
     return u;
   }
@@ -2746,7 +2755,7 @@ export class ItemCache {
       }
       u.items.set(item.id, entry);
       link(u, entry);
-      indexEntry(u, entry, 1);
+      indexEntry(u, entry, 1, false);
       entries[j] = entry;
       if (j % STEP_ITEMS === STEP_ITEMS - 1) yield;
     }
@@ -2757,6 +2766,7 @@ export class ItemCache {
       const doc = this.index(u, entries[j]!.item);
       entries[j]!.doc = doc;
       u.byDoc[doc] = entries[j]!;
+      u.affiliations?.put(entries[j]!.item);
       if (k % STEP_ITEMS === STEP_ITEMS - 1) yield;
     }
     u.index.settle();
@@ -2947,7 +2957,7 @@ export class ItemCache {
       }
       u.items.set(item.id, entry);
       link(u, entry);
-      indexEntry(u, entry, 1);
+      indexEntry(u, entry, 1, false);
       entries[j] = entry;
       if (j % STEP_ITEMS === STEP_ITEMS - 1) yield;
     }
@@ -2958,6 +2968,7 @@ export class ItemCache {
       const doc = this.index(u, plain[j]!);
       entries[j]!.doc = doc;
       u.byDoc[doc] = entries[j]!;
+      u.affiliations?.put(entries[j]!.item);
       if (k % STEP_ITEMS === STEP_ITEMS - 1) yield;
     }
     u.index.settle();
