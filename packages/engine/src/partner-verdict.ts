@@ -1313,7 +1313,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       items: read.map((x) => {
         const item = readerItem(x.item, focus, undefined, this.config.pushCheckItemChars);
         const evidence = gate.affiliations?.get(x.item.id);
-        return evidence ? { ...item, text: `${item.text}\nAffiliation evidence (data): ${evidence}` } : item;
+        return evidence ? { ...item, affiliation: evidence } : item;
       }),
       today,
       ...(sheet.length > 0 ? { sheet, ...(this.config.pushCheckSheetRefs ? { sheetRefs: true } : {}) } : {}),

@@ -7,7 +7,8 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { PushChecker } from "./push-check";
+import { checkKey, checkMessages, PushChecker, type PushCheckInput } from "./push-check";
+import { readerItem } from "./reader";
 
 const NOW = Date.parse("2026-10-27T09:00:00Z");
 const ref = { tenantId: "t", userId: "u", sessionId: "s" };
@@ -107,6 +108,27 @@ async function run(
 }
 
 describe("organisation constraints have check-only seats", () => {
+  test("affiliation evidence survives rule references, is redacted, and changes the check cache key", () => {
+    const secret = "sk_live_" + "a".repeat(32);
+    const affiliation = `Ahmed Hassan — Umbrella Health (contact Company field, ${secret})`;
+    const candidate = readerItem(items[4]!, new Set());
+    const input: PushCheckInput = {
+      request: REQUEST,
+      today: "2026-10-27",
+      items: [{ ...candidate, affiliation }],
+      sheet: [
+        { id: candidate.id, title: candidate.title, statement: candidate.text, kind: "constraint", source: "mail" },
+      ],
+      sheetRefs: true,
+    };
+    const prompt = checkMessages(input).at(-1)!.content;
+    expect(prompt).toContain('rule="1"');
+    expect(prompt).toContain("Affiliation evidence (data): Ahmed Hassan");
+    expect(prompt).not.toContain(secret);
+    expect(checkKey(input)).not.toBe(checkKey({ ...input, items: [candidate] }));
+    expect(checkKey(input)).not.toBe(checkKey({ ...input, items: [{ ...candidate, affiliation: "Other evidence" }] }));
+  });
+
   test("org seats carry bounded provenance to the checker, never to packet text", async () => {
     const prompts: string[] = [];
     const model = new FakeModel((req) => {
