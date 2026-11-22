@@ -950,7 +950,7 @@ async function runWorld(
         op: "run",
         task: t.id,
         token: binding.token,
-        system: systemPrompt(world, { lookups: false, data: true }),
+        system: systemPrompt(world, { lookups: false, data: true, edenGuide: cond.edenGuide }),
         prompt: userPrompt(t),
         nowMs: clock,
         model: MODEL,

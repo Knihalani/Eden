@@ -10,3 +10,8 @@ export const ASK_CONTEXT_DESCRIPTION =
   "documents, CRM and more) and answers with citations. Use it when you need a fact about the user, their " +
   "people, projects or history that is not in the conversation. Pass `item` with an item id from an earlier " +
   "answer's Sources list to read that item's parts in full.";
+
+/** Opt-in integrator system-prompt guidance; Eden does not inject it. */
+export const EDEN_CONTEXT_GUIDE =
+  "Eden context blocks are excerpts already retrieved for this request. Say what each changes before acting; " +
+  "call ask_context when unsure.";

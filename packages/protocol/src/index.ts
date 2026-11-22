@@ -18,4 +18,4 @@ export {
   MAX_TEXT_CHARS,
   type Checked,
 } from "./validate";
-export { ASK_CONTEXT_DESCRIPTION } from "./describe";
+export { ASK_CONTEXT_DESCRIPTION, EDEN_CONTEXT_GUIDE } from "./describe";

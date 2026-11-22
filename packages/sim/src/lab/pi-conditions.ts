@@ -17,6 +17,8 @@
  * - `+nokey` (D291): also the harness's: Eden runs as a server with no model key builds it (`buildPartner` with
  *   `NO_MODELS`): the same engine settings, but no card enricher (so no cards and no intent requests) and no reader.
  *   Only a base with Eden takes it;
+ * - `+edenGuide`: harness-only, on a base with Eden: append the integrator's context guide to the agent system
+ *   prompt. Changes no engine setting or tool availability;
  * - `+ephemeral`, `+ephemeralBp` (A16, D336): also the harness's, on a base with Eden: how earlier requests' packets
  *   stay in the transcript (`packet-layout.ts`): only the current request's, as `withContext` and the proxy send them,
  *   and with a cache breakpoint on the request's user turn. Only multi-request sessions (`--day`, `--days`) differ;
@@ -48,6 +50,8 @@ export interface Condition {
   judge: boolean;
   /** `+nokey`: no card enricher and no reader are built, as on a server without a model key (D291). */
   noKey: boolean;
+  /** `+edenGuide`: append the optional integrator guidance to the agent's system prompt. */
+  edenGuide: boolean;
   /** `+ephemeral`, `+ephemeralBp` (D336): how earlier requests' packets stay in the transcript; else `kept`. */
   packets: PacketLayout;
   /** `hits` (P3): the top lexical hits pushed on every request (`lexical-hits.ts`), no partner, tools or ask. */
@@ -56,6 +60,7 @@ export interface Condition {
 
 /** The harness flag `+ask`: `ask_context` beside the tools, never sent to the engine as a setting. */
 const ASK_FLAG = "ask";
+const GUIDE_FLAG = "edenGuide";
 // `+pushCheckedWhy` is an engine flag: check order and short request links, off in the default.
 // `+packetCoversLine` adds retrieved-excerpt framing; both flags can stack on a condition.
 // `+pushUnsureAskNudge` adds a request-specific ask invitation only to unchecked candidates.
@@ -102,6 +107,10 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   const allFlags = flagPart ? flagPart.slice(1).split("+") : [];
   for (const f of allFlags) if (!/^[a-zA-Z]+$/.test(f)) throw new Error(`bad flag in ${name}: use +flagName`);
   const askFlag = allFlags.includes(ASK_FLAG);
+  const edenGuide = allFlags.includes(GUIDE_FLAG);
+  if (edenGuide && !base.startsWith("eden") && !base.startsWith("both")) {
+    throw new Error(`condition ${name}: +edenGuide describes Eden's context, so only a base with Eden takes it`);
+  }
   if (askFlag && !base.startsWith("both")) {
     throw new Error(`condition ${name}: +ask adds ask_context beside the tools, so only a both base takes it`);
   }
@@ -120,7 +129,9 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   if (layouts.length && (base === "none" || base === "tools")) {
     throw new Error(`condition ${name}: +${layouts[0]} places Eden's packets, so only a base with Eden takes it`);
   }
-  const flags = allFlags.filter((f) => f !== ASK_FLAG && f !== NOKEY_FLAG && !(LAYOUT_FLAGS as string[]).includes(f));
+  const flags = allFlags.filter(
+    (f) => f !== ASK_FLAG && f !== GUIDE_FLAG && f !== NOKEY_FLAG && !(LAYOUT_FLAGS as string[]).includes(f),
+  );
   let extra: Record<string, unknown> = {};
   if (variant !== undefined) {
     const v = options.variants?.[variant];
@@ -161,6 +172,7 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
     askTool,
     judge: base.endsWith("-judge"),
     noKey,
+    edenGuide,
     packets: layouts[0] ?? "kept",
     hits: base === "hits",
   };

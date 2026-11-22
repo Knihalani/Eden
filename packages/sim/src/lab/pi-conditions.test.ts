@@ -5,6 +5,26 @@ import { pairedWith, parseCondition, parseConditions, parseVariants } from "./pi
 const ALL = { sync: true, cards: true, densePacket: true };
 
 describe("pi-ab conditions", () => {
+  test("+edenGuide is harness-only and leaves tool availability and engine settings alone", () => {
+    const options = { config: ALL, defaults: DEFAULT_CONFIG as unknown as Record<string, unknown> };
+    const off = parseCondition("both", options);
+    const on = parseCondition("both+edenGuide", options);
+    expect(off.edenGuide).toBe(false);
+    expect(on.edenGuide).toBe(true);
+    expect(on.config).toEqual(off.config);
+    expect(on.askTool).toBe(off.askTool);
+    const stacked = parseCondition("both+ask+pushCheckedWhy+packetCoversLine+pushUnsureAskNudge+edenGuide", options);
+    expect(stacked.edenGuide).toBe(true);
+    expect(stacked.askTool).toBe(true);
+    expect(stacked.config).toEqual({ ...ALL, pushCheckedWhy: true, packetCoversLine: true, pushUnsureAskNudge: true });
+    expect(parseCondition("both+ask+edenGuide", options).askTool).toBe(true);
+    expect(parseCondition("eden+edenGuide", options).edenGuide).toBe(true);
+    for (const base of ["none", "tools", "hits"]) {
+      expect(() => parseCondition(`${base}+edenGuide`, options)).toThrow(/only a base with Eden/);
+    }
+    expect(() => parseCondition("both+edenGuides", options)).toThrow(/no engine setting/);
+  });
+
   test("+packetCoversLine enables the framing trial alone or with +pushCheckedWhy", () => {
     const options = { config: ALL, defaults: DEFAULT_CONFIG as unknown as Record<string, unknown> };
     expect(parseCondition("both+packetCoversLine", options).config).toEqual({ ...ALL, packetCoversLine: true });
@@ -21,7 +41,6 @@ describe("pi-ab conditions", () => {
     expect(parseCondition("both+pushUnsureAskNudge", options).config).toEqual({ ...ALL, pushUnsureAskNudge: true });
     expect(() => parseCondition("both+pushUnsureAskNudges", options)).toThrow(/no engine setting/);
   });
-
   test("+pushCheckedWhy enables the checked packet trial", () => {
     const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
     expect(parseCondition("both+pushCheckedWhy", { config: ALL, defaults }).config).toEqual({
