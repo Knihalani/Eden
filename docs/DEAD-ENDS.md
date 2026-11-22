@@ -140,6 +140,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 | D998 | part of: card state frozen with its user rejected | Merged with main (b99f0171), RSS a user after a thaw 8.61 / 8.60 → 7.31 / 7.46 MB (−13% to −15%; −20% to… |
 | D1052 | Rejected (stopped on its pre-registered screen): more items a card call and a compact card reply; the Message Batches API stays rejected | stopped on its pre-registered screen |
 | D1154 | Rejected and deleted (F1, served by subagents, D1101; stopped on the pre-registered rule of 606571ee/89d98a27): `cardsRequestsWide`, the… | Form-4 cards recorded on the world's clock (D1102) through the queue for dev20 seeds 41–44, against the… |
+| D2090 | Rejected (measured): `intentExpand` — ASK_FAMILY OR-groups on the intent-index query. | measured |
 
 ## Check
 

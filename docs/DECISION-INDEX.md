@@ -965,3 +965,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2087 | 2026-11-21 | Adopted: `tmpDir` in @eden/primitives — test scratch dirs clean themselves. | adopted |
 | D2088 | 2026-11-22 | Adopted: one doubly-sure item may ride past the confident packet's cap. | adopted |
 | D2089 | 2026-11-22 | Adopted: a packet finalized after a same-turn delivery drops the item already handed. | adopted |
+| D2090 | 2026-11-22 | Rejected (measured): `intentExpand` — ASK_FAMILY OR-groups on the intent-index query. | rejected |
