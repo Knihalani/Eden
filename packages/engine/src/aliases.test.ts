@@ -209,4 +209,38 @@ describe("partner wiring (D2009): requests anchor through the table", () => {
     expect(r.handed).toContain("mail:amex");
     expect(r.unsettled).toBe(false);
   });
+
+  test("routing and rarity read the request's expanded entities too (D2096)", async () => {
+    ITEMS = [
+      item(
+        "amex",
+        "Card security",
+        "Your American Express card ending 7731 was cancelled.",
+        1,
+        "American Express <notifications@americanexpress.example>",
+      ),
+    ];
+    const p = setup({});
+    CACHE.put(SCOPE, ITEMS);
+    await say(p, "Notes for the day.");
+    const s = (p as never as { sessions: Map<string, object> }).sessions.get("t/u1#s1");
+    const cue = {
+      text: "pay amex",
+      entities: ["Amex"],
+      key: "",
+      id: "cue:t",
+      time: null,
+      at: NOW,
+      raw: "Pay Amex.",
+      offset: 0,
+    };
+    // "amex" is the mail's "american express" only through the table: without expansion the local index finds
+    // nothing of the request in the mail source, and neither expanded word counts rare.
+    const hits = (p as never as { localRouteHits: (a: object, b: object) => Map<string, number> | undefined }) // eslint-disable-next-line
+      .localRouteHits(s, cue);
+    expect(hits?.get("mail")).toBeGreaterThan(0);
+    const rare = (p as never as { rareTerms: (a: object, b: object) => number[] }).rareTerms(s, cue);
+    const vocab = CACHE.peekVocab(SCOPE)!;
+    expect(rare.map((id) => vocab.term(id))).toContain("american");
+  });
 });
