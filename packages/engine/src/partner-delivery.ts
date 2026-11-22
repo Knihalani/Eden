@@ -862,7 +862,9 @@ export abstract class PartnerDelivery extends PartnerCore {
     const people = this.config.quietNameOnly ? this.peopleOf(s, cue) : [];
     if (people.length > 0) {
       const inNames = new Set<number>();
-      for (const p of people) {
+      // The people as expanded (D2094) stay name words too: a co-surname's other part ("sara" of "sara webb",
+      // joined to "webb") is evidence of a name, not of what the request is about.
+      for (const p of aliasExpand(cache.aliasTable(s.scope), people)) {
         const t = termIds(p, vocab, false);
         for (let i = 0; i < t.n; i++) inNames.add(t.ids[i]!);
       }
