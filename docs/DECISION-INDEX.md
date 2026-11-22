@@ -968,3 +968,4 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2090 | 2026-11-22 | Rejected (measured): `intentExpand` — ASK_FAMILY OR-groups on the intent-index query. | rejected |
 | D2091 | 2026-11-22 | Adopted: a billing breaker beside the request cap. | adopted |
 | D2092 | 2026-11-22 | Adopted: `expect.also` — a tolerated delivery on the eval label. | adopted |
+| D2093 | 2026-11-22 | Adopted: a gated candidate tied to the request by its own reference survives the term bar. | adopted |

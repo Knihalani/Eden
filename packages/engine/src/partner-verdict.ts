@@ -1472,7 +1472,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
         ? current
             // A gated push still hands only what is actually tied: one shared word ("Thursday") is filler that
             // ranked high on a common term, never an answer (D1970).
-            .filter((x) => x.matched >= 2 || x.entity === true)
+            .filter((x) => x.matched >= 2 || x.entity === true || namesRef(this.frame(cue), x.item))
             .slice(0, this.config.pushCandidates)
         : [];
     // `pushLookup` (D1252): the check answered and named nothing (a non-null empty answer: this pass's call, a reused

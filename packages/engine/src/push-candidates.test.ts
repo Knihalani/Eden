@@ -66,6 +66,8 @@ function setup(
     items?: ContextItem[];
     fail?: boolean;
     noReader?: boolean;
+    /** Items already in the user's cache, as the funnel's backfilled corpus is, before the first message. */
+    seeded?: ContextItem[];
     onReader?: (r: ReaderReport) => void;
     onPushPool?: (r: PushPoolReport) => void;
   } = {},
@@ -80,10 +82,12 @@ function setup(
       return opts.items ?? [...PLAIN, HOLD, DEADLINE];
     },
   };
+  const cache = new ItemCache();
+  if (opts.seeded) cache.put({ tenantId: "t", userId: "u1" }, opts.seeded, NOW - HOUR);
   const p = new ContextPartner({
     sources: async () => [source],
     sourceMap: new SourceMap(),
-    cache: new ItemCache(),
+    cache,
     budget: new Budget(),
     model: null,
     now: () => NOW,
@@ -178,6 +182,28 @@ describe("pushCandidates (D236, D237): the push hands the agent candidates, with
     await p.observe({ ...ref(), at: NOW, kind: "user_message", text: "thanks" } as AgentEvent);
     await first;
     expect(candidates(p)).toEqual([]);
+  });
+
+  test("a candidate naming the request's own reference is tied though a term short (D2093)", async () => {
+    // lh10's `challenge-on-hold` miss: "Settle IS40018322 today" — the hold notice tops the pool but shares only the
+    // reference with the request, and `matched < 2` read it as one-shared-word filler. `namesRef` is the tie
+    // `about()` already accepts.
+    const pcn = item(
+      "pcn",
+      "We have received your challenge",
+      "Penalty Charge Notice IS40018322 (vehicle LB19 XKT). The amount is on hold while your challenge is considered — do not settle it yet.",
+      4,
+    );
+    const pools: PushPoolReport[] = [];
+    const { p } = setup(
+      { ...quiet, pushCandidates: 3 },
+      { items: [pcn], seeded: [pcn, ...PLAIN], onPushPool: (r) => pools.push(r) },
+    );
+    await say(p, "Pay IS40018322 today, before it doubles.");
+    const got = candidates(p);
+    expect(got.length).toBe(1);
+    expect(got[0]!.citations.map((c) => c.itemId)).toContain("mail:pcn");
+    expect(pools.at(-1)!.handed).toContain("mail:pcn");
   });
 
   test("an explicit ask calls no reader either", async () => {
