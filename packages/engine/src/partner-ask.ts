@@ -587,7 +587,10 @@ export abstract class PartnerAsk extends PartnerVerdict {
       checked = checked.filter((x) => {
         const now = s.ledger.entry(x.item.id);
         if (!(now === undefined || sameEntry(was.get(x.item.id), now))) return false;
-        return x.revised === true || !this.deliveredThisTurn(s, x.item.id);
+        // A `withdrawn` item is this reading's own replacement for the packet still queued — `build` marked it
+        // delivered when the first pass queued it, and `withdraw` unmarks it in the same step below (D2089's same-turn
+        // drop would otherwise strip it from its replacement before the undo runs).
+        return x.revised === true || withdrawn.has(x.item.id) || !this.deliveredThisTurn(s, x.item.id);
       });
       const still = internal.request === undefined || internal.request === s.requests;
       // `pushOpenConstraint` (Q4.2, opt-in; o3-push-open §5, screened and not built): on a request the push opened
