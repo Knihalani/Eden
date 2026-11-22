@@ -134,6 +134,7 @@ import {
   ASK_NUDGE,
   CHECKED_LEAD,
   CHECKED_WHY_LEAD,
+  CHECKED_FACTS_LEAD,
   LOOKUP_HEAD_LEAD,
   LOOKUP_LEAD,
   LOOKUP_QUIET,
@@ -1316,6 +1317,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
         return evidence ? { ...item, affiliation: evidence } : item;
       }),
       today,
+      ...(this.config.pushCheckedFacts ? { checkedFacts: true } : {}),
       ...(sheet.length > 0 ? { sheet, ...(this.config.pushCheckSheetRefs ? { sheetRefs: true } : {}) } : {}),
       cacheKey: userCacheKey(s.scope),
     };
@@ -1342,6 +1344,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       return withSheet({
         yes: new Set(items.filter((it) => yes.has(it.id)).map((it) => it.id)),
         ...(kept.settled?.changes ? { changes: kept.settled.changes } : {}),
+        ...(kept.settled?.facts ? { facts: kept.settled.facts } : {}),
         ...(kept.settled?.rules ? { rules: kept.settled.rules } : {}),
         marks: kept.marks,
         costUsd: 0,
@@ -4180,10 +4183,15 @@ export abstract class PartnerVerdict extends PartnerCheck {
   protected checkedFrame(nudge = false, check?: PushCheckRead | null): PacketFrame {
     const k = Math.min(this.config.pushCandidates, this.config.askReaderPool, READER_POOL_CAP);
     const each = Math.min(this.config.compactItemBytes, MAX_CANDIDATE_BYTES);
-    const lead = this.config.pushCheckedWhy ? CHECKED_WHY_LEAD : CHECKED_LEAD;
+    const lead = this.config.pushCheckedFacts
+      ? CHECKED_FACTS_LEAD
+      : this.config.pushCheckedWhy
+        ? CHECKED_WHY_LEAD
+        : CHECKED_LEAD;
     return {
       lead: nudge ? `${lead} ${ASK_NUDGE}` : lead,
       ...(this.config.pushCheckedWhy ? { changes: check?.changes } : {}),
+      ...(this.config.pushCheckedFacts ? { facts: check?.facts } : {}),
       itemBytes: each,
       maxBytes: Math.max(this.config.maxInjectionBytes, 400 + k * (each + 120)),
     };

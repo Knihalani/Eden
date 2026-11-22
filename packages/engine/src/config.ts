@@ -827,6 +827,8 @@ export interface EngineConfig {
   pushCheckAdaptiveWait: boolean;
   /** Trial: check order and short per-item request links on check-named packets. */
   pushCheckedWhy: boolean;
+  /** Trial: check-named packets state faithful source facts before their excerpts. */
+  pushCheckedFacts: boolean;
   /** Trial: remind the agent that packet excerpts are already retrieved, without claiming search coverage. */
   packetCoversLine: boolean;
   /** Trial: unchecked candidates invite a short request-specific ask before acting. */
@@ -1130,6 +1132,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckWaitMs: 1_500,
   pushCheckAdaptiveWait: true,
   pushCheckedWhy: false,
+  pushCheckedFacts: false,
   packetCoversLine: false,
   pushUnsureAskNudge: false,
   pushCheckItemChars: 200,

@@ -9,7 +9,7 @@ import { checkEngineConfig } from "./config-check";
 import { DEFAULT_CONFIG } from "./config";
 import { ContextPartner, type PushPoolReport } from "./partner";
 import { CORE_CONFIG } from "./parts";
-import { CANDIDATES_LEAD, CHECKED_LEAD, CHECKED_WHY_LEAD, PACKET_COVERS_LINE } from "./render";
+import { CANDIDATES_LEAD, CHECKED_LEAD, CHECKED_WHY_LEAD, CHECKED_FACTS_LEAD, PACKET_COVERS_LINE } from "./render";
 import { CHECK_SYSTEM, checkKey, checkMessages, itemMark, parseCompare, PushChecker } from "./push-check";
 
 // The push check (I3, D500; in the default since D828). One model call over the push's pool names the items that
@@ -96,6 +96,62 @@ async function handed(p: ContextPartner, at = ref, text = REQUEST): Promise<stri
 }
 
 describe("pushCheck (I3, D500): one model call picks the push's candidates", () => {
+  test("answer-form packets are opt-in, stack, retain cached facts and arrive after a late check", async () => {
+    const run = async (flag?: boolean, late = false) => {
+      const model: Model = {
+        id: "facts",
+        async chat(req) {
+          if (late) await new Promise((resolve) => setTimeout(resolve, 60));
+          const n = numbers(req).get(late ? "Invoice archive" : "Harlow deposit");
+          return new FakeModel(() =>
+            JSON.stringify({
+              items: n ? [{ i: n, on: "Harlow", hits: "deposit", says: ITEMS[late ? 3 : 2]!.text, act: true }] : [],
+            }),
+          ).chat(req);
+        },
+      };
+      const { partner } = setup(
+        {
+          pushCheck: true,
+          pushCandidatesSettled: 0,
+          pushCheckWaitMs: late ? 10 : 1500,
+          ...(flag === undefined ? {} : { pushCheckedFacts: flag }),
+          pushCheckedWhy: true,
+          packetCoversLine: true,
+        },
+        model,
+      );
+      await partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 2_000 });
+      if (late) await new Promise((resolve) => setTimeout(resolve, 100));
+      const packet = partner
+        .takePending(ref)
+        .find((p) => (late ? p.text.includes(CHECKED_FACTS_LEAD) : p.reason.startsWith("candidates:")))!;
+      return { partner, packet };
+    };
+    const before = await run();
+    const off = await run(false);
+    const on = await run(true);
+    expect(off.packet.text).toBe(before.packet.text);
+    expect(on.packet.citations).toEqual(before.packet.citations);
+    expect(on.packet.text).toContain(CHECKED_FACTS_LEAD);
+    expect(on.packet.text).toContain('"The Harlow venue deposit is due on Friday 30 October." (from: Harlow deposit)');
+    expect(on.packet.text).toContain('(changes: "deposit")');
+    expect(on.packet.text).toContain(PACKET_COVERS_LINE);
+    await on.partner.observe({ ...ref, at: NOW, kind: "context_reset" } as AgentEvent);
+    await on.partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, { waitMs: 2_000 });
+    expect(on.partner.takePending(ref).find((p) => p.reason.startsWith("candidates:"))!.text).toContain(
+      '"The Harlow venue deposit is due on Friday 30 October."',
+    );
+    expect((await run(true, true)).packet.text).toContain(CHECKED_FACTS_LEAD);
+    const unchecked = setup({ pushCheck: true, pushCheckedFacts: true }, null);
+    await unchecked.partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+      waitMs: 2_000,
+    });
+    expect(unchecked.partner.takePending(ref).find((p) => p.reason.startsWith("candidates:"))!.text).not.toContain(
+      CHECKED_FACTS_LEAD,
+    );
+  });
+
   test("stem constraint seats are bounded, switchable and check-only", async () => {
     const rules = [
       item("stem1", "Finance approval", "Q4 renewals: discounts above 10% need CFO sign-off before offered.", 1),

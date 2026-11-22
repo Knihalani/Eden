@@ -7,6 +7,15 @@ const ALL = { sync: true, cards: true };
 const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
 
 describe("hermes-ab conditions", () => {
+  test("+checkedFacts aliases the answer-form engine trial and stacks", () => {
+    const c = parseHermesCondition("hermes+eden+checkedFacts+pushCheckedWhy+packetCoversLine", {
+      config: ALL,
+      defaults,
+    });
+    expect(c.config).toEqual({ ...ALL, pushCheckedFacts: true, pushCheckedWhy: true, packetCoversLine: true });
+    expect(pairedWith(c.name)).toBe("hermes");
+    expect(DEFAULT_CONFIG.pushCheckedFacts).toBe(false);
+  });
   test("+edenGuide is opt-in system guidance, not engine configuration", () => {
     const options = { config: ALL, defaults };
     const off = parseHermesCondition("hermes+eden", options);

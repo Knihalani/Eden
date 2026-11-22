@@ -26,9 +26,11 @@ import { sanitizeForStore } from "@eden/redact";
 import { READER_REQUEST_CHARS, type ReaderItem } from "./reader";
 import { inert } from "./render";
 import { SheetCachePolicy, SystemTtlPolicy } from "./sheet-cache";
+import { checkedFact } from "./checked-facts";
 
 /** The prompt's version: a lab replay cache made by another prompt is not this one's. */
 export const CHECK_VERSION = 1;
+export const CHECK_FACTS_VERSION = 2;
 /** Hard cap on the items one call reads. */
 export const CHECK_MAX_ITEMS = 20;
 /**
@@ -139,8 +141,16 @@ export const SHEET_HEAD = [
     'Most requests touch none of the rules: then write "rules":[].',
 ].join("\n\n");
 
+const FACTS_FORMAT =
+  ' For each item or rule entry, write "says" after "hits" and before "act": at most 20 words stating the item\'s ' +
+  "fact that bears on the request, in the item's own names, dates and numbers. Source data only; do not invent facts.";
+export const CHECK_FACTS_SYSTEM =
+  CHECK_SYSTEM.replace('"act":true}', '"says":"<the item\'s fact>","act":true}') + FACTS_FORMAT;
+const SHEET_FACTS_HEAD = SHEET_HEAD.replace('"act":true}', '"says":"<the item\'s fact>","act":true}') + FACTS_FORMAT;
+
 /** What one check is asked: the request's head, the pool's items as the reader renders them, and the user's day. */
 export interface PushCheckInput {
+  checkedFacts?: boolean;
   request: string;
   items: (ReaderItem & { affiliation?: string })[];
   today: string;
@@ -157,6 +167,7 @@ export interface PushCheckInput {
 
 /** One check's outcome: the item ids it says change the action (null: no answer, fail open), and its accounting. */
 export interface PushCheckRead {
+  facts?: ReadonlyMap<string, string>;
   yes: ReadonlySet<string> | null;
   /** Each named item's request link, in the reply's decisive-first order (sheet items included). */
   changes?: ReadonlyMap<string, string>;
@@ -186,7 +197,7 @@ export function checkKey(input: PushCheckInput): string {
   // "c": the compare-first reply's key since D527, kept so the lab's recorded replies still replay.
   const form = "c";
   const h = createHash("sha256").update(
-    `v${CHECK_VERSION}${form}\n${input.today}\n${head(input.request).toLowerCase()}\n`,
+    `v${input.checkedFacts ? CHECK_FACTS_VERSION : CHECK_VERSION}${form}\n${input.today}\n${head(input.request).toLowerCase()}\n`,
   );
   for (const it of input.items.slice(0, CHECK_MAX_ITEMS)) {
     h.update(`${itemMark(it)}\t${it.text}\n`);
@@ -272,12 +283,16 @@ export function checkMessages(
   });
   return [
     // `systemHour` (D1800): the instructions ask the hour on their own; a marked sheet carries them to it anyway.
-    { role: "system", content: CHECK_SYSTEM, ...(systemHour ? { cache: true, cacheTtl: "1h" as const } : {}) },
+    {
+      role: "system",
+      content: input.checkedFacts ? CHECK_FACTS_SYSTEM : CHECK_SYSTEM,
+      ...(systemHour ? { cache: true, cacheTtl: "1h" as const } : {}),
+    },
     ...(sheet.length > 0
       ? [
           {
             role: "user" as const,
-            content: `${SHEET_HEAD}\n\n<rules count="${sheet.length}">\n${sheetText(sheet)}\n</rules>`,
+            content: `${input.checkedFacts ? SHEET_FACTS_HEAD : SHEET_HEAD}\n\n<rules count="${sheet.length}">\n${sheetText(sheet)}\n</rules>`,
             // A user's checks are often more than five minutes apart: on the 5-minute TTL most would write the sheet
             // again at 1.25x, dearer than sending it uncached; an hour keeps about three in four of an active user's
             // as reads (D1197). A user whose checks are hours apart would only write it, at 2x: plain (D1800).
@@ -326,7 +341,7 @@ export function parseCompareSheet(
   text: string,
   count: number,
   rules: number,
-  onHit?: (kind: "item" | "rule", index: number, hits: string) => void,
+  onHit?: (kind: "item" | "rule", index: number, hits: string, says?: string) => void,
 ): { items: number[]; rules: number[] } | null {
   if (!OPENING.test(text)) return null;
   let entries: unknown;
@@ -356,7 +371,7 @@ export function parseCompareSheet(
   const named: number[] = [];
   for (const { e, rule } of all) {
     if (!e || typeof e !== "object") return null;
-    const { i, r, hits, act } = e as { i?: unknown; r?: unknown; hits?: unknown; act?: unknown };
+    const { i, r, hits, act, says } = e as { i?: unknown; r?: unknown; hits?: unknown; act?: unknown; says?: unknown };
     if (act !== true && act !== "true") continue;
     // A yes whose link is not text (an array, null, another format's entry) is a format error: fail open, never
     // closed (a yes read as nothing would silence the push). A missing link is the entry contradicting itself.
@@ -369,7 +384,7 @@ export function parseCompareSheet(
       if (typeof k !== "number" || !Number.isInteger(k) || k < 1 || k > rules) return null;
       if (!named.includes(k - 1) && named.length < SHEET_MAX_NAMED) {
         named.push(k - 1);
-        onHit?.("rule", k - 1, hits);
+        onHit?.("rule", k - 1, hits, typeof says === "string" ? says : undefined);
       }
       continue;
     }
@@ -377,7 +392,7 @@ export function parseCompareSheet(
     if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > count) return null;
     if (!out.includes(n - 1) && out.length < 5) {
       out.push(n - 1);
-      onHit?.("item", n - 1, hits);
+      onHit?.("item", n - 1, hits, typeof says === "string" ? says : undefined);
     }
   }
   return { items: out, rules: named };
@@ -489,7 +504,10 @@ export class PushChecker {
       const res = await this.deps.model.chat({
         messages: checkMessages({ ...input, items, sheet }, { sheetCache, systemHour }),
         // A sheet's rule entries are about 35 tokens each, past the items' cap.
-        maxTokens: sheet.length > 0 ? COMPARE_MAX_TOKENS + 40 * SHEET_MAX_NAMED : COMPARE_MAX_TOKENS,
+        maxTokens:
+          COMPARE_MAX_TOKENS +
+          (sheet.length > 0 ? 40 * SHEET_MAX_NAMED : 0) +
+          (input.checkedFacts ? 30 * (COMPARE_MAX_ENTRIES + (sheet.length > 0 ? SHEET_MAX_NAMED : 0)) : 0),
         reasoning: "off",
         json: true,
         // The compare-first reply lists its rejections on purpose (a "hits": "none" entry), so it has no stop.
@@ -509,11 +527,16 @@ export class PushChecker {
         this.systemPolicy.note(scope.tenantId, sent);
       }
       const changes = new Map<string, string>();
+      const facts = new Map<string, string>();
       const at = res.truncated
         ? null
-        : parseCompareSheet(res.text, items.length, sheet.length, (kind, index, hits) => {
+        : parseCompareSheet(res.text, items.length, sheet.length, (kind, index, hits, says) => {
             const id = kind === "item" ? items[index]!.id : sheet[index]!.id;
             if (!changes.has(id)) changes.set(id, sanitizeForStore(hits).slice(0, 120));
+            if (input.checkedFacts) {
+              const fact = checkedFact(says, kind === "item" ? items[index]!.text : sheet[index]!.statement);
+              if (fact && !facts.has(id)) facts.set(id, fact);
+            }
           });
       if (!at) {
         this.stats.failures++;
@@ -524,6 +547,7 @@ export class PushChecker {
       return {
         yes: new Set(at.items.map((i) => items[i]!.id)),
         changes,
+        ...(input.checkedFacts ? { facts } : {}),
         ...(sheet.length > 0 ? { rules: new Set(at.rules.map((k) => sheet[k]!.id)) } : {}),
         costUsd: res.costUsd,
         called: true,

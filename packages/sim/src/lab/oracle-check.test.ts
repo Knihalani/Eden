@@ -40,6 +40,23 @@ test("perfect answers round-trip through PushChecker, with generic links and zer
   expect(checker.stats.failures).toBe(0);
 });
 
+test("answer-form oracle/noisy proxies state decisive source sentences, not gold, and preserve picks", async () => {
+  const oracle = new OracleCheckModel(1, 1);
+  const i = { ...input(), checkedFacts: true };
+  i.items = i.items.map((it) => ({ ...it, text: "Thanks for the update. Harlow payments are on hold until Friday." }));
+  const t = { ...task, detail: "Harlow payments are on hold until Friday" };
+  const reply = await oracle.run(t, i, () => oracle.chat(request(i)));
+  const entries = JSON.parse(reply.text).items;
+  expect(entries.map((e: { i: number }) => e.i)).toEqual([1, 2, 3]);
+  expect(entries[1].says).toBe("Harlow payments are on hold until Friday.");
+  expect(entries[0].says).toBe("Thanks for the update.");
+  expect(Object.keys(entries[1])).toEqual(["i", "on", "hits", "says", "act"]);
+  const off = { ...i, checkedFacts: false };
+  expect(
+    JSON.parse((await oracle.run(t, off, () => oracle.chat(request(off)))).text).items.map((e: { i: number }) => e.i),
+  ).toEqual([1, 2, 3]);
+});
+
 test("perfect controls, neutral, irrelevant and empty pools yield no selections", async () => {
   const oracle = new OracleCheckModel();
   for (const variant of ["control", "neutral", "hidden"]) {

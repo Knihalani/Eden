@@ -1416,7 +1416,7 @@ async function runSeed(
     // A neutral task plants nothing: no item has the empty id, so every planted-item field reads false.
     const id = variant === "neutral" ? "" : planted[i]!.id;
     const sessionId = task.id;
-    dumpTasks.set(sessionId, { suite, seed, variant, template: task.template, planted: id });
+    dumpTasks.set(sessionId, { suite, seed, variant, template: task.template, planted: id, detail: task.detail });
     returned.clear();
     const callsBefore = calls;
     const receivedBefore = received();

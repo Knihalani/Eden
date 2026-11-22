@@ -129,9 +129,9 @@ export function parseCondition(name: string, options: ConditionOptions): Conditi
   if (layouts.length && (base === "none" || base === "tools")) {
     throw new Error(`condition ${name}: +${layouts[0]} places Eden's packets, so only a base with Eden takes it`);
   }
-  const flags = allFlags.filter(
-    (f) => f !== ASK_FLAG && f !== GUIDE_FLAG && f !== NOKEY_FLAG && !(LAYOUT_FLAGS as string[]).includes(f),
-  );
+  const flags = allFlags
+    .map((f) => (f === "checkedFacts" ? "pushCheckedFacts" : f))
+    .filter((f) => f !== ASK_FLAG && f !== GUIDE_FLAG && f !== NOKEY_FLAG && !(LAYOUT_FLAGS as string[]).includes(f));
   let extra: Record<string, unknown> = {};
   if (variant !== undefined) {
     const v = options.variants?.[variant];
