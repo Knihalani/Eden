@@ -829,6 +829,8 @@ export interface EngineConfig {
   pushCheckedWhy: boolean;
   /** Trial: remind the agent that packet excerpts are already retrieved, without claiming search coverage. */
   packetCoversLine: boolean;
+  /** Trial: unchecked candidates invite a short request-specific ask before acting. */
+  pushUnsureAskNudge: boolean;
   /** The characters of each item's most relevant parts the check reads (200, D501; at most `READER_ITEM_CHARS`). */
   pushCheckItemChars: number;
   /**
@@ -1129,6 +1131,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckAdaptiveWait: true,
   pushCheckedWhy: false,
   packetCoversLine: false,
+  pushUnsureAskNudge: false,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   packetHeedsCheck: true,

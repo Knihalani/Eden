@@ -13,6 +13,7 @@
  * pairs every `hermes+eden…` condition with `hermes` (`pairedWith` strips from the first `+` or `~`).
  * `hermes+eden+pushCheckedWhy` enables the opt-in per-item check explanations and check order.
  * `hermes+eden+packetCoversLine` adds retrieved-excerpt framing; it stacks with `+pushCheckedWhy`.
+ * `hermes+eden+pushUnsureAskNudge` invites a request-specific ask on unchecked candidate packets.
  */
 import { parseCondition, type Condition, type ConditionOptions } from "./pi-conditions";
 

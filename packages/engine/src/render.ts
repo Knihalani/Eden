@@ -49,6 +49,8 @@ export function renderPacket(
      * made single).
      */
     lead?: string;
+    /** A request's top entity/topic, only for the unchecked candidates' ask invitation. */
+    unsureAskTopic?: string;
     /** Check-authored request links, rendered as quoted data on the item's line. */
     changes?: ReadonlyMap<string, string>;
     /**
@@ -115,15 +117,22 @@ export function renderPacket(
       return text;
     };
   }
+  const unsure =
+    options.unsureAskTopic !== undefined &&
+    (options.lead === CANDIDATES_LEAD || options.lead?.startsWith(`${CANDIDATES_LEAD} `))
+      ? unsureAskNudge(options.unsureAskTopic)
+      : "";
   const lines = [
     HEADER,
     ...(options.packetCoversLine ? [PACKET_COVERS_LINE] : []),
     ...(options.lead ? [options.lead] : []),
+    ...(unsure ? [unsure] : []),
   ];
   const footer = "</context>";
   let bytes = utf8Length(lines.join("\n")) + utf8Length(footer) + 2;
   const maxBytes = options.maxBytes;
   if (options.packetCoversLine && bytes > maxBytes) return "";
+  if (unsure && bytes > maxBytes) return "";
   let k = 0;
   for (; k < items.length; k++) {
     const room = maxBytes - bytes - 1;
@@ -243,6 +252,17 @@ export const PLAN_LEAD =
 export const ASK_NUDGE =
   "They may not cover the person, thing or date this request names: before answering, call ask_context with " +
   "those specifics, if you have it.";
+
+export function unsureAskNudge(topic: string): string {
+  const gated = sanitizeForStore(safeLine(topic)) || "this request";
+  let question = "";
+  for (let n = 48; n >= 0; n--) {
+    const short = safeLine(truncateUtf8(gated, n)).replace(/"/g, "'");
+    question = sanitizeForStore(`Any constraints on ${short}?`);
+    if (utf8Length(question) <= 80) break;
+  }
+  return `${EDEN_NOTE}unsure these apply — ask_context "${question}" before acting.`;
+}
 
 /** `pushLookup` (D1252): the lookup leads' closing sentence. */
 export const LOOKUP_USE = "Use them for details the request needs.";
