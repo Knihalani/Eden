@@ -213,6 +213,7 @@ export const PARENTS: Partial<Record<Key, readonly Key[]>> = {
   packetHeedsCheck: [...PUSH, "pushCheck"],
   pushDaySeats: [...PUSH, "pushCheck"],
   pushConstraintStemSeats: [...PUSH, "pushCheck"],
+  pushPartyOrgLink: [...PUSH, "pushCheck"],
   pushCheckSheet: [...PUSH, "pushCheck", "cards"],
   pushCheckSheetRefs: [...PUSH, "pushCheck"],
   revisionDiff: ["revisionNotice"],

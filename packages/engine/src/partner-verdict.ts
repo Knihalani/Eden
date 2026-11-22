@@ -1132,6 +1132,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
         : new Map<string, Card>();
       seated.push(...stemmed.filter((x) => this.constraintLike(x, stemCards)).slice(0, 2));
     }
+    seated.push(...this.partyOrgSeats(s, cue, new Set([...pool, ...seated].map((x) => x.item.id)), byDay));
     if (seated.length === 0 && !byDay) return { pool, like: pool.map((x) => this.constraintLike(x, cards)), cards };
     // The pool as it stood, and its own gate: what a push with no check answer hands (`candidatesOf`), so a seat never
     // opens a hand-out no model judged. A push only the day started has no such hand-out at all.
@@ -1154,6 +1155,48 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const quiet = byDay && !pool.some((x, i) => seats.has(x.item.id) && all[i] === true);
     const like = quiet ? all.map(() => false) : all;
     return { pool, like, seats, before, unchecked, cards };
+  }
+
+  private partyOrgSeats(s: Session, cue: Cue, have: ReadonlySet<string>, byDay: boolean): Scored[] {
+    if (!this.config.pushPartyOrgLink || !this.config.pushCheck || !this.deps.checker || byDay) return [];
+    const cache = this.deps.cache;
+    const vocab = cache.peekVocab(s.scope);
+    if (!vocab) return [];
+    const now = this.now();
+    const orgs = new Set<string>();
+    const found = new Map<string, Scored>();
+    const blocks = new Set<string>();
+    const people = new Set([
+      ...cache.affiliationParties(s.scope, cue.raw),
+      ...aliasExpand(cache.aliasTable(s.scope), cue.entities),
+    ]);
+    for (const person of [...people].slice(0, 8)) {
+      for (const edge of cache.partyOrgs(s.scope, person, now)) {
+        const org = edge.org.toLowerCase();
+        if (orgs.has(org) || orgs.size >= 4) continue;
+        orgs.add(org);
+        const terms = termIds(edge.org, vocab, false);
+        if (terms.n === 0) continue;
+        const ties = new Set(edge.org.toLowerCase().split(/\s+/));
+        for (const h of cache.search(s.scope, terms.ids, terms.n, 48, now)) {
+          if (have.has(h.item.id) || bulkMail(h.item) || !cache.containsAll(s.scope, h.doc, terms.ids, terms.n))
+            continue;
+          const x: Scored = { item: h.item, doc: h.doc, sketch: h.sketch, score: 0, matched: 0 };
+          if (!this.contradicts(x, cue)) {
+            found.set(h.item.id, x);
+            if (assess(this.frame(cue), h.item, localNow(cue), ties) === "conflict") blocks.add(h.item.id);
+          }
+        }
+      }
+    }
+    const candidates = [...found.values()];
+    const cards = this.config.cards
+      ? (this.deps.cards?.cardsOf(s.scope, [...found.keys()], cue.arrived ?? now) ?? new Map<string, Card>())
+      : new Map<string, Card>();
+    return candidates
+      .filter((x) => this.constraintLike(x, cards))
+      .sort((a, b) => Number(blocks.has(b.item.id)) - Number(blocks.has(a.item.id)))
+      .slice(0, 2);
   }
 
   /**

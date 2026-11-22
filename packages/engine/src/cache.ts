@@ -36,6 +36,7 @@ import {
 import { itemId, scopeKey, type ContextItem, type Scope } from "@eden/protocol";
 import { sanitizeForStore } from "@eden/redact";
 import type { ListReuse } from "@eden/sources";
+import { AffiliationIndex, type Affiliation } from "./affiliations";
 import { dayKeys } from "./days";
 import { dayFactsClass, dayFactsOf, type DayFacts } from "./day-facts";
 import { dayOf, offsetOf as startOffset, parseWhen, userOffset } from "./grounding";
@@ -169,6 +170,7 @@ class UserCache {
   constructor(
     readonly scope: Scope,
     releaseTerms: boolean,
+    affiliations = false,
     /** A fast thaw's saved vocabulary and index (D860), else a new, empty pair. */
     saved?: { vocab: Omit<VocabSnapshot, "h1" | "h2" | "lens">; index: IndexSnapshot },
   ) {
@@ -181,7 +183,9 @@ class UserCache {
       onTermFreed: releaseTerms ? (t: number) => this.vocab.release(t) : undefined,
     };
     this.index = saved ? SparseIndex.restore(saved.index, options) : new SparseIndex(options);
+    this.affiliations = affiliations ? new AffiliationIndex() : undefined;
   }
+  affiliations: AffiliationIndex | undefined;
   /** Vocabulary size after the last rebuild. */
   baseline = 0;
   /** The expiry tick (`ItemCache.epoch`) at which the user was last read or written: idle ones freeze (D325). */
@@ -621,6 +625,8 @@ function factDays(f: DayFacts): number[] {
 }
 
 function indexEntry(u: UserCache, e: Entry, by: 1 | -1): void {
+  if (by === 1) u.affiliations?.put(e.item);
+  else u.affiliations?.remove(e.item.id);
   const start = e.item.meta?.start;
   const raw = start && rawStartDay(start);
   if (raw) bucket(u.starts, raw, e, by);
@@ -935,6 +941,7 @@ let bodyIds = new Uint32Array(4_096);
 
 export class ItemCache {
   private readonly users = new Map<string, UserCache | FrozenUser>();
+  private affiliationsEnabled = false;
   /** Expiry ticks so far (`expireIdle`): a user's `seen` against it says how long they have been idle (D325). */
   private epoch = 0;
   /** The last `Entry.seq` handed out. */
@@ -1221,7 +1228,11 @@ export class ItemCache {
       return existing;
     }
     this.admit(scope.tenantId);
-    const u = new UserCache({ tenantId: scope.tenantId, userId: scope.userId }, this.limits.releaseTerms);
+    const u = new UserCache(
+      { tenantId: scope.tenantId, userId: scope.userId },
+      this.limits.releaseTerms,
+      this.affiliationsEnabled,
+    );
     u.revision = ++this.revisions;
     u.seen = this.epoch;
     this.users.set(key, u);
@@ -1591,7 +1602,7 @@ export class ItemCache {
    * numbers change; nothing outside holds them across calls. Sketches are kept (they do not depend on term ids).
    */
   private rebuild(scope: Scope, old: UserCache): void {
-    const u = new UserCache(old.scope, this.limits.releaseTerms);
+    const u = new UserCache(old.scope, this.limits.releaseTerms, this.affiliationsEnabled);
     u.revision = ++this.revisions;
     u.seen = old.seen;
     for (const e of old.items.values()) {
@@ -1717,6 +1728,31 @@ export class ItemCache {
   get(scope: Scope, id: string, now = Date.now()): ContextItem | null {
     const e = this.peek(scope)?.items.get(id);
     return e && this.alive(e, now) ? e.item : null;
+  }
+
+  /** Enable bounded affiliation indexing for live items and all subsequent stores and thaws. */
+  enablePartyOrgs(): void {
+    if (this.affiliationsEnabled) return;
+    this.affiliationsEnabled = true;
+    for (const u of this.users.values()) {
+      if (u instanceof FrozenUser) continue;
+      u.affiliations = new AffiliationIndex();
+      for (const e of u.items.values()) u.affiliations.put(e.item);
+    }
+  }
+
+  partyOrgs(scope: Scope, party: string, now = Date.now()): Affiliation[] {
+    const u = this.peek(scope);
+    return (
+      u?.affiliations?.forParty(party, (id) => {
+        const e = u.items.get(id);
+        return e !== undefined && this.alive(e, now);
+      }) ?? []
+    );
+  }
+
+  affiliationParties(scope: Scope, text: string): string[] {
+    return this.peek(scope)?.affiliations?.namedIn(text) ?? [];
   }
 
   /** Top items for the query's term ids (`ids[0..n)` in the user's vocabulary), fresh only. */
@@ -2590,7 +2626,7 @@ export class ItemCache {
       return ungaps(g as Uint8Array, wide === 1 ? new Uint32Array(length) : new Uint16Array(length));
     });
     const ix = head.index;
-    const u = new UserCache(f.scope, this.limits.releaseTerms, {
+    const u = new UserCache(f.scope, this.limits.releaseTerms, this.affiliationsEnabled, {
       vocab: { terms: head.terms, free: head.free },
       index: {
         fields: 2,
@@ -2670,7 +2706,7 @@ export class ItemCache {
     const body = Bun.zstdDecompressSync(blob.subarray(8, 8 + bodyLen));
     const jsonLen = new DataView(body.buffer, body.byteOffset, body.byteLength).getUint32(0, true);
     const head = JSON.parse(fromUtf8.decode(body.subarray(8, 8 + jsonLen))) as LeanHead;
-    const u = new UserCache(f.scope, this.limits.releaseTerms);
+    const u = new UserCache(f.scope, this.limits.releaseTerms, this.affiliationsEnabled);
     u.revision = f.revision;
     u.seen = f.seen;
     u.probes = f.probes;
@@ -2875,7 +2911,7 @@ export class ItemCache {
     if (isLean(blob)) return yield* this.leanThawSteps(f, blob);
     const body = JSON.parse(fromUtf8.decode(Bun.zstdDecompressSync(blob))) as FrozenBody;
     yield;
-    const u = new UserCache(f.scope, this.limits.releaseTerms);
+    const u = new UserCache(f.scope, this.limits.releaseTerms, this.affiliationsEnabled);
     u.revision = f.revision;
     u.seen = f.seen;
     u.probes = f.probes;

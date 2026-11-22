@@ -846,6 +846,8 @@ export interface EngineConfig {
   pushDaySeats: number;
   /** Up to two stem-matched constraints seated for the push check only. */
   pushConstraintStemSeats: boolean;
+  /** Trial: two check-only organisation constraints reached through explicit one-hop person affiliations. */
+  pushPartyOrgLink: boolean;
   /**
    * How many of the pool's items, from its first, the check reads (at most `CHECK_MAX_ITEMS`); when it answers, only
    * those can be candidates.
@@ -1129,6 +1131,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   packetHeedsCheck: true,
   pushDaySeats: 3,
   pushConstraintStemSeats: false,
+  pushPartyOrgLink: false,
   pushCheckSheet: 80,
   pushCheckSheetRefs: true,
   pushOpen: true,
