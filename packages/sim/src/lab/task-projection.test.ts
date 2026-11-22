@@ -20,7 +20,7 @@ const source: ProjectionSource = {
   spent: 24,
   spend: { grader: 9 },
   tasks,
-  results: conditions.flatMap((c) => tasks.map((t) => ({ ...emptyResult(t.id, c), costUsd: 1 }))),
+  results: conditions.flatMap((c) => tasks.map((t) => ({ ...emptyResult(t.id, c), facts: {}, costUsd: 1 }))),
 };
 
 test("projection includes all arms, selected kind means, grader, and fixed recap/background cost", () => {
@@ -45,7 +45,24 @@ test("projection refuses incomplete/error references, mismatched plans/models/ar
   );
   expect(() => project({ ...source, spend: undefined })).toThrow("spend");
   expect(() => project({ ...source, spent: NaN })).toThrow("spend");
-  expect(() => project({ ...source, results: source.results.filter((r) => r.task !== "neutral") })).toThrow(
-    "observations",
+  expect(() => project({ ...source, results: source.results.filter((r) => r.task !== "neutral") })).toThrow("complete");
+});
+
+test("budget-stopped references with observations in every arm/kind still need every graded task", () => {
+  const extra = { ...tasks[0]!, id: "hidden-2" };
+  const plan = [...tasks, extra];
+  const project = (s: ProjectionSource) => projectTasks(s, plan, conditions, taskSelection(null, plan), models);
+  const incomplete = { ...source, tasks: plan, partial: false };
+  expect(() => project(incomplete)).toThrow("complete successful grading");
+  const complete = {
+    ...incomplete,
+    results: [...source.results, ...conditions.map((c) => ({ ...emptyResult(extra.id, c), costUsd: 1, facts: {} }))],
+  };
+  expect(() => project(complete)).not.toThrow();
+  expect(() =>
+    project({ ...complete, results: complete.results.map((r, i) => (i === 0 ? { ...r, facts: undefined } : r)) }),
+  ).toThrow("complete successful grading");
+  expect(() => project({ ...complete, results: [...complete.results, complete.results[0]!] })).toThrow(
+    "complete successful grading",
   );
 });

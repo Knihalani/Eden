@@ -7,8 +7,8 @@ export interface ProjectionSource {
   spent: number;
   partial?: boolean;
   spend?: { grader: number };
-  tasks: Pick<Task, "id" | "kind">[];
-  results: Pick<RunResult, "task" | "condition" | "costUsd" | "edenCostUsd" | "error">[];
+  tasks: Pick<Task, "id" | "kind" | "must">[];
+  results: Pick<RunResult, "task" | "condition" | "costUsd" | "edenCostUsd" | "error" | "facts">[];
 }
 
 /** Historical per-kind means, keeping the reference's recap/backfill/background spend fixed. Not a spend cap. */
@@ -39,6 +39,16 @@ export function projectTasks(
     tasks.some((t, i) => source.tasks[i]?.id !== t.id || source.tasks[i]?.kind !== t.kind)
   )
     throw new Error("--project-from needs the same full task plan/horizon; filtering must not rebuild it");
+  const graded = new Set<string>();
+  for (const r of source.results) {
+    const task = priorTasks.get(r.task);
+    const key = JSON.stringify([r.condition, r.task]);
+    if (!task || graded.has(key) || !r.facts || task.must.some((f) => typeof r.facts![f.id] !== "boolean"))
+      throw new Error("--project-from needs complete successful grading of the full task set for every condition");
+    graded.add(key);
+  }
+  if (conditions.some((c) => tasks.some((t) => !graded.has(JSON.stringify([c, t.id])))))
+    throw new Error("--project-from needs complete successful grading of the full task set for every condition");
   const grade = source.spend!.grader / source.results.length;
   const groups = new Map<string, number[]>();
   let variable = 0;
