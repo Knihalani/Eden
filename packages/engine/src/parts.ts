@@ -60,6 +60,7 @@ export const PARTS = {
     askBehind: false,
     syncKeepCut: false,
     syncEngagedDeep: false,
+    syncKeepRules: false,
     syncUnusedSweepMs: 0,
     syncActivePollMs: 0,
     syncActivePollBackoff: false,
