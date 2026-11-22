@@ -325,7 +325,8 @@
           "expect": {
             "items": [
               "crm:jordan-pike-northwind"
-            ]
+            ],
+            "also": ["mail:pike-thursday"]
           }
         },
         {

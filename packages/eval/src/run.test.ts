@@ -61,6 +61,18 @@ describe("eval harness", () => {
     expect(m.falseFireRate).toBe(0);
   });
 
+  test("large-flight-lookalikes: the next-morning Lisbon workshop is a tolerated delivery, not noise (D2092)", async () => {
+    const s = JSON.parse(
+      readFileSync(join(import.meta.dir, "..", "scenarios", "large-flight-lookalikes.json"), "utf8"),
+    ) as Scenario;
+    const m = await runScenarios([s], { model: null, waitMs: 1_000 });
+    // calendar:lis-workshop is genuinely delivered beside the flight items — `expect.also` keeps it out of the
+    // score entirely: removing the filter turns it into an extra and drops precision below 1.
+    expect(m.precision).toBe(1);
+    expect(m.recall).toBe(1);
+    expect(m.falseFireRate).toBe(0);
+  });
+
   test("promised-follow-up: a stop-word-only follow-up question carries the request before it", async () => {
     const s = JSON.parse(
       readFileSync(join(import.meta.dir, "..", "scenarios", "promised-follow-up.json"), "utf8"),

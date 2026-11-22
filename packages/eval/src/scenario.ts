@@ -7,6 +7,10 @@
  * - `"silent"`: nothing should be delivered at this turn;
  * - absent: the turn is not scored.
  *
+ * `also` beside `items`: deliveries the label tolerates but does not require — companion context a strict `items`
+ * set would punish (a dietary-constraints mail when a lunch moves; the invitee's "Thursday works" when Thursday is
+ * booked). An `also` item's delivery leaves the score entirely: no precision cost, no recall credit.
+ *
  * Two labels belong to the acting suite (`scenarios/acting/`, D810), which scores the default's push of candidates on
  * requests that act and reports it apart from the three headline numbers:
  * - `"neutral"`: a request that acts but that no stored fact bears on: any packet for it is a false fire;
@@ -24,7 +28,7 @@ export type TurnEvent = AgentEvent extends infer E
 
 export interface Turn {
   event: TurnEvent;
-  expect?: { items: string[]; decoys?: string[] } | "silent" | "neutral";
+  expect?: { items: string[]; decoys?: string[]; also?: string[] } | "silent" | "neutral";
 }
 
 export interface Scenario {

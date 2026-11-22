@@ -330,7 +330,8 @@
           "expect": {
             "items": [
               "mail:booking-lis-nov"
-            ]
+            ],
+            "also": ["calendar:lis-workshop"]
           }
         },
         {
