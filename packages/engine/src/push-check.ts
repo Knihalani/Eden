@@ -508,7 +508,7 @@ export class PushChecker {
         ? null
         : parseCompareSheet(res.text, items.length, sheet.length, (kind, index, hits) => {
             const id = kind === "item" ? items[index]!.id : sheet[index]!.id;
-            if (!changes.has(id)) changes.set(id, hits.slice(0, 120));
+            if (!changes.has(id)) changes.set(id, sanitizeForStore(hits).slice(0, 120));
           });
       if (!at) {
         this.stats.failures++;

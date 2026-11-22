@@ -1,5 +1,6 @@
 import { truncateUtf8, utf8Length } from "@eden/primitives";
 import type { Citation, ContextItem } from "@eden/protocol";
+import { sanitizeForStore } from "@eden/redact";
 import { safeBlock, safeLine } from "./line";
 import { isStopword, readWordUnit, WORD_UNITS } from "./text";
 
@@ -132,7 +133,7 @@ export function renderPacket(
     // across an 8 KB item that is then cut to a few hundred bytes (9% of end-to-end CPU; pipeline.bench.ts).
     const prefix = text.length > room * 2 + 64 ? text.slice(0, room * 2 + 64) : text;
     const cut = prefix.length < text.length;
-    const change = options.changes?.get(item.id);
+    const change = sanitizeForStore(options.changes?.get(item.id) ?? "");
     const linkBytes = Math.max(0, room - 54);
     let link = change ? safeLine(change.slice(0, 60)).replace(/"/g, "'") : "";
     for (let n = Math.min(change?.length ?? 0, 60); link.length > 60 || utf8Length(link) > linkBytes; n--) {
