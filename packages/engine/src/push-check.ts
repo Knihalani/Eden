@@ -403,6 +403,13 @@ export interface PushCheckStats {
  * session holds what a check answered (`partner.ts`); this class holds no user content.
  */
 export class PushChecker {
+  private readonly latencies: number[] = [];
+
+  expectedLatencyMs(): number {
+    if (this.latencies.length < 3) return 0;
+    const sorted = this.latencies.slice().sort((a, b) => a - b);
+    return sorted[Math.ceil(sorted.length * 0.95) - 1]!;
+  }
   private readonly limits: PushCheckLimits;
   readonly stats: PushCheckStats = {
     asked: 0,
@@ -476,6 +483,10 @@ export class PushChecker {
         signal,
       });
       this.deps.budget.settle(reservation, res.costUsd);
+      if (Number.isFinite(res.latencyMs) && res.latencyMs > 0) {
+        this.latencies.push(res.latencyMs);
+        if (this.latencies.length > 64) this.latencies.shift();
+      }
       this.count(res.costUsd, res.usage);
       // An answered call reached the provider: its sheet was written or read if marked. A failed one is not noted,
       // nor one whose session ended while it ran (a `forget` aborts it: nothing is kept for a forgotten user).

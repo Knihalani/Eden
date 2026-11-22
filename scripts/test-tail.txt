@@ -15,6 +15,7 @@ packages/engine/src/freshen-deadline.test.ts
 packages/engine/src/partner.test.ts
 packages/engine/src/probes.test.ts
 packages/engine/src/push-behind.test.ts
+packages/engine/src/push-check.test.ts
 packages/engine/src/push-cut-behind.test.ts
 packages/engine/src/reader.test.ts
 packages/engine/src/source-refs.test.ts

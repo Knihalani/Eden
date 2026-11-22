@@ -939,6 +939,8 @@ export type SearchedLive = Awaited<ReturnType<PartnerVerdict["searchLive"]>>;
 /** `ask`'s second argument, for the engine's own asks (`readerPush`); an embedder's ask passes none. */
 export interface AskInternal {
   push?: boolean;
+  /** Monotonic deadline of the caller's push wait. */
+  deadline?: number;
   /** The session's request count when the push's request was counted: a later request makes it stale. */
   request?: number;
   /** The session's turn when the push's request was counted: the push's trace reports it (audit A11). */
@@ -1208,7 +1210,13 @@ export abstract class PartnerVerdict extends PartnerCheck {
    * that answers later is kept on the session, so a second pass over the same pool (`readerPushBehind`) reads it
    * with no call. The call runs on the session's signal: it ends with the session, not with the wait.
    */
-  protected async checkPush(s: Session, cue: Cue, gate: PushGate, forRequest?: number): Promise<PushCheckRead | null> {
+  protected async checkPush(
+    s: Session,
+    cue: Cue,
+    gate: PushGate,
+    forRequest?: number,
+    deadline?: number,
+  ): Promise<PushCheckRead | null> {
     const checker = this.deps.checker;
     if (!this.config.pushCheck || !checker) return null;
     const like = gate.like.some(Boolean);
@@ -1267,9 +1275,15 @@ export abstract class PartnerVerdict extends PartnerCheck {
       while (checks.size > CHECK_KEPT) checks.delete(checks.keys().next().value as string);
     }
     const running = kept.read;
+    let waitMs = this.config.pushCheckWaitMs;
+    const remaining = deadline === undefined ? 0 : deadline - performance.now() - 25;
+    const expected = checker.expectedLatencyMs();
+    if (this.config.pushCheckAdaptiveWait && remaining >= waitMs && expected > 0) {
+      waitMs = Math.min(remaining, Math.max(waitMs, expected + 50));
+    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<null>((done) => {
-      timer = setTimeout(() => done(null), this.config.pushCheckWaitMs);
+      timer = setTimeout(() => done(null), waitMs);
     });
     try {
       const got = await Promise.race([running, late]);

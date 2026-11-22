@@ -69,6 +69,7 @@ export const NEEDS_DEP: Partial<Record<Key, ConfigDep>> = {
   // `pushCandidates` is not here: the candidates make no reader call and act without one (D276).
   pushCheck: "checker",
   pushCheckWaitMs: "checker",
+  pushCheckAdaptiveWait: "checker",
   pushCheckItemChars: "checker",
   pushCheckItems: "checker",
   packetHeedsCheck: "checker",

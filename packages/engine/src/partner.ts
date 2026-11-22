@@ -520,7 +520,14 @@ export class ContextPartner extends PartnerAsk {
     // `ask_context` gets the reading before its first model request when it is ready in time. The push's own read is
     // not cut at `askReaderWaitMs` (that bounds an explicit ask): a reading that lands later is still queued, while its
     // session is open and its request is the session's latest (`internal.request`, set once `observeEvent` counts it).
-    const internal: { push: true; request?: number; turn?: number; open?: boolean; byDay?: boolean } = { push: true };
+    const internal: {
+      push: true;
+      request?: number;
+      turn?: number;
+      open?: boolean;
+      byDay?: boolean;
+      deadline?: number;
+    } = { push: true };
     // `pushOpen` (O3, D702): the candidates' push also starts for a request whose verb is on no list; with
     // `pushCheck` its pool is checked as a listed request's (D823, D828).
     // `pushIndirect` (D820): an indirect lead-in ("I need to pay …", "Should I book …?") is read as its imperative,
@@ -590,6 +597,8 @@ export class ContextPartner extends PartnerAsk {
         : null;
     const t0 = performance.now();
     // With a push running, the reply's packet is handed out below, once the push's check has had its say (D1450).
+    const pushWait = Math.min(options.waitMs ?? 0, this.config.readerPushWaitMs);
+    if (pushWait > 0) internal.deadline = t0 + pushWait;
     const observing = this.observeEvent(event, options, push !== null);
     // `observeEvent` counts the request before its first await, so the session's count now names this request.
     // Its turn too: the push's trace names its request's turn, as a lookup's does, not the one current when it settles.

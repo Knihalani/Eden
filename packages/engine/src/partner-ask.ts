@@ -537,7 +537,7 @@ export abstract class PartnerAsk extends PartnerVerdict {
       // checker wired (no model key) no await is added: the push's timing (which turn it lands in) stays as it was.
       const check =
         gate && this.config.pushCheck && this.deps.checker
-          ? await this.checkPush(s, cue, gate, internal.request)
+          ? await this.checkPush(s, cue, gate, internal.request, internal.deadline)
           : null;
       if (check && s.closed) {
         // The session closed while the check ran: its call was paid for, so it is traced on its own.
