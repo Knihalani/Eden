@@ -5,6 +5,13 @@ import { pairedWith, parseCondition, parseConditions, parseVariants } from "./pi
 const ALL = { sync: true, cards: true, densePacket: true };
 
 describe("pi-ab conditions", () => {
+  test("+pushCheckedWhy enables the checked packet trial", () => {
+    const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
+    expect(parseCondition("both+pushCheckedWhy", { config: ALL, defaults }).config).toEqual({
+      ...ALL,
+      pushCheckedWhy: true,
+    });
+  });
   test("the plain conditions keep their meaning and the run's configuration", () => {
     const tools = parseCondition("tools", { config: ALL });
     expect([tools.useTools, tools.useEden, tools.judge, tools.act]).toEqual([true, false, false, false]);

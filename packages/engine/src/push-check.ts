@@ -158,6 +158,8 @@ export interface PushCheckInput {
 /** One check's outcome: the item ids it says change the action (null: no answer, fail open), and its accounting. */
 export interface PushCheckRead {
   yes: ReadonlySet<string> | null;
+  /** Each named item's request link, in the reply's decisive-first order (sheet items included). */
+  changes?: ReadonlyMap<string, string>;
   /** `pushCheckSheet` (F5): the items whose sheet cards the reply named (empty with no sheet; null with `yes`). */
   rules?: ReadonlySet<string>;
   /** `pushCheckSheet` (F5): the sheet's item ids as read, set by the partner for the lab's pool report. */
@@ -320,6 +322,7 @@ export function parseCompareSheet(
   text: string,
   count: number,
   rules: number,
+  onHit?: (kind: "item" | "rule", index: number, hits: string) => void,
 ): { items: number[]; rules: number[] } | null {
   if (!OPENING.test(text)) return null;
   let entries: unknown;
@@ -360,12 +363,18 @@ export function parseCompareSheet(
       // A yes in the rules list with no readable rule number is a format error (fail open), as an item's is.
       const k = typeof r === "string" && /^\d+$/.test(r) ? Number(r) : r;
       if (typeof k !== "number" || !Number.isInteger(k) || k < 1 || k > rules) return null;
-      if (!named.includes(k - 1) && named.length < SHEET_MAX_NAMED) named.push(k - 1);
+      if (!named.includes(k - 1) && named.length < SHEET_MAX_NAMED) {
+        named.push(k - 1);
+        onHit?.("rule", k - 1, hits);
+      }
       continue;
     }
     const n = typeof i === "string" && /^\d+$/.test(i) ? Number(i) : i;
     if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > count) return null;
-    if (!out.includes(n - 1) && out.length < 5) out.push(n - 1);
+    if (!out.includes(n - 1) && out.length < 5) {
+      out.push(n - 1);
+      onHit?.("item", n - 1, hits);
+    }
   }
   return { items: out, rules: named };
 }
@@ -494,7 +503,13 @@ export class PushChecker {
         if (sheet.length > 0) this.sheetPolicy.note(user, sheetHash, sent, sheetCache);
         this.systemPolicy.note(scope.tenantId, sent);
       }
-      const at = res.truncated ? null : parseCompareSheet(res.text, items.length, sheet.length);
+      const changes = new Map<string, string>();
+      const at = res.truncated
+        ? null
+        : parseCompareSheet(res.text, items.length, sheet.length, (kind, index, hits) => {
+            const id = kind === "item" ? items[index]!.id : sheet[index]!.id;
+            if (!changes.has(id)) changes.set(id, sanitizeForStore(hits).slice(0, 120));
+          });
       if (!at) {
         this.stats.failures++;
         this.failed(new Error("push check reply unreadable (cut off at the token cap, or not the expected JSON)"));
@@ -503,6 +518,7 @@ export class PushChecker {
       if (at.rules.length > 0) this.stats.sheetNamed += at.rules.length;
       return {
         yes: new Set(at.items.map((i) => items[i]!.id)),
+        changes,
         ...(sheet.length > 0 ? { rules: new Set(at.rules.map((k) => sheet[k]!.id)) } : {}),
         costUsd: res.costUsd,
         called: true,

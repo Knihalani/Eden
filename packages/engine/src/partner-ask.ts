@@ -654,7 +654,7 @@ export abstract class PartnerAsk extends PartnerVerdict {
                 candidates.lookup
                   ? this.lookupFrame(candidates.lookup)
                   : candidates.checked
-                    ? this.checkedFrame(candidates.unsettled !== undefined)
+                    ? this.checkedFrame(candidates.unsettled !== undefined, check)
                     : this.candidateFrame(candidates.unsettled !== undefined),
               )
             : this.deliver(s, checked, "proactive", `reader:${cue.id}`, cue)

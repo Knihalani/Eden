@@ -1743,7 +1743,7 @@ export class ContextPartner extends PartnerAsk {
     const rendering = spans?.open("render", parent, { items: items.length });
     const options: Parameters<typeof renderPacket>[1] = {
       maxBytes: frame?.maxBytes ?? this.config.maxInjectionBytes,
-      ...(frame ? { lead: frame.lead } : {}),
+      ...(frame ? { lead: frame.lead, changes: frame.changes } : {}),
       ...(this.config.compactInjection || frame
         ? {
             focus: focusOf(cue),
@@ -1828,6 +1828,7 @@ export const PLAN_WAITING = 64;
 export const PLAN_SENT = 256; /** `pushCandidates` (D236): a candidates' packet's framing line and cut. */
 export interface PacketFrame {
   lead: string;
+  changes?: ReadonlyMap<string, string>;
   itemBytes: number;
   maxBytes: number;
 }

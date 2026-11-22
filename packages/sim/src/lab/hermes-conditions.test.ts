@@ -7,6 +7,11 @@ const ALL = { sync: true, cards: true };
 const defaults = DEFAULT_CONFIG as unknown as Record<string, unknown>;
 
 describe("hermes-ab conditions", () => {
+  test("+pushCheckedWhy enables only the checked packet trial", () => {
+    const c = parseHermesCondition("hermes+eden+pushCheckedWhy", { config: ALL, defaults });
+    expect(c.config).toEqual({ ...ALL, pushCheckedWhy: true });
+    expect(DEFAULT_CONFIG.pushCheckedWhy).toBe(false);
+  });
   test("hermes is the source tools alone; hermes+eden adds Eden over the same tools", () => {
     const h = parseHermesCondition("hermes", { config: ALL });
     expect([h.name, h.useTools, h.withPartner, h.eden]).toEqual(["hermes", true, false, false]);
