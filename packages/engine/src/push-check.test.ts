@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, jest, test } from "bun:test";
 import { SourceMap } from "@eden/graph";
 import { Budget, FakeModel, type ChatRequest, type Model } from "@eden/llm";
 import type { AgentEvent, ContextItem } from "@eden/protocol";
@@ -61,6 +61,7 @@ function setup(
 ) {
   const source: Source = { id: "mail", kind: "test", description: "Mail", search: async () => items };
   const checker = model ? new PushChecker({ model, budget: new Budget() }) : undefined;
+  const reported = Promise.withResolvers<PushPoolReport>();
   const partner = new ContextPartner({
     sources: async () => [source],
     sourceMap: new SourceMap(),
@@ -79,9 +80,12 @@ function setup(
       ...config,
     },
     ...(checker ? { checker } : {}),
-    onPushPool: (r) => pools.push(r),
+    onPushPool: (r) => {
+      pools.push(r);
+      reported.resolve(r);
+    },
   });
-  return { partner, checker };
+  return { partner, checker, reported: reported.promise };
 }
 
 const ref = { tenantId: "t", userId: "u1", sessionId: "s1" };
@@ -215,61 +219,103 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
     expect(packet.citations.map((c) => c.itemId)).toEqual(["mail:other", "mail:dated"]);
     expect(packet.text).toContain('(changes: "the Harlow deposit")');
   });
-  for (const [label, waitMs, adaptive, warm, checked] of [
-    ["warm latency fits caller budget", 600, true, true, true],
-    ["remaining budget caps the wait", 350, true, true, false],
-    ["no deadline keeps the fixed wait", 0, true, true, false],
-    ["disabled keeps the fixed wait", 600, false, true, false],
-    ["cold checker keeps the fixed wait", 600, true, false, false],
-    ["short caller wait is not extended", 100, true, true, false],
+  for (const [label, waitMs, adaptive, warm, checked, poolAtMs, startupMs = 0] of [
+    ["warm latency fits caller budget", 600, true, true, true, 420],
+    ["remaining budget caps the wait", 350, true, true, false, 325],
+    ["no deadline keeps the fixed wait", 0, true, true, false, 300],
+    ["disabled keeps the fixed wait", 600, false, true, false, 300],
+    ["cold checker keeps the fixed wait", 600, true, false, false, 300],
+    ["short caller wait is not extended", 100, true, true, false, 300],
+    ["no deadline tolerates delayed check startup", 0, true, true, false, 300, 80],
   ] as const) {
     test(`adaptive check wait: ${label}`, async () => {
-      let delayed = false;
-      const inner = says(["Harlow deposit"]);
-      const model: Model = {
-        id: "timed",
-        async chat(request) {
-          if (delayed) await new Promise((done) => setTimeout(done, 420));
-          return { ...(await inner.chat(request)), latencyMs: 420 };
-        },
-      };
-      const pools: PushPoolReport[] = [];
-      const { partner, checker } = setup(
-        { pushCheck: true, pushCheckWaitMs: 300, pushCheckAdaptiveWait: adaptive },
-        model,
-        pools,
-      );
-      expect(checker!.expectedLatencyMs()).toBe(0);
-      const input = {
-        request: REQUEST,
-        today: "2026-10-27",
-        items: [
-          {
-            id: "warm",
-            source: "mail",
-            date: "",
-            from: "",
-            hash: "warm",
-            title: "Harlow deposit",
-            text: "Hold the deposit.",
+      jest.useFakeTimers({ now: NOW });
+      try {
+        let delayed = false;
+        const started = Promise.withResolvers<number>();
+        const inner = says(["Harlow deposit"]);
+        const model: Model = {
+          id: "timed",
+          async chat(request) {
+            if (delayed) {
+              started.resolve(performance.now());
+              await new Promise((done) => setTimeout(done, 420));
+            }
+            return { ...(await inner.chat(request)), latencyMs: 420 };
           },
-        ],
-      };
-      if (warm) for (let i = 0; i < 3; i++) await checker!.check(ref, "warm", input, new AbortController().signal);
-      expect(checker!.expectedLatencyMs()).toBe(warm ? 420 : 0);
-      delayed = true;
-      const start = performance.now();
-      const result = await partner.observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
-        waitMs,
-      });
-      const elapsed = performance.now() - start;
-      if (waitMs > 0) expect(elapsed).toBeLessThan(waitMs + 30);
-      if (waitMs < 300) await new Promise((done) => setTimeout(done, 330 - elapsed));
-      const packets = [...(result.injection ? [result.injection] : []), ...partner.takePending(ref)];
-      expect(pools.at(-1)!.check).toBe(checked ? "yes" : "late");
-      expect(packets.some((p) => p.text.includes(CHECKED_LEAD))).toBe(checked);
-      if (checked) expect(elapsed).toBeGreaterThan(400);
-      await new Promise((done) => setTimeout(done, Math.max(0, 450 - (performance.now() - start))));
+        };
+        const pools: PushPoolReport[] = [];
+        const { partner, checker, reported } = setup(
+          { pushCheck: true, pushCheckWaitMs: 300, pushCheckAdaptiveWait: adaptive },
+          model,
+          pools,
+        );
+        expect(checker!.expectedLatencyMs()).toBe(0);
+        const input = {
+          request: REQUEST,
+          today: "2026-10-27",
+          items: [
+            {
+              id: "warm",
+              source: "mail",
+              date: "",
+              from: "",
+              hash: "warm",
+              title: "Harlow deposit",
+              text: "Hold the deposit.",
+            },
+          ],
+        };
+        if (warm) for (let i = 0; i < 3; i++) await checker!.check(ref, "warm", input, new AbortController().signal);
+        expect(checker!.expectedLatencyMs()).toBe(warm ? 420 : 0);
+        const check = checker!.check.bind(checker);
+        let checking: ReturnType<PushChecker["check"]> | undefined;
+        checker!.check = (...args) => (checking = check(...args));
+        delayed = true;
+        const start = performance.now();
+        let elapsed: number | undefined;
+        const observing = partner
+          .observe({ ...ref, at: NOW, kind: "user_message", text: REQUEST } as AgentEvent, {
+            waitMs,
+          })
+          .then((result) => {
+            elapsed = performance.now() - start;
+            return result;
+          });
+        if (startupMs > 0) jest.advanceTimersByTime(startupMs);
+        const checkAt = await started.promise;
+        expect(checkAt - start).toBe(startupMs);
+        if (waitMs > 0 && waitMs < poolAtMs) {
+          jest.advanceTimersByTime(waitMs);
+          await observing;
+          expect(elapsed).toBe(waitMs);
+        }
+        if (startupMs > 0) {
+          jest.advanceTimersByTime(330 - (performance.now() - start));
+          await new Promise<void>((done) => setImmediate(done));
+          expect(pools).toHaveLength(0);
+        }
+        jest.advanceTimersByTime(checkAt + poolAtMs - 1 - performance.now());
+        await new Promise<void>((done) => setImmediate(done));
+        expect(pools).toHaveLength(0);
+        if (waitMs >= poolAtMs) expect(elapsed).toBeUndefined();
+        jest.advanceTimersByTime(1);
+        expect((await reported).check).toBe(checked ? "yes" : "late");
+        const result = await observing;
+        if (waitMs > 0) expect(elapsed!).toBeLessThan(waitMs + 30);
+        const packets = [...(result.injection ? [result.injection] : []), ...partner.takePending(ref)];
+        expect(pools.at(-1)!.check).toBe(checked ? "yes" : "late");
+        expect(packets.some((p) => p.text.includes(CHECKED_LEAD))).toBe(checked);
+        if (checked) expect(elapsed!).toBeGreaterThan(400);
+        const left = checkAt + 420 - performance.now();
+        if (left > 0) jest.advanceTimersByTime(left);
+        expect(checking).toBeDefined();
+        await checking;
+        await new Promise<void>((done) => setImmediate(done));
+      } finally {
+        jest.clearAllTimers();
+        jest.useRealTimers();
+      }
     });
   }
 
