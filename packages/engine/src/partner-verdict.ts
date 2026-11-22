@@ -4083,7 +4083,11 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const verified = await this.verifyItems(s, scored, cue);
     const kept = verified.filter((x) => {
       const now = s.ledger.entry(x.item.id);
-      return now === undefined || sameEntry(held.has(x.item.id) ? held.get(x.item.id) : now, now);
+      if (!(now === undefined || sameEntry(held.has(x.item.id) ? held.get(x.item.id) : now, now))) return false;
+      // A delivery that landed over the await — the request's own fast path or push — already handed this item to
+      // the agent this turn: a second packet citing it is a same-turn duplicate (D2089). A `revised` copy still
+      // goes: its job is to replace the copy now in the agent's hands.
+      return x.revised === true || !this.deliveredThisTurn(s, x.item.id);
     });
     if (kept.length === 0 || s.closed) return null;
     return this.deliver(s, kept, mode, reason, cue, undefined, frame, undoWas);
