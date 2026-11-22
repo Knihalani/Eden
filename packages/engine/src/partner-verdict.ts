@@ -2969,6 +2969,10 @@ export abstract class PartnerVerdict extends PartnerCheck {
     );
     // `sourceKindPrior` (D2015): a cold user's draw favours the kinds a person's requests usually land in.
     const priors = sourcePriors(all, this.config.sourceKindPrior, this.config.sourceKindPriorExtra);
+    // Sources search on the request's entities: those mean the user's names as the user's data writes them —
+    // "Amex" is "American Express" in the mail — so what is searched is the set `aliasExpand` gives (D2094),
+    // the same one `requestAnchors` settles against.
+    const entities = aliasExpand(this.deps.cache.aliasTable(s.scope), cue.entities);
     // One deadline for the whole lookup (D140): the on-demand poll, the live search, the planner's cascade and the
     // probes share it. An ask with `askBehind` off waits for its poll, so a poll and a search with deadlines of their
     // own could hold the reader back twice `sourceTimeoutMs` (a listing that hangs, then the search that follows it).
@@ -2995,7 +2999,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       if (width > 0 && all.length > width) {
         preRanked = this.deps.sourceMap.route({
           scope: s.scope,
-          entities: cue.entities,
+          entities,
           situation: s.situation,
           sourceIds: all.map((x) => x.id),
           limit: Math.max(width, limit),
@@ -3078,7 +3082,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       preRanked?.slice(0, limit) ??
       this.deps.sourceMap.route({
         scope: s.scope,
-        entities: cue.entities,
+        entities,
         situation: s.situation,
         sourceIds: all.map((x) => x.id),
         limit,
@@ -3151,7 +3155,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const query: SearchQuery = {
       scope: s.scope,
       text: listing ? "" : cue.text,
-      entities: cue.entities,
+      entities,
       limit: 8,
       ...(window ? { window } : {}),
     };
@@ -4117,7 +4121,12 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const signal = AbortSignal.any([s.abort.signal, AbortSignal.timeout(this.config.sourceTimeoutMs)]);
     // As in serving: no call is started that this timeout would cut off.
     const deadlineAt = performance.now() + this.config.sourceTimeoutMs;
-    const query = { scope: s.scope, text: cue.text, entities: cue.entities, limit: 8 };
+    const query = {
+      scope: s.scope,
+      text: cue.text,
+      entities: aliasExpand(this.deps.cache.aliasTable(s.scope), cue.entities),
+      limit: 8,
+    };
     const healthy = new Set(["ok", "cached", "stale"]);
     await Promise.all(
       sources.map(async (source) => {

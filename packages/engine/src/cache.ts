@@ -2032,14 +2032,27 @@ export class ItemCache {
     if (!u) return new Map();
     if (u.aliases === undefined) {
       const table = new Map<string, Set<string>>();
+      const contractions = new Map<string, Set<string>>();
       for (const full of u.parties.keys()) {
         const name = full.toLowerCase();
-        for (const w of name.match(/\p{L}+/gu) ?? []) {
+        const ws = name.match(/\p{L}+/gu) ?? [];
+        for (const w of ws) {
           let set = table.get(w);
           if (set === undefined) table.set(w, (set = new Set()));
           set.add(name);
         }
+        // D2094: a multi-word party's contraction joins it too — "american express" answering to "amex" — held
+        // aside so a contraction that spells a real part keeps the part's meaning, while two names sharing one
+        // contraction both expand it.
+        const con =
+          ws.length === 2 ? ws[0]!.slice(0, 2) + ws[1]!.slice(0, 2) : ws.length > 2 ? ws.map((w) => w[0]).join("") : "";
+        if (con.length >= 4) {
+          let set = contractions.get(con);
+          if (set === undefined) contractions.set(con, (set = new Set()));
+          set.add(name);
+        }
       }
+      for (const [con, set] of contractions) if (!table.has(con)) table.set(con, set);
       u.aliases = table;
     }
     return u.aliases;

@@ -66,6 +66,22 @@ describe("quietNameOnly: a tie by a person's name alone is not pushed with no mo
     expect(await run({ quietNameOnly: true }, text)).toEqual({ u1: [], u2: [] });
   });
 
+  test("a co-surname's first name joined by expansion is still a name word, not topic (D2094)", async () => {
+    // "sara" joins "sara webb" to the request's "Sara"; without the expanded names also excluded,
+    // "webb" reads as a topic word and a name-only tie slips the gate.
+    const docs: StaticDoc[] = [
+      {
+        ref: "seed",
+        title: "Notes",
+        text: mail("Sara Webb", "Weekly notes from Sara Webb."),
+        meta: { people: "Sara Webb; Marcus Webb" },
+      },
+      { ref: "slides", title: "Slides", text: mail("Marcus Webb", "Marcus dropped off the slides yesterday.") },
+    ];
+    expect((await run({}, "Say hi to Sara by the way", docs)).u1?.length).toBeGreaterThan(0);
+    expect(await run({ quietNameOnly: true }, "Say hi to Sara by the way", docs)).toEqual({ u1: [], u2: [] });
+  });
+
   test("a request about something of theirs still is: the item holds a word beyond the name", async () => {
     const got = await run({ quietNameOnly: true }, "Where is my lunch with Leila Haddad?");
     expect(got.u1).toContain("mail:lunch");
