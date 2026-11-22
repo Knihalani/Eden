@@ -31,6 +31,7 @@
  *     [--config ALL3] [--variant-config '{"A5":{…}}'] [--model z-ai/glm-5.3-flash] [--grader …] [--budget 0.6]
  *     [--card-model m] [--cards FILE [--cards-out FILE]] [--intent default|none|FILE[,FILE]]
  *     [--allow-logging] [--rpm 18] [--max-requests N] [--limit n] [--templates a,b] [--concurrency 4]
+ *     [--kinds hidden,control] [--project-from completed-results.json]
  *     [--max-iterations 6] [--out hermes-ab.json] [--timeline dir] [--time-scale 1] [--dump FILE] [--dry]
  *
  * `--time-scale` (default 1) gives the sim sources their profiles' assumed latency, as pi-ab does (its header says why,
@@ -55,7 +56,7 @@
  * `--days` an Eden arm resumes only with `--resume-biased` (its Eden never saw the reused days), and says so.
  */
 import { spawnSync } from "node:child_process";
-import { appendFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -106,6 +107,8 @@ import {
   type Task,
 } from "./ab-common";
 import { variantsFor } from "./neutral";
+import { kindSlots, parseKinds, selectionLine, taskSelection } from "./task-kinds";
+import { projectTasks, type ProjectionSource } from "./task-projection";
 import { observeToolResult } from "./observe-tool";
 import { DayLog, isRecap, poolDays, recapOf, shiftClocks, shiftMeta, type DaySummary } from "./pi-day";
 import { parseDaySize, parseMix, planUser, suiteTemplates, userWorldOf, withDayRecaps } from "./pi-user";
@@ -148,6 +151,7 @@ if (!existsSync(HERMES_PY)) throw new Error(`--hermes-python ${HERMES_PY}: no su
 const HERMES_COMMIT = spawnSync("git", ["-C", HERMES_SRC, "rev-parse", "--short", "HEAD"]).stdout.toString().trim();
 const LAB_DIR = resolve(dirname(new URL(import.meta.url).pathname), "../../lab/hermes");
 const SEEDS = opt("seeds", "41").split(",").map(Number);
+const KINDS = args.includes("--kinds") ? parseKinds(opt("kinds", "")) : null;
 const MODEL = opt("model", "z-ai/glm-5.3-flash");
 const GRADER = opt("grader", "anthropic/claude-haiku-5.5");
 const BUDGET = Number(opt("budget", "0.6"));
@@ -770,7 +774,7 @@ async function runWorld(
   };
   try {
     worker = await readyWorker(id, home, eden);
-    for (const t of tasks) {
+    for (const { task: t, run } of kindSlots(tasks, KINDS)) {
       if (unit?.complete) flush();
       const fromJournal = JOURNAL?.done.get(unitId(t, DAYS_ON && newDay ? dayNo + 1 : dayNo));
       if (!fromJournal && exhausted()) break;
@@ -802,6 +806,7 @@ async function runWorld(
       const startsDay = !DAYS_ON || newDay;
       newDay = DAYS_ON && isRecap(t);
       day?.turn();
+      if (DAYS_ON && !isRecap(t) && t.planted) dayPlanted.add(t.planted);
       if (DAYS_ON && day && isRecap(t)) {
         // pi-ab's recap: the day's planted items' clock times move, the sources serve the new text, and the change is
         // announced as `--push` says; only before the recap, which is never graded.
@@ -844,6 +849,10 @@ async function runWorld(
             adopt(fromJournal);
           }
         } else adopt(fromJournal);
+        continue;
+      }
+      if (!run) {
+        if (startsDay) await closePrevious();
         continue;
       }
       if (JOURNAL && !unit) {
@@ -1146,6 +1155,27 @@ const worlds: {
       ),
     );
 // The requests replayed for the items the run's sources hold, counted before anything is spent (`--dry` shows it).
+const SELECTION = taskSelection(
+  KINDS,
+  worlds.flatMap((w) => w.tasks),
+);
+const selectedCount = (tasks: Task[]) => tasks.filter((t) => !KINDS || KINDS.includes(t.kind)).length;
+console.error(selectionLine(SELECTION));
+if (opt("project-from", "")) {
+  const reference = JSON.parse(readFileSync(opt("project-from", ""), "utf8")) as ProjectionSource;
+  const p = projectTasks(
+    reference,
+    worlds.flatMap((w) => w.tasks),
+    CONDITIONS.map((c) => c.name),
+    SELECTION,
+    { model: MODEL, grader: GRADER },
+  );
+  console.error(
+    `PROJECTED COST: $${p.projectedUsd.toFixed(4)}; ${p.tasks} graded tasks; ` +
+      `$${p.fixedUsd.toFixed(4)} recap/background fixed; historical kind means incl. grader, not a cap`,
+  );
+} else if (DRY) console.error("PROJECTED COST: unavailable (pass --project-from completed-results.json)");
+if (KINDS && !worlds.some((w) => selectedCount(w.tasks))) throw new Error("--kinds selects no tasks");
 const intentCount =
   INTENT_WANTED && diskCards
     ? intentCoverage(
@@ -1157,7 +1187,8 @@ const intentCount =
     : { found: 0, of: 0 };
 const INTENT_LINE = intentLine({ wanted: INTENT_WANTED, cardsReplayed: !!CARDS_FILE, ...INTENT, ...intentCount });
 console.error(
-  `hermes-ab: ${worlds.reduce((n, w) => n + w.tasks.length, 0)} tasks × ${CONDITIONS.length} conditions ` +
+  `hermes-ab: ${KINDS ? `${worlds.reduce((n, w) => n + selectedCount(w.tasks), 0)} selected of ` : ""}` +
+    `${worlds.reduce((n, w) => n + w.tasks.length, 0)} ${KINDS ? "planned " : ""}tasks × ${CONDITIONS.length} conditions ` +
     `(${CONDITIONS.map((c) => c.name).join(",")}), hermes ${HERMES_COMMIT}, model ${MODEL}, grader ${GRADER}, ` +
     `cap $${BUDGET}, suites ${SUITE_LIST.join(",")}, ` +
     `time-scale ${TIME_SCALE}${TIME_SCALE === 0 ? " (connectors at 0 ms)" : ""}, ` +
@@ -1302,6 +1333,7 @@ writeFileSync(
       suites: SUITE_LIST,
       spent,
       harness: "hermes",
+      taskSelection: SELECTION,
       harnessVersion: `hermes-agent@${HERMES_COMMIT}`,
       config: CONFIG,
       ...(Object.keys(CONFIG_VARIANTS).length ? { variantConfig: CONFIG_VARIANTS } : {}),
@@ -1350,7 +1382,7 @@ const ungraded = results.filter((r) => !r.error && !r.facts && tasks.find((t) =>
 {
   // Every stream's units, journalled now or by an earlier attempt: then the results file holds them all.
   const units = worlds.reduce(
-    (n, w) => n + CONDITIONS.length * (w.daySizes ? w.daySizes.filter((k) => k > 0).length : w.tasks.length),
+    (n, w) => n + CONDITIONS.length * (w.daySizes ? w.daySizes.filter((k) => k > 0).length : selectedCount(w.tasks)),
     0,
   );
   const have = JOURNAL!.done.size + JOURNAL!.written;

@@ -12,6 +12,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BENCH_DIR, type LedgerEntry } from "./ledger";
+import { sameSelection, selectionLine, type TaskSelection } from "./task-kinds";
 
 const args = process.argv.slice(2);
 const opt = (name: string) => {
@@ -33,6 +34,9 @@ if (args.includes("--list")) {
 }
 
 const show = (a: LedgerEntry, b: LedgerEntry) => {
+  const selections = [a, b].map((e) => e.config.taskSelection as TaskSelection | undefined);
+  sameSelection(selections);
+  console.log(selectionLine(selections[0]));
   console.log(
     `\n== ${a.tier} ${a.suite}: ${a.label} (${a.commit}${a.dirty ? "*" : ""}) → ${b.label} (${b.commit}${b.dirty ? "*" : ""})`,
   );

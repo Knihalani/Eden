@@ -15,6 +15,7 @@ import { buildWorld, type World } from "../world";
 import { dressEntities } from "./dress-entities";
 import { clearSlot, dress } from "./hidden-context";
 import { prepareWorld, SUITES } from "./suites";
+import { sameSelection, type TaskSelection } from "./task-kinds";
 
 export const MAX_STEPS = 6;
 export const TOOL_ITEMS = 5;
@@ -666,6 +667,7 @@ export function armPromptsHash(extra: unknown = null, neutral = false): string {
 
 /** What a results file says about the run that made it, as far as reusing its Eden-free arms depends on it. */
 export interface ArmSource {
+  taskSelection?: TaskSelection;
   model: string;
   grader: string;
   harness?: string;
@@ -694,6 +696,7 @@ export interface ArmSource {
  * needs the arms run again.
  */
 export function reusableArms(prior: ArmSource, now: Omit<ArmSource, "results">, conditions: string[]): RunResult[] {
+  sameSelection([prior.taskSelection, now.taskSelection]);
   const same = (what: string, there: unknown, here: unknown) => {
     if (JSON.stringify(there ?? null) !== JSON.stringify(here ?? null))
       throw new Error(`--reuse-arms: ${what} differs (${JSON.stringify(there)} there, ${JSON.stringify(here)} here)`);

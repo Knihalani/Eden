@@ -30,6 +30,7 @@ import {
 } from "./pi-cost";
 import { dayOf } from "./pi-user";
 import { resumedNote } from "./run-journal";
+import { sameSelection, selectionLine, type TaskSelection } from "./task-kinds";
 
 const argv = process.argv.slice(2);
 const flag = (name: string) => {
@@ -40,6 +41,7 @@ const files = argv.filter((a, i) => a.endsWith(".json") && !["--lifetime", "--js
 if (!files.length) throw new Error("usage: pi-cost-report.ts run.json [run2.json …] [--lifetime cold.json] [--json F]");
 
 interface RunFile {
+  taskSelection?: TaskSelection;
   /** `--resume` (D813): what an earlier attempt's journal supplied (`resumedNote`). */
   resumed?: Parameters<typeof resumedNote>[1];
   seeds: number[];
@@ -64,8 +66,10 @@ const background: Background[] = [];
 const recaps: { seed: number; condition: string; usd: number }[] = [];
 const notes: string[] = [];
 const shapes: { file: string; shape?: UserShape }[] = [];
+const selections: (TaskSelection | undefined)[] = [];
 for (const file of files) {
   const run = JSON.parse(readFileSync(file, "utf8")) as RunFile;
+  selections.push(run.taskSelection);
   const resumed = resumedNote(file, run.resumed);
   if (resumed) notes.push(resumed);
   shapes.push({
@@ -95,6 +99,8 @@ for (const file of files) {
     recaps.push({ seed: d.seed, condition: d.condition, usd: (d.recapUsd ?? 0) + (d.recapEdenUsd ?? 0) });
   }
 }
+sameSelection(selections);
+console.log(selectionLine(selections[0]));
 const lifetime: Lifetime[] = lifetimeFor(
   (flag("lifetime") ?? "")
     .split(",")
@@ -187,4 +193,11 @@ if (byDay.some((r) => r.day > 0)) {
   }
 }
 if (flag("json"))
-  writeFileSync(flag("json")!, JSON.stringify({ files, costs, plans: priced, kinds: kindRows(tasks), byDay }, null, 2));
+  writeFileSync(
+    flag("json")!,
+    JSON.stringify(
+      { files, taskSelection: selections[0], costs, plans: priced, kinds: kindRows(tasks), byDay },
+      null,
+      2,
+    ),
+  );

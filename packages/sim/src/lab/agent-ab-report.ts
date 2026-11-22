@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { Rng } from "../rng";
 import { record, tidy } from "./ledger";
+import { sameSelection, selectionLine, taskSelection, type TaskSelection } from "./task-kinds";
 
 interface Task {
   id: string;
@@ -53,6 +54,7 @@ for (let i = 0; i < argv.length; i++) {
 }
 if (!files.length) throw new Error("usage: agent-ab-report.ts results.json [more.json ...]");
 interface RunFile {
+  taskSelection?: TaskSelection;
   model: string;
   grader: string;
   spent: number;
@@ -61,6 +63,14 @@ interface RunFile {
   results: Result[];
 }
 const runs = files.map((f) => JSON.parse(readFileSync(f, "utf8")) as RunFile);
+sameSelection(runs.map((r) => r.taskSelection));
+const SELECTION =
+  runs[0]?.taskSelection ??
+  taskSelection(
+    null,
+    runs.flatMap((r) => r.tasks),
+  );
+console.log(selectionLine(SELECTION));
 const joined = (xs: string[]) => [...new Set(xs)].join(",");
 const run = {
   model: joined(runs.map((r) => r.model)),
@@ -292,6 +302,7 @@ if (at >= 0) {
     const t = tasks.get(r.task);
     return {
       task: r.task,
+      taskSelection: SELECTION,
       kind: t?.kind,
       template: t?.type,
       condition: r.condition,
@@ -319,7 +330,7 @@ if (at >= 0) {
       tier: "agent",
       suite,
       label,
-      config: { conditions },
+      config: { conditions, taskSelection: SELECTION },
       seeds: run.seeds,
       models: { agent: run.model, grader: run.grader },
       costUsd: Number(run.spent.toFixed(4)),
