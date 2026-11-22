@@ -1131,7 +1131,9 @@ export abstract class PartnerVerdict extends PartnerCheck {
             at,
           ) ?? new Map<string, Card>())
         : new Map<string, Card>();
-      seated.push(...stemmed.filter((x) => this.constraintLike(x, stemCards)).slice(0, 2));
+      seated.push(
+        ...stemmed.filter((x) => this.constraintLike(x, stemCards) && !this.staleSelf(x.item, cue)).slice(0, 2),
+      );
     }
     const affiliations = new Map<string, string>();
     seated.push(
@@ -1213,7 +1215,7 @@ export abstract class PartnerVerdict extends PartnerCheck {
       ? (this.deps.cards?.cardsOf(s.scope, [...found.keys()], cue.arrived ?? now) ?? new Map<string, Card>())
       : new Map<string, Card>();
     const seats = candidates
-      .filter((x) => this.constraintLike(x, cards))
+      .filter((x) => this.constraintLike(x, cards) && !this.staleSelf(x.item, cue))
       .sort((a, b) => Number(blocks.has(b.item.id)) - Number(blocks.has(a.item.id)))
       .slice(0, 2);
     for (const x of seats) affiliations.set(x.item.id, evidence.get(x.item.id)!);

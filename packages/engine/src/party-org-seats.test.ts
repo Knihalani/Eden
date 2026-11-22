@@ -190,6 +190,29 @@ describe("organisation constraints have check-only seats", () => {
     expect((await run({ ...options, stem: true, model: new FakeModel(() => "not json") })).ids).toEqual(unchecked.ids);
   });
 
+  test("superseded policies cannot crowd a current policy out of org or stem seats", async () => {
+    const policies = [
+      ...["old-a", "old-b"].map((id) =>
+        item(id, `Legal [superseded] ${id}`, "Umbrella Health renewals are on hold. This policy has been superseded."),
+      ),
+      item("current", "Legal current", "Umbrella Health renewals are on hold until MSA countersignature."),
+    ];
+    for (const flags of [{ on: true }, { on: false, stem: true }, { on: true, stem: true }]) {
+      const result = await run({
+        ...flags,
+        text: "Reply to Ahmed Hassan about the renewal.",
+        contents: [...items.slice(0, 2), ...policies],
+      });
+      expect(result.pools.length).toBeGreaterThan(0);
+      for (const { pool } of result.pools) {
+        expect(pool).toContain("mail:current");
+        expect(pool).not.toContain("mail:old-a");
+        expect(pool).not.toContain("mail:old-b");
+      }
+      expect(result.ids).toContain("mail:current");
+    }
+  });
+
   test("full party names are recognised even when entity extraction includes a leading verb", async () => {
     const { ids } = await run({ text: "Tell Ahmed Hassan we'll ship the SSO integration next month." });
     expect(ids.some((id) => ["mail:one", "mail:two", "mail:three"].includes(id))).toBe(true);
