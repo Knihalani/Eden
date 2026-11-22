@@ -13,9 +13,29 @@ export interface Affiliation {
   address?: string;
 }
 
-const nameKey = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
-const NAME = /^\p{L}[\p{L}'’-]*(?: \p{L}[\p{L}'’-]*){1,3}$/u;
+const NAME_FOLDS: Record<string, string> = {
+  ß: "ss",
+  ø: "o",
+  ł: "l",
+  đ: "d",
+  ð: "d",
+  þ: "th",
+  æ: "ae",
+  œ: "oe",
+  ı: "i",
+};
+const nameKey = (s: string) =>
+  s
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[ßøłđðþæœı]/g, (c) => NAME_FOLDS[c]!)
+    .trim()
+    .replace(/\s+/g, " ");
+const NAME = /^\p{L}[\p{L}\p{M}'’-]*(?: \p{L}[\p{L}\p{M}'’-]*){1,3}$/u;
 const EMAIL = /[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi;
+const FOOTER =
+  /\s+(?:M:|Tel:|Phone:|Email:)|(?<![\p{L}\p{N}])\+?\d(?:[ \t().-]*\d){6,}|[\w.+-]+@[\w.-]+\.[a-z]{2,}|\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)|\s+\|\s+|\b(?:confidential(?:ity)?|this\s+email|sent\s+from)\b/iu;
 const QUOTED = new RegExp(
   [
     String.raw`(?:^|\s)>|(?:^|\n)\s*[“"]|\bOn [^\n]{0,240}?wrote:`,
@@ -61,22 +81,30 @@ export function affiliationOf(item: ContextItem): Affiliation | null {
   if (!NAME.test(person)) return null;
   const address = from[0]![2]!.toLowerCase();
   const body = ownBody(text.slice(split).trimStart());
-  const name = person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-  const signature = new RegExp(
-    String.raw`(?:^|\n|--\s+)[ \t]*` + name + String.raw`\s+[^|\n]{0,80}\|[ \t]*([^|\n]{1,100})(?=\n|$)`,
-    "gi",
-  );
-  for (const sig of body.matchAll(signature)) {
-    const tail = sig[1]!.split(/\s+(?:M:|Tel:|Phone:|Email:|CONFIDENTIALITY\b)/i)[0]!;
+  const local = nameKey(address.split("@")[0]!).replace(/[^\p{L}\p{N}]/gu, "");
+  const signature = /([^|\n]{1,200}(?:(?:\r?\n[ \t]*){1,3}[^|\n]{0,80})?)\|[ \t]*([^\n]*)/uy;
+  for (const at of body.matchAll(/(?:--\s+|^|\n)[ \t]*/g)) {
+    signature.lastIndex = at.index! + at[0].length;
+    const sig = signature.exec(body);
+    if (!sig) continue;
+    const tail = sig[2]!.split(FOOTER)[0]!;
     const org = organisation(tail);
     if (!org) continue;
-    const end = body.slice(sig.index! + sig[0].length, sig.index! + sig[0].length + 200);
-    const emails = [...`${sig[0]}\n${end}`.matchAll(EMAIL)].map((m) => m[0].toLowerCase());
-    const local = address.split("@")[0]!.replace(/[^\p{L}\p{N}]/gu, "");
-    const parts = nameKey(person).split(" ");
-    const fullLocal = `${parts[0]}${parts.at(-1)}`.replace(/[^\p{L}\p{N}]/gu, "");
-    if (emails.length > 0 ? !emails.every((e) => e === address) : local !== fullLocal) continue;
-    return { ...base, person, org, kind: "signature", address };
+    const end = sig.index + sig[0].length - sig[2]!.length + tail.length;
+    const emails = [...body.slice(sig.index, end + 200).matchAll(EMAIL)].map((m) => m[0].toLowerCase());
+    if (emails.some((email) => email !== address)) continue;
+    const head = sig[1]!.trim();
+    const line = head.split(/\r?\n/)[0]!;
+    const words = [...line.matchAll(/\p{L}[\p{L}\p{M}'’-]*/gu)];
+    for (let n = 2; n <= Math.min(4, words.length); n++) {
+      const name = line.slice(0, words[n - 1]!.index! + words[n - 1]![0].length).replace(/\s+/g, " ");
+      if (!NAME.test(name) || (head.includes("\n") && nameKey(name) !== nameKey(line))) continue;
+      const parts = nameKey(name).split(" ");
+      const displayMatch = nameKey(name) === nameKey(person);
+      const localMatch = `${parts[0]}${parts.at(-1)}`.replace(/[^\p{L}\p{N}]/gu, "") === local;
+      if (!displayMatch && !localMatch) continue;
+      return { ...base, person: displayMatch ? person : name, org, kind: "signature", address };
+    }
   }
   return null;
 }
@@ -91,11 +119,7 @@ export class AffiliationIndex {
   }
 
   namedIn(text: string): string[] {
-    const words =
-      text
-        .slice(0, 4_000)
-        .toLowerCase()
-        .match(/[\p{L}'’-]+/gu) ?? [];
+    const words = nameKey(text.slice(0, 4_000)).match(/[\p{L}'’-]+/gu) ?? [];
     const names = new Set<string>();
     for (let i = 0; i < words.length; i++) {
       for (let n = 2; n <= 4 && i + n <= words.length; n++) {

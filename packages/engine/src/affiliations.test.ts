@@ -43,6 +43,23 @@ describe("one-hop affiliations", () => {
     expect(index.forParty("Umbrella Health", () => true)).toEqual([]);
   });
 
+  test("signature name and title may be separated by up to three newlines", () => {
+    for (const separator of ["\n", "\n\n", "\n\n\n", "\n \t\n", "\r\n \t\r\n\t\r\n"]) {
+      const body = `--\nJane Doe${separator}CTO | Acme`;
+      expect(affiliationOf(mail(body, "Jane Doe <jane.doe@acme.com>"))).toMatchObject({
+        person: "Jane Doe",
+        org: "Acme",
+        kind: "signature",
+      });
+    }
+  });
+
+  test("blank-line signature parsing retains identity and newline bounds", () => {
+    expect(affiliationOf(mail("--\nJane Doe\n\nCTO | Acme"))).toBeNull();
+    expect(affiliationOf(mail("--\nJane Doe Smith\n\nCTO | Acme", "Jane Doe <jane.doe@acme.com>"))).toBeNull();
+    expect(affiliationOf(mail("--\nJane Doe\n\n\n\nCTO | Acme", "Jane Doe <jane.doe@acme.com>"))).toBeNull();
+  });
+
   test("other senders, mismatched addresses, quoted and forwarded signatures create no edge", () => {
     for (const body of [
       `Hello\n> ${signature.replaceAll("\n", "\n> ")}`,
@@ -69,11 +86,110 @@ describe("one-hop affiliations", () => {
     ])
       expect(affiliationOf(mail(body))).toBeNull();
     expect(affiliationOf(mail(signature, "Alice Smith <alice.smith@other.com>"))).toBeNull();
-    expect(affiliationOf(mail(signature, "Ahmed Hassan <alice.smith@other.com>"))).toBeNull();
+    expect(affiliationOf(mail(signature, "Ahmed Hassan <alice.smith@other.com>"))).toMatchObject({
+      person: "Ahmed Hassan",
+    });
     expect(affiliationOf(mail(`${signature}\nEmail: another@other.com`))).toBeNull();
     expect(affiliationOf(item("Company: Umbrella Health"))).toBeNull();
     expect(affiliationOf(item("Contact: Ahmed Hassan\nCompany: A\nCompany: B"))).toBeNull();
     expect(affiliationOf(item(""))).toBeNull();
+  });
+
+  test("folded display names admit nickname addresses and flattened signature footers", () => {
+    expect(
+      affiliationOf(
+        mail(
+          "Hey Robin, thanks. Cheers, Lex -- Alexándra Brøwn CTO | West Harbour Analytics",
+          "Alexandra Brown <lex.brown@westharbour.example>",
+        ),
+      ),
+    ).toMatchObject({
+      person: "Alexandra Brown",
+      org: "West Harbour Analytics",
+      address: "lex.brown@westharbour.example",
+    });
+    expect(
+      affiliationOf(
+        mail(
+          "Thanks for reviewing. — Chloë Sørensen -- Chloë Sørensen VP Operations | Harbour Foods M: +44 7700 912345 CONFIDENTIALITY NOTICE: " +
+            "This email is intended only for its recipient. ".repeat(8),
+          "Chloe Sorensen <chloe.sorensen@harbour.example>",
+        ),
+      ),
+    ).toMatchObject({ person: "Chloe Sorensen", org: "Harbour Foods" });
+  });
+
+  test("all name lookup paths fold accents, combining marks and common Latin variants", () => {
+    for (const [person, folded] of [
+      ["Zoë Müller", "Zoe Muller"],
+      ["Zoe\u0308 Mu\u0308ller", "Zoe Muller"],
+      ["Søren Straße", "Soren Strasse"],
+      ["Łukasz Đorđević", "Lukasz Dordevic"],
+      ["Ægir Œstergård", "Aegir Oestergard"],
+      ["Þór Ðal", "Thor Dal"],
+    ]) {
+      const index = new AffiliationIndex();
+      index.put(contact("Example Org", person));
+      expect(index.forParty(folded!, () => true)).toHaveLength(1);
+      expect(index.namedIn(`Reply to ${folded}.`)).toHaveLength(1);
+      expect(affiliationOf(mail(`--\n${person}\nCTO | Example Org`, `${folded} <alias@example.com>`))).toMatchObject({
+        person: folded,
+        org: "Example Org",
+      });
+      index.remove("crm:contact");
+      expect(index.forParty(folded!, () => true)).toEqual([]);
+    }
+  });
+
+  test("folded first and last names retain the sender-local-part identity path", () => {
+    expect(
+      affiliationOf(mail("--\nChloë Sørensen\nCTO | Example Org", "Chloe Jensen <chloe.sorensen@example.com>")),
+    ).toMatchObject({ person: "Chloë Sørensen", org: "Example Org" });
+  });
+
+  test("signature identity rejects unrelated names, quoted/forwarded nicknames and generic roles", () => {
+    const sig = "--\nAlexandra Brown\nCTO | Example Org";
+    expect(affiliationOf(mail(sig, "Alice Smith <alice.smith@example.com>"))).toBeNull();
+    expect(
+      affiliationOf(
+        mail("--\nAlexandra Brown Jones\nCTO | Example Org", "Alexandra Brown <alexandra.brown@example.com>"),
+      ),
+    ).toBeNull();
+    for (const body of [
+      `> ${sig.replaceAll("\n", "\n> ")}`,
+      `---------- Forwarded message ---------\n${sig}`,
+      `On Tuesday, Lex wrote:\n${sig}`,
+    ])
+      expect(affiliationOf(mail(body, "Alexandra Brown <lex.brown@example.com>"))).toBeNull();
+    expect(affiliationOf(mail("-- CTO | Example Org"))).toBeNull();
+    const index = new AffiliationIndex();
+    index.put(mail(sig, "Alexandra Brown <lex.brown@example.com>"));
+    for (const role of ["CTO", "Chief Technology Officer", "the technical lead", "Example Org"])
+      expect(index.namedIn(`Reply to ${role}`)).toEqual([]);
+  });
+
+  test("footer markers are cut before the company bound, never before identity checks", () => {
+    for (const footer of [
+      " M: +44 7700 912345",
+      " +44 (0) 7700 912345",
+      " 123-456-7890",
+      " Email: ahmed.hassan@umbrellahealth.com",
+      " ahmed.hassan@umbrellahealth.com",
+      " https://example.com",
+      " www.example.com",
+      " | Registered Office",
+      " Confidential: " + "private ".repeat(40),
+      " This email " + "notice ".repeat(40),
+      " Sent from my phone",
+    ])
+      expect(affiliationOf(mail(`-- Ahmed Hassan CTO | Example Org${footer}`))).toMatchObject({ org: "Example Org" });
+    expect(affiliationOf(mail(`-- Ahmed Hassan CTO | ${"A".repeat(101)} +44 7700 912345`))).toBeNull();
+    expect(affiliationOf(mail(`-- Ahmed Hassan CTO | ${"A".repeat(100)} | registered office`))).toMatchObject({
+      org: "A".repeat(100),
+    });
+    expect(affiliationOf(mail("-- Ahmed Hassan CTO | Studio 54"))).toMatchObject({ org: "Studio 54" });
+    expect(affiliationOf(mail("-- Ahmed Hassan CTO | Example Org Email: another@example.com"))).toBeNull();
+    expect(affiliationOf(mail("-- Alice Smith CTO | Example Org https://example.com"))).toBeNull();
   });
 
   test("two organisations per party and bounded evidence per user; replacing evidence revokes the old edge", () => {
