@@ -976,6 +976,15 @@ export abstract class PartnerDelivery extends PartnerCore {
   }
 
   /**
+   * Whether the session already handed the agent this item this turn — a second packet citing it is a same-turn
+   * duplicate (D2089). Deliveries race across the paths (the push resolves while the slow path's re-reads are
+   * awaited), so this is checked where each packet is finalized, not only where its candidates were ranked.
+   */
+  protected deliveredThisTurn(s: Session, itemId: string): boolean {
+    return s.delivered.some((d) => d.itemId === itemId && d.turn === s.turn);
+  }
+
+  /**
    * Whether any of these cached items was fetched longer ago than `refreshAfterMs` (refreshing on), or, with
    * `verifyDelivery`, read before its source signalled a change (`doubted`): the fast path may not re-read it, so the
    * slow path, which does, delivers it.
