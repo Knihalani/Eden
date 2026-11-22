@@ -96,6 +96,7 @@ export interface Row {
   n: number;
   returned: number;
   cached: number;
+  pool: number;
   delivered: number;
   calls: number;
   ms: number;
@@ -125,7 +126,7 @@ export interface PartOut {
 }
 
 export function zeroRow(): Row {
-  return { n: 0, returned: 0, cached: 0, delivered: 0, calls: 0, ms: 0 };
+  return { n: 0, returned: 0, cached: 0, pool: 0, delivered: 0, calls: 0, ms: 0 };
 }
 
 /**

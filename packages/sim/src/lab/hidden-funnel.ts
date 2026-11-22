@@ -71,6 +71,10 @@
  * `--neutral` also runs the `neutral` variant of the suites that build it (neutral.ts: the same requests, nothing
  * planted) and prints a NEUTRAL line per suite (any packet delivered, items, bytes, ask items, calls, ms per task); its
  * rows go to the JSON's `neutral` block, never to `rows`, `total` or `perTask`.
+ *
+ * `--check oracle|noisy` runs the real push checker with a $0 ground-truth proxy model. `oracle` accepts only the
+ * current planted hidden item. `noisy` uses `--check-tp` (default .85) and `--check-fp` (default .05), with stable
+ * seed/task/item draws. Generic links never quote gold details. This measures a ceiling, not model or agent quality.
  */
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import {
@@ -157,6 +161,7 @@ import {
 } from "./reader-stub";
 import { packetLine } from "./uptake";
 import { checkLogging, DumpingChecker, replyKeeping, type DumpTask } from "./check-dump";
+import { OracleCheckModel, taskScopedCheck } from "./oracle-check";
 import {
   addNeutralRows,
   addNeutralTask,
@@ -247,6 +252,8 @@ const cli = flags(
         "push-rates",
         "fetch-gone",
         "check",
+        "check-tp",
+        "check-fp",
         "check-model",
         "check-cache",
         "check-log",
@@ -640,15 +647,25 @@ const READER_SYS = systemHash({ messages: readerMessages({ request: "", items: [
 const READER_SUBSET = opt("reader-subset", "");
 if (READER_SUBSET && READER !== "replay") throw new Error("--reader-subset needs --reader replay");
 /**
- * `--check live|replay` (I3, D500): the `pushCheck` trial's model (`--check-model`, default Haiku 5.5), through a
- * replay cache (`--check-cache F`, appended to by a live run: pay once). Wiring it changes nothing unless the run's
- * configuration turns `pushCheck` on. `live` keeps the funnel to one process (one cache file, one ledger stream).
+ * `--check live|replay`: the push check's model (`--check-model`, default Haiku 5.5), through a disk replay cache
+ * (`--check-cache F`). `oracle|noisy` instead supply the task-ground-truth proxy, without a cache or provider.
+ * All modes need `pushCheck` on. `live` keeps one process (one cache file, one ledger stream).
  */
 const CHECK = opt("check", "none");
-if (!["none", "live", "replay"].includes(CHECK)) throw new Error("--check must be live or replay");
+if (!["none", "live", "replay", "oracle", "noisy"].includes(CHECK))
+  throw new Error("--check must be none, live, replay, oracle or noisy");
+const ORACLE_CHECK = CHECK === "oracle" || CHECK === "noisy";
+if (CHECK !== "noisy" && (cli.has("check-tp") || cli.has("check-fp")))
+  throw new Error("--check-tp and --check-fp need --check noisy");
+const oracleCheck = ORACLE_CHECK
+  ? new OracleCheckModel(
+      CHECK === "oracle" ? 1 : Number(opt("check-tp", ".85")),
+      CHECK === "oracle" ? 0 : Number(opt("check-fp", ".05")),
+    )
+  : null;
 const CHECK_MODEL = opt("check-model", "claude-haiku-5-5");
 const CHECK_CACHE = opt("check-cache", "");
-if (CHECK !== "none" && !CHECK_CACHE) throw new Error("--check needs --check-cache FILE");
+if ((CHECK === "live" || CHECK === "replay") && !CHECK_CACHE) throw new Error("--check needs --check-cache FILE");
 if (CHECK !== "none" && !RUN.pushCheck)
   throw new Error("--check is inert unless pushCheck is on (--set pushCheck=true)");
 /** The judge's, the reader's and the check's requests: paced, capped and retried, with the run's logging choice. */
@@ -659,7 +676,7 @@ const ACCESS = labAccess(args, [
 ]);
 /** One replaying check model for every lane; each lane's `PushChecker` keeps its own stats. */
 const checkModel =
-  CHECK === "none"
+  CHECK === "none" || ORACLE_CHECK
     ? null
     : new ReplayModel(
         CHECK_CACHE,
@@ -675,7 +692,9 @@ const checkModel =
 const CHECK_LOG = opt("check-log", "");
 if (CHECK_LOG) writeFileSync(CHECK_LOG, "");
 const loggedCheck = (tag: Record<string, unknown>): Model | null =>
-  checkModel && CHECK_LOG ? checkLogging(checkModel, CHECK_LOG, tag) : checkModel;
+  CHECK_LOG && (oracleCheck ?? checkModel)
+    ? checkLogging((oracleCheck ?? checkModel)!, CHECK_LOG, tag)
+    : (oracleCheck ?? checkModel);
 const checkLanes: PushChecker[] = [];
 /** `--check-dump FILE` (M7, D932): each check call as a row with its pool, reply and task labels (`check-dump.ts`). */
 const CHECK_DUMP = opt("check-dump", "");
@@ -790,12 +809,13 @@ interface Row {
   n: number;
   returned: number;
   cached: number;
+  pool: number;
   delivered: number;
   calls: number;
   ms: number;
 }
 type Rows = Map<string, { hidden: Row; control: Row }>;
-const row = (): Row => ({ n: 0, returned: 0, cached: 0, delivered: 0, calls: 0, ms: 0 });
+const row = (): Row => ({ n: 0, returned: 0, cached: 0, pool: 0, delivered: 0, calls: 0, ms: 0 });
 
 /** One suite through the funnel: per-template rows and one record per task. Each suite plants its own worlds. */
 async function runSuite(suite: string): Promise<{ rows: Rows; perTask: Record<string, unknown>[]; wall: number }> {
@@ -820,6 +840,7 @@ async function runSuite(suite: string): Promise<{ rows: Rows; perTask: Record<st
         x.n++;
         if (t.returned) x.returned++;
         if (t.cached) x.cached++;
+        if ((t.pushPoolAt ?? -1) >= 0) x.pool++;
         if (t.delivered) x.delivered++;
         x.calls += t.calls;
         x.ms += t.ms;
@@ -856,6 +877,7 @@ interface TaskRow {
   template: string;
   returned: boolean;
   cached: boolean;
+  pushPoolAt?: number;
   delivered: boolean;
   /** When surfaced (delivered or ask-cited): reader-flagged, rule path or listed only (D173, ask-coverage.ts). */
   surfacedBy?: SurfacedBy;
@@ -1164,6 +1186,8 @@ async function runSeed(
             (id) => ((it) => (it ? `${it.title ?? ""}\n${it.text}` : ""))(cache.get(scope, id, clock)),
           ))(replyKeeping(laneCheck))
       : new PushChecker({ model: laneCheck, budget: new Budget(UNCAPPED) });
+  if (checker && oracleCheck)
+    taskScopedCheck(checker, oracleCheck, (key) => dumpTasks.get(key.slice(key.indexOf("#") + 1)));
   if (checker) checkLanes.push(checker);
   const pushPools = new Map<string, PushPoolReport[]>();
   const partner = new ContextPartner({
@@ -1819,6 +1843,9 @@ for (const suite of SUITE_LIST) {
     console.log(line(name, r));
   }
   console.log(line(SUITE_LIST.length > 1 ? `total ${suite}` : "TOTAL", total) + inertTag());
+  console.log(
+    `POOL ${suite}: hidden ${pct(total.hidden.pool, total.hidden.n)}, decoy ${pct(total.control.pool, total.control.n)}`,
+  );
   for (const l of screenLines(suite, perTask as unknown as ScreenRow[], PACKET_K)) console.log(l + TAG + inertTag());
   // D173: surfaced split into reader-flagged, rule path and listed only (reporting only; the gates are unchanged).
   for (const l of surfacedLines(suite, perTask as unknown as SurfacedRow[])) console.log(l + TAG + inertTag());
@@ -2053,30 +2080,33 @@ if (READER_SUBSET && readerModel) {
   );
 }
 /** `--check` (I3, D500): the push check's calls over the whole run, every phase (neutral included). */
-const checkUse = checkModel
-  ? (() => {
-      const sum = (k: keyof PushChecker["stats"]) => checkLanes.reduce((n, c) => n + c.stats[k], 0);
-      const lat = checkModel.quantiles();
-      return {
-        asked: sum("asked"),
-        calls: sum("calls"),
-        failures: sum("failures"),
-        costUsdAsMade: Number(checkModel.calls.reduce((n, c) => n + c.costUsd, 0).toFixed(6)),
-        inputTokens: checkModel.calls.reduce((n, c) => n + c.inputTokens, 0),
-        cachedInputTokens: checkModel.calls.reduce((n, c) => n + c.cachedInputTokens, 0),
-        outputTokens: checkModel.calls.reduce((n, c) => n + c.outputTokens, 0),
-        replayed: checkModel.replayed,
-        sent: checkModel.sent,
-        missed: checkModel.missed,
-        p50Ms: lat.p50,
-        p90Ms: lat.p90,
-      };
-    })()
-  : null;
+const checkUse =
+  checkModel || oracleCheck
+    ? (() => {
+        const sum = (k: keyof PushChecker["stats"]) => checkLanes.reduce((n, c) => n + c.stats[k], 0);
+        const lat = checkModel?.quantiles() ?? { p50: 0, p90: 0 };
+        return {
+          mode: CHECK,
+          ...(oracleCheck ? { proxy: true, tp: oracleCheck.tp, fp: oracleCheck.fp } : {}),
+          asked: sum("asked"),
+          calls: sum("calls"),
+          failures: sum("failures"),
+          costUsdAsMade: Number((checkModel?.calls.reduce((n, c) => n + c.costUsd, 0) ?? 0).toFixed(6)),
+          inputTokens: checkModel?.calls.reduce((n, c) => n + c.inputTokens, 0) ?? oracleCheck!.stats.inputTokens,
+          cachedInputTokens: checkModel?.calls.reduce((n, c) => n + c.cachedInputTokens, 0) ?? 0,
+          outputTokens: checkModel?.calls.reduce((n, c) => n + c.outputTokens, 0) ?? oracleCheck!.stats.outputTokens,
+          replayed: checkModel?.replayed ?? 0,
+          sent: checkModel?.sent ?? 0,
+          missed: checkModel?.missed ?? 0,
+          p50Ms: lat.p50,
+          p90Ms: lat.p90,
+        };
+      })()
+    : null;
 if (checkUse) {
   const per = (x: number) => (checkUse.calls ? x / checkUse.calls : 0);
   console.log(
-    `CHECK (I3, ${CHECK_MODEL}, ${CHECK}): ${checkUse.calls} calls of ${checkUse.asked} asked, ` +
+    `CHECK (I3, ${oracleCheck?.id ?? CHECK_MODEL}, ${CHECK}${oracleCheck ? ` proxy TP=${oracleCheck.tp} FP=${oracleCheck.fp}` : ""}): ${checkUse.calls} calls of ${checkUse.asked} asked, ` +
       `${checkUse.failures} failed, ${checkUse.missed} replay misses; $${checkUse.costUsdAsMade.toFixed(4)} as made ` +
       `($${per(checkUse.costUsdAsMade).toFixed(6)} a call); ${per(checkUse.inputTokens).toFixed(0)} in ` +
       `(${per(checkUse.cachedInputTokens).toFixed(0)} cached) / ${per(checkUse.outputTokens).toFixed(0)} out a call; ` +
@@ -2103,6 +2133,8 @@ if (!cli.has("no-record") && ACCESS.pacer.refused === 0 && misses.code === 0) {
     const metrics: Record<string, number> = {
       hiddenReturned: n("returned", "hidden"),
       hiddenCached: n("cached", "hidden"),
+      hiddenPool: n("pool", "hidden"),
+      decoyPool: n("pool", "control"),
       hiddenDelivered: n("delivered", "hidden"),
       decoyDelivered: n("delivered", "control"),
       callsPerTask: (t.hidden.calls + t.control.calls) / Math.max(1, t.hidden.n + t.control.n),
@@ -2125,7 +2157,10 @@ if (!cli.has("no-record") && ACCESS.pacer.refused === 0 && misses.code === 0) {
       {
         tier: "funnel",
         suite,
-        label: opt("label", Object.keys(CONFIG).length ? "custom" : "baseline"),
+        label: opt("label", oracleCheck ? `${CHECK}-check-proxy` : Object.keys(CONFIG).length ? "custom" : "baseline"),
+        ...(oracleCheck
+          ? { note: `push-check ${CHECK} proxy TP=${oracleCheck.tp} FP=${oracleCheck.fp}; ceiling, not uptake` }
+          : {}),
         config: CONFIG,
         seeds: SEEDS,
         // The judge's spend is the whole run's (all suites), booked on the first suite's record.

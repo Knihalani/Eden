@@ -194,6 +194,24 @@ describe("mergeParts (D139): blocks of suites × seeds merge to the one-process 
     expect(m.perTask).toEqual(whole.perTask);
   });
 
+  test("pool counts sum across shards for both variants, including JSON round-trip", () => {
+    const groups = [41, 42].map((seed) => ({ suites: ["hidden"], seeds: [String(seed)] }));
+    const parts = groups.map((g, i) => {
+      const p = fake(g.suites, g.seeds.map(Number));
+      for (const r of [...Object.values(p.rows), p.total]) {
+        Object.assign(r.hidden, { pool: i + 1 });
+        Object.assign(r.control, { pool: 2 * (i + 1) });
+      }
+      return p;
+    });
+    const m = JSON.parse(JSON.stringify(mergeParts(parts, groups, ["hidden"], ["41", "42"])));
+    for (const r of [m.total, m.bySuite.hidden.total, ...Object.values(m.rows)]) {
+      expect(r.hidden.pool).toBe(3);
+      expect(r.control.pool).toBe(6);
+    }
+    expect(mergeParts([], [], [], []).total).toEqual({ hidden: zeroRow(), control: zeroRow() });
+  });
+
   test("a part that ran other shards than its block, or lacks a per-suite summary, is refused", () => {
     const g = [{ suites: ["train1", "train2"], seeds: ["41"] }];
     expect(() => mergeParts([fake(["train1", "train2"], [42])], g, ["train1", "train2"], ["41"])).toThrow(/task/);
