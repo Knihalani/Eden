@@ -21,6 +21,9 @@ const QUOTED = new RegExp(
     String.raw`(?:^|\s)>|(?:^|\n)\s*[“"]|\bOn [^\n]{0,240}?wrote:`,
     String.raw`\b(?:Forwarded message|Original Message|Begin forwarded message:)`,
     String.raw`\bFrom:[ \t]+[^<\n]{0,100}<[^>\n]{1,120}>|<blockquote\b|<q[\s>]|\x60{3}`,
+    String.raw`(?:^|\n)[ \t]*(?:Von|Gesendet|De|Envoyé|Envoye|Enviado):|(?:^|\n)[ \t]*_{5,}[ \t]*(?:\r?$)`,
+    String.raw`\bAm [^\n]{0,240}?schrieb[^\n]{0,120}?:|\bLe [^\n]{0,240}?a écrit[ \t]*:|\bEl [^\n]{0,240}?escribi[oó][ \t]*:`,
+    String.raw`(?:Ursprüngliche Nachricht|Ursprungliche Nachricht|Message d['’]origine|Message transféré|Mensaje original|Mensaje reenviado)`,
   ].join("|"),
   "im",
 );

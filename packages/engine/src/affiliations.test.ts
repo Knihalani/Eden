@@ -55,6 +55,16 @@ describe("one-hop affiliations", () => {
       "Hello From: Ahmed Hassan <ahmed.hassan@umbrellahealth.com> -- Ahmed Hassan CFO | Umbrella Health",
       `Hello\n<blockquote>\n${signature}\n</blockquote>`,
       `Hello\n\`\`\`\n${signature}\n\`\`\``,
+      `Hallo\nVon: Ahmed Hassan <ahmed.hassan@umbrellahealth.com>\nGesendet: Dienstag\n${signature}`,
+      `Hallo\nAm Dienstag schrieb Ahmed Hassan:\n${signature}`,
+      `Hallo\n-----Ursprüngliche Nachricht-----\n${signature}`,
+      `Hallo\n________________\n${signature}`,
+      `Bonjour\nDe: Ahmed Hassan\nEnvoyé: mardi\n${signature}`,
+      `Bonjour\nLe mardi, Ahmed Hassan a écrit :\n${signature}`,
+      `Bonjour\n-----Message d'origine-----\n${signature}`,
+      `Hola\nDe: Ahmed Hassan\nEnviado: martes\n${signature}`,
+      `Hola\nEl martes, Ahmed Hassan escribió:\n${signature}`,
+      `Hola\n-----Mensaje original-----\n${signature}`,
     ])
       expect(affiliationOf(mail(body))).toBeNull();
     expect(affiliationOf(mail(signature, "Alice Smith <alice.smith@other.com>"))).toBeNull();
