@@ -216,8 +216,10 @@ export function localConfig(env = process.env): ServerConfig | null {
     persist: state?.persist ?? null,
     sourceMapPath: state?.sourceMapPath ?? ":memory:",
     queryPlanner: "serve",
-    tenantRatePerSec: 200,
-    tenantBurst: 400,
+    // One tenant on one loopback socket: the GCRA exists so no tenant starves another — meaningless with one.
+    // 0 turns the limiter off (http.ts); a hot client loop never sees a 429 from its own daemon.
+    tenantRatePerSec: 0,
+    tenantBurst: 0,
     maxBodyBytes: DEFAULT_MAX_BODY_BYTES,
     shutdownGraceMs: 1000,
   };
