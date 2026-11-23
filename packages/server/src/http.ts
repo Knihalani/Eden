@@ -147,11 +147,12 @@ export function createHandler(
 ) {
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const tooLarge = `body must be at most ${maxBodyBytes.toLocaleString("en-US")} bytes`;
-  // tenantRatePerSec 0 (local mode — one tenant cannot starve another) means no limiter at all.
+  // tenantRatePerSec 0 (local mode — one tenant cannot starve another) means no limiter at all;
+  // exactly 0 only — a negative or NaN rate still reaches Gcra and stops startup as before.
   const limiter =
-    (config.tenantRatePerSec ?? 200) > 0
-      ? new Gcra({ ratePerSec: config.tenantRatePerSec ?? 200, burst: config.tenantBurst ?? 400 })
-      : null;
+    config.tenantRatePerSec === 0
+      ? null
+      : new Gcra({ ratePerSec: config.tenantRatePerSec ?? 200, burst: config.tenantBurst ?? 400 });
   const tenantOf = (req: Request): string | null => {
     const key = keyOf(req);
     if (key && config.keys.has(key)) return config.keys.get(key)!;
