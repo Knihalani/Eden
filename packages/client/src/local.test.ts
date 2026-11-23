@@ -148,7 +148,7 @@ test("sharePath: a daemon recorded with other model settings is replaced (D2109)
     expect(await first.endpoint()).not.toBeNull();
     const recorded = JSON.parse(readFileSync(share, "utf8"));
     daemonPid = recorded.pid;
-    expect(recorded.model).toEqual({});
+    expect(recorded.model).toEqual([]);
     first.close();
     // Same sources, new model settings: the recorded daemon is stale and is replaced, not attached.
     const second = new LocalEden(command, {
@@ -161,7 +161,9 @@ test("sharePath: a daemon recorded with other model settings is replaced (D2109)
     const newer = JSON.parse(readFileSync(share, "utf8"));
     expect(newer.pid).not.toBe(daemonPid);
     daemonPid = newer.pid;
-    expect(newer.model).toEqual({ EDEN_MODEL: "m2", EDEN_MODEL_BASE_URL: "http://127.0.0.1:1/v1" });
+    // The fingerprint names the set variables and hashes their values — never the values.
+    expect(newer.model.map(([name]: [string, string]) => name)).toEqual(["EDEN_MODEL", "EDEN_MODEL_BASE_URL"]);
+    expect(newer.model.every(([, h]: [string, string]) => /^[0-9a-f]{64}$/.test(h))).toBe(true);
     second.close();
   } finally {
     if (daemonPid) {

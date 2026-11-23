@@ -6,6 +6,7 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   appendFileSync,
   chmodSync,
@@ -271,6 +272,18 @@ export class LocalEden {
     return out;
   }
 
+  /**
+   * The share record's model fingerprint: [name, hash] pairs over the resolved model env, in
+   * MODEL_ENV order. The values are hashed: a share file must never carry EDEN_MODEL_API_KEY in
+   * cleartext, and the pairs' fixed order keeps the record byte-compatible with the Python client.
+   */
+  private modelSig(): [string, string][] {
+    return Object.entries(this.modelEnv()).map(([name, value]) => [
+      name,
+      createHash("sha256").update(value).digest("hex"),
+    ]);
+  }
+
   /** The configured source files' identity: a server started before they existed/changed is stale. */
   private sourcesSig(): [string, number | null, number | null][] {
     const sig: [string, number | null, number | null][] = [];
@@ -317,7 +330,7 @@ export class LocalEden {
       JSON.stringify(data.sources ?? []) !== JSON.stringify(this.sourcesSig()) ||
       // A record written before model settings existed reads as model-free; it is stale when the
       // owner has model settings now (the daemon runs without them either way).
-      JSON.stringify(data.model ?? {}) !== JSON.stringify(this.modelEnv());
+      JSON.stringify(data.model ?? []) !== JSON.stringify(this.modelSig());
     try {
       // Node's fetch never honors HTTP(S)_PROXY, so loopback cannot be routed through a refusing proxy.
       const res = await fetch(`${url}/healthz`, {
@@ -430,8 +443,9 @@ export class LocalEden {
           pid: this.process.pid,
           generation: this.endpointValue.generation,
           sources: this.sourcesSig(),
-          model: this.modelEnv(),
+          model: this.modelSig(),
         }),
+        { mode: 0o600 },
       );
       chmodSync(tmp, 0o600);
       renameSync(tmp, share);

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -245,6 +246,10 @@ class LocalEden:
                 out[name] = str(value)
         return out
 
+    def _model_sig(self):
+        """[name, hash] pairs over the resolved model env — the share record must not carry the key."""
+        return [[name, hashlib.sha256(value.encode()).hexdigest()] for name, value in self._model_env().items()]
+
     def _sources_sig(self):
         """The configured source files' identity: a server started before they existed/changed is stale."""
         sig = []
@@ -273,7 +278,7 @@ class LocalEden:
         stale = (data.get("sources", []) != self._sources_sig()
                  # A record written before model settings existed reads as model-free; it is stale
                  # when the owner has model settings now.
-                 or data.get("model", {}) != self._model_env())
+                 or data.get("model", []) != self._model_sig())
         try:
             # Bypass proxies: some environments route loopback through a refusing HTTP proxy.
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -305,9 +310,15 @@ class LocalEden:
         try:
             self._share.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             tmp = self._share.with_name(self._share.name + ".tmp")
-            tmp.write_text(json.dumps({"url": self._endpoint[0], "token": self._endpoint[1],
-                                       "pid": self._process.pid, "generation": self._endpoint[2],
-                                       "sources": self._sources_sig(), "model": self._model_env()}))
+            # Created mode 0o600 at open: the record carries the bearer token, and a default-mode
+            # window before chmod would expose it (the model fingerprint is hashed, not a secret).
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                os.write(fd, json.dumps({"url": self._endpoint[0], "token": self._endpoint[1],
+                                        "pid": self._process.pid, "generation": self._endpoint[2],
+                                        "sources": self._sources_sig(), "model": self._model_sig()}).encode())
+            finally:
+                os.close(fd)
             os.chmod(tmp, 0o600)
             tmp.replace(self._share)
         except Exception:
