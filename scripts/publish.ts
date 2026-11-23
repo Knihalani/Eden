@@ -73,9 +73,7 @@ async function pypiPublish(version: string) {
   cpSync(join(root, "LICENSE"), join(stage, "LICENSE"));
   rmSync(join(stage, "eden_client", "__pycache__"), { recursive: true, force: true });
   if (!yes) {
-    console.log(
-      `pypi: would publish eden-client@${version}` + (token ? "" : " (PYPI_TOKEN needed at publish time)"),
-    );
+    console.log(`pypi: would publish eden-client@${version}` + (token ? "" : " (PYPI_TOKEN needed at publish time)"));
     return;
   }
   if ((await run([python, "-m", "build", "-o", "dist", "."], stage)) !== 0) throw new Error("python -m build failed");

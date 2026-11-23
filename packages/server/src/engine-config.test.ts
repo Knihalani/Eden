@@ -166,6 +166,34 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     );
   });
 
+  test("EDEN_MODEL_ROLES (A2): an allowlist nulls the roles it leaves out, a typo stops startup", () => {
+    const make = () => ({ id: "fake", chat: async () => ({}) }) as never;
+    const all = modelRolesFromEnv({ OPENROUTER_API_KEY: "k" }, make);
+    expect(all.reader).not.toBeNull();
+    expect(all.cards).not.toBeNull();
+    expect(all.cardsRetry).not.toBeNull();
+    const justReader = modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_ROLES: "reader" }, make);
+    expect(justReader.reader).not.toBeNull();
+    expect(justReader.cards).toBeNull();
+    expect(justReader.cardsRetry).toBeNull();
+    // The cap and scrub are kept either way.
+    expect(justReader.scrub).toBeDefined();
+    expect(
+      modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_ROLES: " cards , cardsRetry " }, make).reader,
+    ).toBeNull();
+    // Same on a local endpoint.
+    const local = modelRolesFromEnv(
+      { EDEN_MODEL_BASE_URL: "http://localhost:11434/v1", EDEN_MODEL: "m", EDEN_MODEL_ROLES: "cards" },
+      make,
+      make,
+    );
+    expect(local.reader).toBeNull();
+    expect(local.cards).not.toBeNull();
+    expect(() => modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_ROLES: "reader,judge" }, make)).toThrow(
+      /unknown role "judge"/,
+    );
+  });
+
   test("EDEN_MODEL_CACHE (D1790): cache breakpoints by default, none when set to off", () => {
     const seen: Record<string, unknown>[] = [];
     const make = (o: Record<string, unknown>) => {

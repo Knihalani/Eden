@@ -31,6 +31,12 @@
  *                                vLLM's); Ollama and LM Studio need none, and none is sent.
  * EDEN_MODEL_TIMEOUT_MS          the roles' own call deadline on that endpoint, default 120,000: local
  *                                inference on a small box is far slower than a hosted route.
+ * EDEN_MODEL_ROLES               the roles the model serves, comma-separated: `reader`, `cards`,
+ *                                `cardsRetry`; unset is all three. Off roles get no model and their
+ *                                paths run exactly as with no model at all — the per-role switch for
+ *                                endpoints whose model cannot do a role (A2: a 1.5B local model's
+ *                                checks fail ~43% of calls; harmless — fails open — but the calls
+ *                                are burned inference for no gain).
  *
  * The Anthropic provider is lab only (D97): nothing here constructs it.
  */
@@ -144,17 +150,20 @@ export function modelRolesFromEnv(
       rateHold: new RateHold(),
       freeCalls: free,
     };
-    return {
-      reader: makeLocal(options),
-      cards: makeLocal(options),
-      cardsRetry: makeLocal(options),
-      // A loopback endpoint bills nothing, so an unset tenant spend cap is lifted for it: a 0 there
-      // would refuse free calls (the per-session and per-user estimates stay, tiny and unsettled at
-      // $0 — D2109). A configured cap keeps binding: a loopback gateway can front a paid provider.
-      usdPerTenantDay:
-        free && env.EDEN_MODEL_USD_PER_TENANT_DAY === undefined ? Number.POSITIVE_INFINITY : usdPerTenantDay,
-      scrub: keyScrubber(env.EDEN_MODEL_API_KEY ?? ""),
-    };
+    return allowRoles(
+      {
+        reader: makeLocal(options),
+        cards: makeLocal(options),
+        cardsRetry: makeLocal(options),
+        // A loopback endpoint bills nothing, so an unset tenant spend cap is lifted for it: a 0 there
+        // would refuse free calls (the per-session and per-user estimates stay, tiny and unsettled at
+        // $0 — D2109). A configured cap keeps binding: a loopback gateway can front a paid provider.
+        usdPerTenantDay:
+          free && env.EDEN_MODEL_USD_PER_TENANT_DAY === undefined ? Number.POSITIVE_INFINITY : usdPerTenantDay,
+        scrub: keyScrubber(env.EDEN_MODEL_API_KEY ?? ""),
+      },
+      env.EDEN_MODEL_ROLES,
+    );
   }
   const apiKey = env.OPENROUTER_API_KEY;
   if (!apiKey) return { ...NO_MODELS, usdPerTenantDay };
@@ -170,12 +179,40 @@ export function modelRolesFromEnv(
     // On by default (D1790); `OpenRouterModel` sends them to `anthropic/*` models only and falls back on a refusal.
     ...(cacheOn(env.EDEN_MODEL_CACHE) ? { anthropicCache: true } : {}),
   };
+  return allowRoles(
+    {
+      reader: make({ ...base, sort: "throughput" }),
+      cards: make({ ...base, sort: "price" }),
+      cardsRetry: make(base),
+      usdPerTenantDay,
+      scrub: keyScrubber(apiKey),
+    },
+    env.EDEN_MODEL_ROLES,
+  );
+}
+
+const ROLE_NAMES = ["reader", "cards", "cardsRetry"] as const;
+type RoleName = (typeof ROLE_NAMES)[number];
+
+/**
+ * `EDEN_MODEL_ROLES` applied: a role not listed gets a null model — its path runs the no-model
+ * code, the same as with no endpoint at all. Unset or blank is every role; an unknown name stops
+ * startup rather than silently running fewer roles than the operator named.
+ */
+function allowRoles(roles: ModelRoles, allow: string | undefined): ModelRoles {
+  if (allow === undefined || allow.trim() === "") return roles;
+  const names = allow.split(",").map((s) => s.trim());
+  for (const name of names) {
+    if (!(ROLE_NAMES as readonly string[]).includes(name)) {
+      throw new Error(`EDEN_MODEL_ROLES: unknown role ${JSON.stringify(name)} (want ${ROLE_NAMES.join(",")})`);
+    }
+  }
+  const on = new Set(names as RoleName[]);
   return {
-    reader: make({ ...base, sort: "throughput" }),
-    cards: make({ ...base, sort: "price" }),
-    cardsRetry: make(base),
-    usdPerTenantDay,
-    scrub: keyScrubber(apiKey),
+    ...roles,
+    reader: on.has("reader") ? roles.reader : null,
+    cards: on.has("cards") ? roles.cards : null,
+    cardsRetry: on.has("cardsRetry") ? roles.cardsRetry : null,
   };
 }
 
