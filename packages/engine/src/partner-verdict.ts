@@ -76,7 +76,7 @@ import { sourcePriors } from "./source-prior";
 import type { Evidence } from "./source-yield";
 import { ProbeEconomy, type ProbeKind } from "./economy";
 import { judgeMessages, parseJudge } from "./judge";
-import { namesParticipant, participantWords, startDay, startMs, timeWindow, titleNames } from "./grounding";
+import { dayOf, namesParticipant, participantWords, startDay, startMs, timeWindow, titleNames } from "./grounding";
 import {
   absenceSpan,
   ASKS_OWN,
