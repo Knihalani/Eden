@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { localBoundary, localConfig } from "./local";
@@ -25,6 +25,21 @@ test("local configuration scrubs capabilities and consumes the token", () => {
     console.log = log;
     console.info = info;
   }
+});
+
+test("EDEN_HOME is the local daemon's state dir too (a LocalEden's `home`)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "eden-home-state-"));
+  const env = { EDEN_LOCAL: "1", EDEN_LOCAL_TOKEN: token, EDEN_HOME: dir };
+  const config = localConfig(env)!;
+  expect(config.persist).not.toBeNull();
+  expect(config.persist!.dir).toBe(join(dir, "frozen"));
+  expect(config.persist!.discard).toBe(true);
+  expect(config.sourceMapPath).toBe(join(dir, "source-map.db"));
+  expect(existsSync(join(dir, "persist.key"))).toBe(true);
+  // EDEN_LOCAL_STATE_DIR still wins when both are set (the explicit opt-in).
+  const other = mkdtempSync(join(tmpdir(), "eden-home-state2-"));
+  const both = localConfig({ EDEN_LOCAL: "1", EDEN_LOCAL_TOKEN: token, EDEN_HOME: dir, EDEN_LOCAL_STATE_DIR: other })!;
+  expect(both.persist!.dir).toBe(join(other, "frozen"));
 });
 
 test("a state dir makes local state durable: a generated key, frozen dir, file source map", () => {

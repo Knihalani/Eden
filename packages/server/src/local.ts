@@ -8,9 +8,11 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   createWriteStream,
   existsSync,
+  linkSync,
   mkdirSync,
   readFileSync,
   renameSync,
+  unlinkSync,
   statSync,
   writeFileSync,
   type WriteStream,
@@ -25,6 +27,9 @@ const ALLOWED = new Set([
   "EDEN_LOCAL_DETACHED",
   "EDEN_LOCAL_LOG",
   "EDEN_LOCAL_STATE_DIR",
+  // The daemon's durable home: a LocalEden passes its `home` through as EDEN_HOME; under it the
+  // source map and frozen-user blobs live, so a replacement daemon resumes, encrypted (D1966).
+  "EDEN_HOME",
   "EDEN_SOURCES_FILE",
   "EDEN_USER_SOURCES_FILE",
   // A sidecar's model roles run only on an OpenAI-compatible endpoint the embedder names (D2109): these are the
@@ -110,7 +115,11 @@ function localState(dir: string | undefined): {
   sourceMapPath: string;
 } | null {
   if (!dir?.trim()) return null;
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } catch {
+    return null; // An unwritable home stays volatile rather than stopping the daemon.
+  }
   const keyPath = join(dir, "persist.key");
   let key: Uint8Array | null = null;
   try {
@@ -121,11 +130,39 @@ function localState(dir: string | undefined): {
     key = null;
   }
   if (key === null) {
-    key = randomBytes(32);
-    const tmp = `${keyPath}.tmp`;
-    writeFileSync(tmp, `${Buffer.from(key).toString("hex")}\n`, { mode: 0o600 });
-    renameSync(tmp, keyPath);
+    // Offer a key atomically: a per-process tmp is fully written, then hard-linked so the first
+    // sidecar of a shared profile to link wins and every loser re-reads the winner's file — each
+    // daemon ends with the same key (a losing key held only in memory would orphan its frozen
+    // blobs on the next restart). A filesystem without hard links falls back to rename.
+    const ours = `${Buffer.from(randomBytes(32)).toString("hex")}\n`;
+    const tmp = `${keyPath}.${process.pid}.tmp`;
+    try {
+      writeFileSync(tmp, ours, { mode: 0o600 });
+      try {
+        linkSync(tmp, keyPath);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "EEXIST") renameSync(tmp, keyPath);
+      }
+      if (existsSync(tmp)) unlinkSync(tmp);
+      const raw = readFileSync(keyPath, "utf8").trim();
+      key = raw.length === 64 ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
+      if (key.length !== 32) key = null;
+    } catch {
+      key = null;
+    }
+    if (key === null) {
+      // No winner answered (or a corrupt one: a crashed writer's half file, which otherwise never
+      // heals): replace it with our tmp. Any failure here keeps the home volatile, not a failed start.
+      try {
+        writeFileSync(tmp, ours, { mode: 0o600 });
+        renameSync(tmp, keyPath);
+        key = Buffer.from(ours.trim(), "hex");
+      } catch {
+        return null; // A read-only home stays volatile rather than stopping the daemon.
+      }
+    }
   }
+  if (key === null) return null;
   return {
     persist: {
       dir: join(dir, "frozen"),
@@ -156,8 +193,11 @@ export function localConfig(env = process.env): ServerConfig | null {
   if (!/^[A-Za-z0-9_-]{32,256}$/.test(token)) {
     throw new Error("EDEN_LOCAL_TOKEN must be 32-256 URL-safe characters");
   }
-  const state = localState(env.EDEN_LOCAL_STATE_DIR);
+  // EDEN_LOCAL_STATE_DIR wins when both are set (the explicit opt-in); EDEN_HOME is a LocalEden's
+  // `home` and names the same durable directory in eden-local (ignored before, D2109's follow-up).
+  const state = localState(env.EDEN_LOCAL_STATE_DIR ?? env.EDEN_HOME);
   delete env.EDEN_LOCAL_STATE_DIR;
+  delete env.EDEN_HOME;
   return {
     keys: new Map([[token, "local"]]),
     dev: false,

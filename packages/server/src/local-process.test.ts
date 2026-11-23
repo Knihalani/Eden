@@ -141,11 +141,12 @@ async function exercise(compiled: boolean) {
     expect(logs).not.toContain("glossary's lexicons");
     expect(logs).not.toContain("router child");
     expect(existsSync(home)).toBe(false);
-    expect(existsSync(eden)).toBe(false);
+    // EDEN_HOME is the durable state dir: its key and frozen-user dir persist across restarts.
+    expect(existsSync(join(eden, "persist.key"))).toBe(true);
     expect(readdirSync(dir).sort()).toEqual(
       (compiled
-        ? [".env", "bunfig.toml", "poison.ts", "sidecar", "sources.json"]
-        : [".env", "bunfig.toml", "sources.json"]
+        ? [".env", "bunfig.toml", "poison.ts", "sidecar", "sources.json", "missing-eden"]
+        : [".env", "bunfig.toml", "sources.json", "missing-eden"]
       ).sort(),
     );
   } finally {
