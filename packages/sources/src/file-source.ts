@@ -89,6 +89,8 @@ export class FileSource implements Source {
   private readonly maxFiles: number;
   private readonly entries: string[];
   private held = new Map<string, Held>();
+  /** Every path the last scan matched (in-spec), including ones the cap or a binary sniff left out. */
+  private covered = new Set<string>();
   private inner: StaticSource | undefined;
 
   constructor(
@@ -119,6 +121,7 @@ export class FileSource implements Source {
       }
     }
     statred.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    this.covered = new Set(statred.map((s) => s.path));
     const keep = new Set(statred.slice(0, this.maxFiles).map((s) => s.path));
     let dirty = false;
     for (const { path, mtimeMs, size } of statred.slice(0, this.maxFiles)) {
@@ -140,12 +143,7 @@ export class FileSource implements Source {
           text,
           url: `file://${path}`,
           updatedAt: mtimeMs,
-          meta: {
-            dir: dirname(path),
-            ext: extname(path),
-            size: String(size),
-            start: new Date(mtimeMs).toISOString().slice(0, 10),
-          },
+          meta: { dir: dirname(path), ext: extname(path), size: String(size) },
         },
       });
     }
@@ -169,7 +167,22 @@ export class FileSource implements Source {
 
   async search(query: SearchQuery, _signal: AbortSignal): Promise<ContextItem[]> {
     this.scan();
-    return this.inner!.search(query);
+    const items = await this.inner!.search(query);
+    // A file whose only date is its mtime still answers a dated lookup: inner's windowed match reads
+    // meta.start and content dates, so the mtime day is added here — as a fall-back, never masking the
+    // days a note's own text names (a meta.start would).
+    const w = query.window;
+    if (!w || items.length >= query.limit) return items;
+    const have = new Set(items.map((i) => i.ref));
+    for (const { doc, mtimeMs } of [...this.held.values()].sort((a, b) => b.mtimeMs - a.mtimeMs)) {
+      if (items.length >= query.limit) break;
+      if (have.has(doc.ref)) continue;
+      const day = new Date(mtimeMs).toISOString().slice(0, 10);
+      if (day >= w.start && day < w.end) {
+        items.push({ ...doc, id: itemId(this.id, doc.ref), sourceId: this.id });
+      }
+    }
+    return items;
   }
 
   async list(_scope: Scope, cursor: string | undefined, limit: number, _signal: AbortSignal): Promise<ListPage> {
@@ -187,7 +200,22 @@ export class FileSource implements Source {
     // path (`/etc/passwd`) must not be read into an item (SEC: fetch is not a file API).
     this.scan();
     const held = this.held.get(ref);
-    if (!held) return null;
-    return { id: itemId(this.id, ref), sourceId: this.id, ...held.doc };
+    if (held) return { id: itemId(this.id, ref), sourceId: this.id, ...held.doc };
+    // In-spec but not indexed — the cap kept newer files, or it turned binary then back to text: read
+    // it on demand rather than report a matching file gone (that answer drops the cached item).
+    if (!this.covered.has(ref)) return null;
+    const st = statSync(ref);
+    const text = readText(ref, this.maxBytes);
+    if (text === null) return null;
+    return {
+      id: itemId(this.id, ref),
+      sourceId: this.id,
+      ref,
+      title: basename(ref),
+      text,
+      url: `file://${ref}`,
+      updatedAt: st.mtimeMs,
+      meta: { dir: dirname(ref), ext: extname(ref), size: String(st.size) },
+    };
   }
 }

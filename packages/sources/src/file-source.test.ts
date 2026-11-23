@@ -23,7 +23,7 @@ test("a directory's files are listed, searched and fetched; mtime rescan picks u
     const page = await s.list(scope, undefined, 10, signal);
     expect(page.items.map((i) => i.title).sort()).toEqual(["note.md", "plumber.txt", "renewal.md"]);
     expect(page.next).toBeNull();
-    expect(page.items[0].url).toMatch(/^file:\/\//);
+    expect(page.items[0]!.url).toMatch(/^file:\/\//);
 
     const hits = await s.search({ scope, text: "kitchen sink", entities: [], limit: 10 }, signal);
     expect(hits.map((h) => h.ref)).toEqual([join(dir, "plumber.txt")]);

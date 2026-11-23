@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import type { Scope } from "@eden/protocol";
 import { FileSource, StaticSource, type Source, type SourceResolver } from "@eden/sources";
-import { checkSpecs, fileDirectory, SourceConfigError, UserSources } from "./user-sources";
+import { checkSpecs, fileDirectory, SourceConfigError, UserSources, type StaticSpec } from "./user-sources";
 
 export function staticResolver(path: string | undefined): SourceResolver {
   const sources = staticSources(path);
@@ -53,11 +53,12 @@ export function staticSources(path: string | undefined): Source[] {
     entries.map((s) => (isObject(s) ? { ...s, kind: s.kind === "file" ? "file" : "static" } : s)),
     "EDEN_SOURCES_FILE.sources",
   );
-  return specs.map((s) =>
-    s.kind === "file"
-      ? new FileSource(s.id, s.description, { paths: s.paths, maxBytes: s.maxBytes, maxFiles: s.maxFiles })
-      : new StaticSource(s.id, s.description, s.docs),
-  );
+  return specs.map((s) => {
+    if (s.kind === "file") {
+      return new FileSource(s.id, s.description, { paths: s.paths, maxBytes: s.maxBytes, maxFiles: s.maxFiles });
+    }
+    return new StaticSource(s.id, s.description, (s as StaticSpec).docs);
+  });
 }
 
 /**
