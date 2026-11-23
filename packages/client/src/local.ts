@@ -150,17 +150,7 @@ export class LocalEden {
     }
     // The embedder's model endpoint for the roles (MODEL_ENV): the option wins, else the owner's own
     // variable of the name — an app whose agent already runs on a local model sets it once for both.
-    const model = {
-      EDEN_MODEL: this.options.model,
-      EDEN_MODEL_BASE_URL: this.options.modelBaseUrl,
-      EDEN_MODEL_API_KEY: this.options.modelApiKey,
-      EDEN_MODEL_TIMEOUT_MS:
-        this.options.modelTimeoutMs === undefined ? undefined : String(this.options.modelTimeoutMs),
-    };
-    for (const name of MODEL_ENV) {
-      const value = model[name] ?? envOf(this.env, name);
-      if (value !== undefined) env[name] = value;
-    }
+    Object.assign(env, this.modelEnv());
     Object.assign(env, {
       EDEN_LOCAL: "1",
       EDEN_LOCAL_TOKEN: token,
@@ -260,6 +250,27 @@ export class LocalEden {
     this.warn(problem);
   }
 
+  /**
+   * The model env the spawned child gets (MODEL_ENV resolved: option, else the owner's variable).
+   * Shared-server records fingerprint it too: a daemon started with other model settings is stale
+   * even when its sources are unchanged (D2109).
+   */
+  private modelEnv(): Record<string, string> {
+    const options = {
+      EDEN_MODEL: this.options.model,
+      EDEN_MODEL_BASE_URL: this.options.modelBaseUrl,
+      EDEN_MODEL_API_KEY: this.options.modelApiKey,
+      EDEN_MODEL_TIMEOUT_MS:
+        this.options.modelTimeoutMs === undefined ? undefined : String(this.options.modelTimeoutMs),
+    };
+    const out: Record<string, string> = {};
+    for (const name of MODEL_ENV) {
+      const value = options[name] ?? envOf(this.env, name);
+      if (value !== undefined) out[name] = value;
+    }
+    return out;
+  }
+
   /** The configured source files' identity: a server started before they existed/changed is stale. */
   private sourcesSig(): [string, number | null, number | null][] {
     const sig: [string, number | null, number | null][] = [];
@@ -285,7 +296,14 @@ export class LocalEden {
    */
   private async attach(): Promise<{ url: string; token: string; generation: number | string } | null> {
     const share = this.options.sharePath!;
-    let data: { url?: unknown; token?: unknown; generation?: unknown; pid?: unknown; sources?: unknown };
+    let data: {
+      url?: unknown;
+      token?: unknown;
+      generation?: unknown;
+      pid?: unknown;
+      sources?: unknown;
+      model?: unknown;
+    };
     try {
       data = JSON.parse(readFileSync(share, "utf8"));
     } catch {
@@ -295,7 +313,11 @@ export class LocalEden {
     const token = String(data.token ?? "");
     const generation = String(data.generation ?? "");
     if (!url || !token || !generation) return null;
-    const stale = JSON.stringify(data.sources ?? []) !== JSON.stringify(this.sourcesSig());
+    const stale =
+      JSON.stringify(data.sources ?? []) !== JSON.stringify(this.sourcesSig()) ||
+      // A record written before model settings existed reads as model-free; it is stale when the
+      // owner has model settings now (the daemon runs without them either way).
+      JSON.stringify(data.model ?? {}) !== JSON.stringify(this.modelEnv());
     try {
       // Node's fetch never honors HTTP(S)_PROXY, so loopback cannot be routed through a refusing proxy.
       const res = await fetch(`${url}/healthz`, {
@@ -408,6 +430,7 @@ export class LocalEden {
           pid: this.process.pid,
           generation: this.endpointValue.generation,
           sources: this.sourcesSig(),
+          model: this.modelEnv(),
         }),
       );
       chmodSync(tmp, 0o600);

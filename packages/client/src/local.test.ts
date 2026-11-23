@@ -129,6 +129,52 @@ test("sharePath: a second owner attaches to the recorded daemon, which outlives 
   }
 });
 
+test("sharePath: a daemon recorded with other model settings is replaced (D2109)", async () => {
+  const dir = tmpDir("eden-local-model-share-");
+  const share = join(dir, "eden", "local-endpoint.json");
+  const sourcesFile = join(dir, "sources.json");
+  writeFileSync(sourcesFile, JSON.stringify({ sources: [] }));
+  const command = [process.execPath, join(root, "packages/server/src/main.ts")];
+  const opts = {
+    home: join(dir, "data"),
+    sourcesFile,
+    env: { HOME: dir, PATH: process.env.PATH },
+    readyTimeoutMs: 10_000,
+    warn: () => {},
+  };
+  let daemonPid: number | null = null;
+  try {
+    const first = new LocalEden(command, { ...opts, sharePath: share });
+    expect(await first.endpoint()).not.toBeNull();
+    const recorded = JSON.parse(readFileSync(share, "utf8"));
+    daemonPid = recorded.pid;
+    expect(recorded.model).toEqual({});
+    first.close();
+    // Same sources, new model settings: the recorded daemon is stale and is replaced, not attached.
+    const second = new LocalEden(command, {
+      ...opts,
+      sharePath: share,
+      model: "m2",
+      modelBaseUrl: "http://127.0.0.1:1/v1",
+    });
+    expect(await second.endpoint()).not.toBeNull();
+    const newer = JSON.parse(readFileSync(share, "utf8"));
+    expect(newer.pid).not.toBe(daemonPid);
+    daemonPid = newer.pid;
+    expect(newer.model).toEqual({ EDEN_MODEL: "m2", EDEN_MODEL_BASE_URL: "http://127.0.0.1:1/v1" });
+    second.close();
+  } finally {
+    if (daemonPid) {
+      try {
+        process.kill(daemonPid, "SIGTERM");
+      } catch {
+        // Already gone.
+      }
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("sharePath: a daemon recorded before the sources changed is replaced, a dead one is dropped", async () => {
   const dir = tmpDir("eden-local-stale-");
   const share = join(dir, "eden", "local-endpoint.json");

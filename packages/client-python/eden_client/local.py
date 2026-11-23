@@ -125,10 +125,7 @@ class LocalEden:
                         env[name] = self._env[name]
             except Exception:
                 pass
-        for name in _MODEL_ENV:
-            value = self._model[name] if self._model[name] is not None else self._env.get(name)
-            if value:
-                env[name] = str(value)
+        env.update(self._model_env())
         env.update(EDEN_LOCAL="1", EDEN_LOCAL_TOKEN=token, HOST="127.0.0.1", PORT="0", EDEN_HOME=self._home)
         for key, value in (("EDEN_SOURCES_FILE", self._sources), ("EDEN_USER_SOURCES_FILE", self._users)):
             if value:
@@ -239,6 +236,15 @@ class LocalEden:
         self._backoff = min(60.0, self._backoff * 2)
         self._warn(problem)
 
+    def _model_env(self):
+        """The model env the spawned child gets; shared-server records fingerprint it too (D2109)."""
+        out = {}
+        for name in _MODEL_ENV:
+            value = self._model[name] if self._model[name] is not None else self._env.get(name)
+            if value:
+                out[name] = str(value)
+        return out
+
     def _sources_sig(self):
         """The configured source files' identity: a server started before they existed/changed is stale."""
         sig = []
@@ -264,7 +270,10 @@ class LocalEden:
             url, token, generation = str(data["url"]), str(data["token"]), str(data["generation"])
         except Exception:
             return None
-        stale = data.get("sources", []) != self._sources_sig()
+        stale = (data.get("sources", []) != self._sources_sig()
+                 # A record written before model settings existed reads as model-free; it is stale
+                 # when the owner has model settings now.
+                 or data.get("model", {}) != self._model_env())
         try:
             # Bypass proxies: some environments route loopback through a refusing HTTP proxy.
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -298,7 +307,7 @@ class LocalEden:
             tmp = self._share.with_name(self._share.name + ".tmp")
             tmp.write_text(json.dumps({"url": self._endpoint[0], "token": self._endpoint[1],
                                        "pid": self._process.pid, "generation": self._endpoint[2],
-                                       "sources": self._sources_sig()}))
+                                       "sources": self._sources_sig(), "model": self._model_env()}))
             os.chmod(tmp, 0o600)
             tmp.replace(self._share)
         except Exception:

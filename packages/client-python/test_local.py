@@ -250,6 +250,10 @@ class LocalTests(unittest.TestCase):
         self.assertEqual(child["EDEN_MODEL_API_KEY"], "k")
         self.assertEqual(child["EDEN_MODEL_TIMEOUT_MS"], "90000")
         self.assertNotIn("OPENROUTER_API_KEY", child)
+        # The share record's model fingerprint is the same resolved env (D2109).
+        self.assertEqual(owner._model_env(), {"EDEN_MODEL": "opt-model", "EDEN_MODEL_API_KEY": "k",
+                                             "EDEN_MODEL_BASE_URL": "http://env/v1",
+                                             "EDEN_MODEL_TIMEOUT_MS": "90000"})
 
     def test_invalid_sources_forward_no_credentials(self):
         source = self.root / "broken"
