@@ -1335,6 +1335,10 @@ export class ContextPartner extends PartnerAsk {
    * `/removed` answer 422 naming an unconfigured one rather than storing nothing (D2109's follow-up).
    */
   async hasSource(scope: Scope, sourceId: string): Promise<boolean> {
+    // The sync's populated view is cheap and current for engaged users; the resolver covers an
+    // unengaged or new user (whose `status` answers fresh on its first sighting) — a just-added
+    // connector is rejected only while neither holds it (config TTL), never silently dropped.
+    if (this.sync?.has(scope, sourceId)) return true;
     const all = await this.deps.sources(scope).catch((): Source[] => []);
     return all.some((x) => x.id === sourceId);
   }
