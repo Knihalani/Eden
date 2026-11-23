@@ -36,7 +36,9 @@
  *                                paths run exactly as with no model at all — the per-role switch for
  *                                endpoints whose model cannot do a role (A2: a 1.5B local model's
  *                                checks fail ~43% of calls; harmless — fails open — but the calls
- *                                are burned inference for no gain).
+ *                                are burned inference for no gain). `cardsRetry` off leaves resends on the
+ *                                cards model — the retry role is a routing variation (D66), not a separate
+ *                                call budget.
  *
  * The Anthropic provider is lab only (D97): nothing here constructs it.
  */
@@ -204,7 +206,10 @@ function allowRoles(roles: ModelRoles, allow: string | undefined): ModelRoles {
   const names = allow.split(",").map((s) => s.trim());
   for (const name of names) {
     if (!(ROLE_NAMES as readonly string[]).includes(name)) {
-      throw new Error(`EDEN_MODEL_ROLES: unknown role ${JSON.stringify(name)} (want ${ROLE_NAMES.join(",")})`);
+      // Echo only a plausible role word: anything else could be a value pasted in by mistake, and
+      // startup errors are logged unredacted.
+      const shown = /^[a-z]{2,20}$/i.test(name) ? JSON.stringify(name) : "an unprintable entry";
+      throw new Error(`EDEN_MODEL_ROLES: unknown role ${shown} (want ${ROLE_NAMES.join(",")})`);
     }
   }
   const on = new Set(names as RoleName[]);
