@@ -756,6 +756,17 @@ no model configuration at all the sidecar runs its no-model path — the push's 
 `eden-local` is the single-file binary the release archives ship (or `bun packages/server/src/main.ts` from a
 checkout); `findLocalBinary`/`resolveLocalEden` encode the search order the plugins use.
 
+**Building the binary yourself** (A1): `bun run build:local` writes `dist/local/eden-local-<platform>-<arch>`
+for the current platform; `bun run build:local --all` builds the whole matrix (linux-x64/arm64, darwin-arm64,
+windows-x64), and `--target=bun-<os>-<arch>` builds one. `bun run verify:local` smoke-tests the native binary —
+it starts it, expects the `EDEN_LOCAL_READY` line, and checks auth. Ship the matching file and point the
+command at it:
+
+```ts
+const eden = new LocalEden(["/opt/eden/eden-local-linux-x64"], { home: "<your-app>/eden" });
+// Python: LocalEden(["/opt/eden/eden-local-linux-x64"], home="<your-app>/eden")
+```
+
 ## Other languages
 
 - **TypeScript or JavaScript outside this repository:** the workspace package exports TypeScript and depends on
