@@ -5,8 +5,10 @@ export {
   DEFAULT_ROLE_MODEL,
   DEFAULT_USD_PER_TENANT_DAY,
   keyScrubber,
+  loopbackModelBase,
   modelRolesFromEnv,
   NO_MODELS,
+  type MakeLocalModel,
   type MakeRoleModel,
   type ModelRoles,
 } from "./models";

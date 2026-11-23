@@ -148,6 +148,7 @@ tenant and the box. Either way Eden's own port is never public.
 | `EDEN_CLUSTER_KEY` (24+ chars) | `openssl rand -hex 24` | `.env` on nodes and routers | replace on all at once (a rolling restart) |
 | `EDEN_S3_*` | the store's console, scoped to the one bucket | `.env` on nodes | create the new key, roll, delete the old |
 | `OPENROUTER_API_KEY` (optional) | OpenRouter | `.env` | in OpenRouter; restart |
+| `EDEN_MODEL_BASE_URL` + `EDEN_MODEL`, `EDEN_MODEL_API_KEY` (optional alternatives, D2109) | your endpoint | `.env` | rotate the endpoint's key; restart |
 | Hetzner / Oracle API tokens | the console | your shell (`TF_VAR_…`), never a file | in the console |
 
 Never in cloud-init user data (readable from the metadata service), an image, a compose file, a repository or a

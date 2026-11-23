@@ -453,6 +453,9 @@ curl -s http://127.0.0.1:8791/v1/messages -H "x-api-key: $ANTHROPIC_API_KEY" -H 
 The packet is not in the answer: it went to the model. To see what Eden added, ask the server
 (`POST $EDEN_URL/v1/explain {"userId":"u1","sessionId":"chat-1"}` lists the item ids it handed out and why).
 
+The upstream can be local too: `EDEN_PROXY_UPSTREAM=http://localhost:11434/v1` puts Eden in front of an
+Ollama/LM Studio-style endpoint, so an agent on local models gets context with zero code changes.
+
 `EDEN_PROXY_UPSTREAM` keeps the provider's version path (`/v1`, `/api/v1`; the proxy warns at startup when it has no
 path). `EDEN_URL` defaults to `http://127.0.0.1:8790`; `EDEN_API_KEY` is one of the server's `EDEN_API_KEYS` keys
 (omit it against `EDEN_DEV=1`). `PROXY_PORT` and `PROXY_HOST` move the proxy (default `127.0.0.1:8791`), and
@@ -647,7 +650,8 @@ rather than reading another profile's process-wide source settings.
 
 The plugin owns a private sidecar for its lifetime. The sidecar listens only on IPv4 loopback on an OS-assigned
 port and uses a fresh bearer token never entered into Hermes' config. Eden does not use remote model roles or
-persist its cache or source map in this mode; a restart reads sources again. Eden contacts only the connectors
+persist its cache or source map in this mode; a restart reads sources again. With `EDEN_MODEL_BASE_URL` set its
+model roles call that endpoint (loopback included, D2109); unset, it makes no model calls. Eden contacts only the connectors
 you configure. Hermes still sends its prompt, including any injected context, to the model provider **you**
 configured; use a local Hermes model and local sources if that data must not leave the machine.
 
@@ -696,7 +700,9 @@ platforms were run natively.
 
 Each personal-agent product gets the same contract through its own extension surface — reporting,
 packet injection, `ask_context`, the party check, an installer that drops the plugin and `eden-local`
-beside the agent's home:
+beside the agent's home. An agent whose own model is local (Ollama, LM Studio, vLLM, llama.cpp, any
+OpenAI-compatible endpoint) can put Eden's background model roles on the same endpoint: `EDEN_MODEL_BASE_URL`
+plus `EDEN_MODEL` reach the sidecar's env and are used instead of OpenRouter (D2109); nothing else is needed.
 
 | Agent                                                         | Package                       | Surface                                                                                   | Deny seam                        | Install                                                                    |
 | ------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
@@ -723,6 +729,32 @@ One installer covers every agent whose home exists on the machine: `python3 exam
 detects the homes, runs each agent's own `install.py`, and reports per agent (`--list` shows what
 was detected, `--agents a,b` and `--<agent>-home PATH` override, `--dry-run` prints without
 running — D2000).
+
+## Your own app: start Eden from your code (`LocalEden`)
+
+A custom agent with no plugin surface to hook into can still embed Eden: depend on the client and let it start
+the sidecar. `LocalEden` (TypeScript) / `eden_client.LocalEden` (Python) spawn `eden-local` on first use — the
+same loopback-only, per-process sidecar the plugins get — and hand it a fresh bearer token that never touches
+your config. Everything still fails open (D14): no binary, no endpoint, no packet — your agent just runs on.
+
+```ts
+import { EdenClient, LocalEden } from "@eden/client";   // or: from eden_client import EdenClient, LocalEden
+
+const eden = new LocalEden(["/path/to/eden-local"], {
+  home: "<your-app>/eden",          // its state dir
+  sourcesFile: "./sources.json",    // optional static docs
+  modelBaseUrl: "http://localhost:11434/v1", // optional: your local model endpoint…
+  model: "qwen3:8b",                              // …and the model it serves (D2109)
+});
+const endpoint = await eden.endpoint();            // starts the sidecar lazily; null = run without Eden
+const client = endpoint && new EdenClient(endpoint.url, { token: endpoint.token });
+```
+
+Point the model options at the same endpoint your agent calls and Eden's roles run there too; unset, the owner's
+own `EDEN_MODEL_*` environment carries through, so a launcher that already exports them needs nothing new. With
+no model configuration at all the sidecar runs its no-model path — the push's candidates included — at $0.
+`eden-local` is the single-file binary the release archives ship (or `bun packages/server/src/main.ts` from a
+checkout); `findLocalBinary`/`resolveLocalEden` encode the search order the plugins use.
 
 ## Other languages
 
@@ -777,6 +809,10 @@ the poll, the slow-path queue, vocabulary release). Run it as shipped:
   budget, and one cap per tenant per day spans them all (`EDEN_MODEL_USD_PER_TENANT_DAY`, default $25). Cost per task
   and per user is in [COST-MODEL.md](COST-MODEL.md); disclose the model provider to your users
   ([PRIVACY.md](PRIVACY.md)).
+- **With `EDEN_MODEL_BASE_URL` + `EDEN_MODEL` set**, the same roles run on any OpenAI-compatible endpoint instead
+  — Ollama (`http://localhost:11434/v1`), LM Studio (`http://localhost:1234/v1`), vLLM, llama.cpp, or a hosted
+  gateway (D2109). `EDEN_MODEL_API_KEY` and `EDEN_MODEL_TIMEOUT_MS` (default 120 s) are optional; a loopback
+  endpoint needs no key and bills $0. Setting this and `OPENROUTER_API_KEY` together stops startup: choose one.
 - **Without a key**, the same default runs its no-model path: nothing to change. The push's candidates make no model
   call and run there too (D276): a request that acts or opens like an instruction gets up to five items to check, at $0.
 - Pass the client's default wait (3,000 ms on a sent user message, `DEFAULT_WAIT_MS`); see the waitMs section above.

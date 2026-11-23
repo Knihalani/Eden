@@ -20,7 +20,7 @@ import { sourcesOrExit } from "./connectors";
 import { buildPartner, startGatePool, tenantSpendFor, turnGateNotice } from "./build";
 import { engineConfig } from "./engine-config";
 import { createHandler } from "./http";
-import { modelRolesFromEnv, NO_MODELS } from "./models";
+import { loopbackModelBase, modelRolesFromEnv } from "./models";
 import { localBoundary, localConfig, redirectLocalConsole, watchLocalInput } from "./local";
 import { S3BlobStore } from "./blob-store";
 import { nodesFromEnv, runCluster, runEdge, topTableFromEnv } from "./cluster";
@@ -41,11 +41,15 @@ if (config.dev && !config.child && !["127.0.0.1", "localhost", "::1"].includes(c
   console.error(`eden: EDEN_DEV=1 on ${config.host}: anyone who can reach this port is served without a key`);
 }
 // D858: a dev server (the quick start, the examples, smoke runs) inheriting OPENROUTER_API_KEY from a shell turned its
-// model roles on and made paid calls nobody asked for. It refuses to start unless the calls are wanted.
-if (config.dev && !config.child && process.env.OPENROUTER_API_KEY && process.env.EDEN_ALLOW_MODEL_ROLES !== "1") {
+// model roles on and made paid calls nobody asked for. It refuses to start unless the calls are wanted. D2109: an
+// EDEN_MODEL_BASE_URL off this machine can bill too; a loopback one (Ollama, LM Studio) cannot and is let through.
+const paidRoles =
+  Boolean(process.env.OPENROUTER_API_KEY) ||
+  (process.env.EDEN_MODEL_BASE_URL !== undefined && !loopbackModelBase(process.env.EDEN_MODEL_BASE_URL));
+if (config.dev && !config.child && paidRoles && process.env.EDEN_ALLOW_MODEL_ROLES !== "1") {
   console.error(
-    "eden: EDEN_DEV=1 with OPENROUTER_API_KEY set would make paid model calls; start it with " +
-      "`env -u OPENROUTER_API_KEY …`, or set EDEN_ALLOW_MODEL_ROLES=1 to allow them (D858)",
+    "eden: EDEN_DEV=1 with a paid model endpoint (OPENROUTER_API_KEY, or an EDEN_MODEL_BASE_URL off this machine) " +
+      "would make paid model calls; unset it, or set EDEN_ALLOW_MODEL_ROLES=1 to allow them (D858)",
   );
   process.exit(2);
 }
@@ -132,7 +136,9 @@ async function serve(config: ServerConfig): Promise<void> {
   // pool, so a bad sources file exits 2 with its message before any worker starts.
   const sources = sourcesOrExit();
   const gatePool = await startGatePool(config.gateWorkers);
-  const models = local ? NO_MODELS : modelRolesFromEnv();
+  // Local mode's scrubbed env holds model settings only when the embedder passed EDEN_MODEL_* through (D2109);
+  // everywhere else the usual key/base-url gate applies. Either way, no settings means no roles.
+  const models = modelRolesFromEnv();
   // Held here so a shutdown can write its last outcome batch (`SourceMap.close` flushes).
   const sourceMap = new SourceMap(config.sourceMapPath);
   const child = config.child;
@@ -146,7 +152,8 @@ async function serve(config: ServerConfig): Promise<void> {
     sourceMap,
     queryPlanner: config.queryPlanner,
     engine,
-    // Cards, intent and the reader on OPENROUTER_API_KEY's model (D112); without a key, the default's no-model path.
+    // Cards, intent and the reader on the configured model (D112; OpenRouter or EDEN_MODEL_BASE_URL, D2109);
+    // with neither, the default's no-model path.
     models,
     // A router child holds 1/N of each tenant's daily model spend (D163), 1/(N x machines) in a cluster (D992).
     processes: share,

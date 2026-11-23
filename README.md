@@ -6,7 +6,9 @@ context the agent needs in front of it before it knows to ask. Most of the time 
 
 - **Not a subagent.** A subagent only answers what the agent thinks to ask. Eden watches the session and speaks first.
 - **Model as last resort.** Cues, a learned source map and a local index decide most turns, with no model call.
-  With `OPENROUTER_API_KEY` set, one model (`EDEN_MODEL`, default Claude Haiku 5.5 via OpenRouter, ZDR routing) writes
+  With `OPENROUTER_API_KEY` set — or `EDEN_MODEL_BASE_URL` + `EDEN_MODEL` pointing at any OpenAI-compatible
+  endpoint, local ones included (Ollama, LM Studio, vLLM, llama.cpp; D2109) — one model
+  (`EDEN_MODEL`, default Claude Haiku 5.5 via OpenRouter, ZDR routing) writes
   implication cards and the intent index in the background, under per-session budgets and a per-tenant daily cap. For
   a request that acts or opens like an instruction, Eden hands the agent the five best candidates it found, framed to
   be checked against the
@@ -70,9 +72,10 @@ Four things that tripped first-time users (fresh-eyes walkthroughs, D856):
   else (both clients, the examples, the proxy and `bun run doctor` read it when no base URL is passed).
 - **Keys in dev mode:** with `EDEN_DEV=1` pass no API key at all (unset `apiKey`/`api_key`, no `EDEN_API_KEY`): a dev
   server accepts a missing key and refuses any made-up one with a 401.
-- **Staying at $0:** a dev server refuses to start when `OPENROUTER_API_KEY` is in its environment (it would make
-  paid model calls in the background, D858): start it with `env -u OPENROUTER_API_KEY …`, or set
-  `EDEN_ALLOW_MODEL_ROLES=1` if you want the model roles.
+- **Staying at $0:** a dev server refuses to start when `OPENROUTER_API_KEY` or a non-loopback
+  `EDEN_MODEL_BASE_URL` is in its environment (either would make paid model calls in the background, D858, D2109):
+  start it with `env -u OPENROUTER_API_KEY -u EDEN_MODEL_BASE_URL …`, or set `EDEN_ALLOW_MODEL_ROLES=1` if you
+  want the model roles. A loopback `EDEN_MODEL_BASE_URL` (Ollama and friends) is free and allowed.
 - **One `sessionId` per conversation:** an item is handed out once per session, so a second script (or the curls
   above) reusing `"s"` gets `(shown above)` instead of the text. Use a fresh session id per run or conversation.
 

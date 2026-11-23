@@ -8,6 +8,9 @@
  * EDEN_SOURCE_MAP    path of the source-map database; default $EDEN_HOME/source-map.db.
  * OPENROUTER_API_KEY turns on the default's model roles (cards, intent, the ask-time reader; models.ts, D112);
  *                    without it the same default runs with no model at all.
+ * EDEN_MODEL_BASE_URL runs the roles on any OpenAI-compatible endpoint instead — a local server included —
+ *                    with EDEN_MODEL naming the model it serves and EDEN_MODEL_API_KEY/EDEN_MODEL_TIMEOUT_MS
+ *                    optional (D2109); setting it and OPENROUTER_API_KEY together stops startup.
  * EDEN_MODEL         the roles' model, default anthropic/claude-haiku-5.5 through OpenRouter (D12's routing).
  * EDEN_MODEL_USD_PER_TENANT_DAY one cap on a tenant's model spend per UTC day, across roles; default 25.
  * EDEN_MODEL_CACHE   `off` stops Anthropic cache breakpoints on the roles' stable prefix (on by default, D1790).

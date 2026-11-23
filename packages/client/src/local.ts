@@ -46,6 +46,14 @@ function* credentialNames(value: unknown): Generator<string> {
   }
 }
 
+/**
+ * The spawned Eden's own model configuration (D2109): the OpenAI-compatible endpoint its roles call. These are
+ * Eden's settings, not credentials — they pass through `allowed`'s EDEN_ block on purpose, so an embedder whose
+ * agent runs on a local model gives its Eden the same. An explicit `LocalEdenOptions` field wins over the
+ * owner process's own variable of the same name.
+ */
+const MODEL_ENV = ["EDEN_MODEL", "EDEN_MODEL_BASE_URL", "EDEN_MODEL_API_KEY", "EDEN_MODEL_TIMEOUT_MS"] as const;
+
 function allowed(name: string): boolean {
   const upper = name.toUpperCase();
   return (
@@ -71,6 +79,20 @@ export interface LocalEdenOptions {
   sharePath?: string;
   /** The environment the child filters down from (default `process.env`). */
   env?: Record<string, string | undefined>;
+  /**
+   * The model the spawned Eden's roles run on, when it has any (D2109): the model name an OpenAI-compatible
+   * endpoint serves (`EDEN_MODEL`). Unset, the owner's own EDEN_MODEL is inherited.
+   */
+  model?: string;
+  /**
+   * That model's endpoint (`EDEN_MODEL_BASE_URL`): `http://localhost:11434/v1` for Ollama, `:1234/v1` for
+   * LM Studio, or any OpenAI-compatible base URL. Unset, the owner's EDEN_MODEL_BASE_URL is inherited.
+   */
+  modelBaseUrl?: string;
+  /** The endpoint's bearer when it wants one (`EDEN_MODEL_API_KEY`); Ollama and LM Studio need none. */
+  modelApiKey?: string;
+  /** The roles' call deadline in ms (`EDEN_MODEL_TIMEOUT_MS`). */
+  modelTimeoutMs?: number | string;
   readyTimeoutMs?: number;
   /** For the caller's log lines; defaults to `console.error`-style stderr writes. */
   warn?: (problem: string) => void;
@@ -125,6 +147,19 @@ export class LocalEden {
     }
     for (const name of names) {
       if (allowed(name) && this.env[name] !== undefined) env[name] = this.env[name]!;
+    }
+    // The embedder's model endpoint for the roles (MODEL_ENV): the option wins, else the owner's own
+    // variable of the name — an app whose agent already runs on a local model sets it once for both.
+    const model = {
+      EDEN_MODEL: this.options.model,
+      EDEN_MODEL_BASE_URL: this.options.modelBaseUrl,
+      EDEN_MODEL_API_KEY: this.options.modelApiKey,
+      EDEN_MODEL_TIMEOUT_MS:
+        this.options.modelTimeoutMs === undefined ? undefined : String(this.options.modelTimeoutMs),
+    };
+    for (const name of MODEL_ENV) {
+      const value = model[name] ?? envOf(this.env, name);
+      if (value !== undefined) env[name] = value;
     }
     Object.assign(env, {
       EDEN_LOCAL: "1",

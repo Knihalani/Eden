@@ -37,6 +37,48 @@ test("a local child answers on loopback with its fresh token, then closes", asyn
   }
 });
 
+test("the spawned child sees the local-model options, else the owner's EDEN_MODEL_* (D2109)", async () => {
+  const dir = tmpDir("eden-local-model-env-");
+  const script = join(dir, "dump-env.ts");
+  writeFileSync(
+    script,
+    `import { mkdirSync, writeFileSync } from "node:fs";
+     import { join } from "node:path";
+     mkdirSync(process.env.EDEN_HOME!, { recursive: true });
+     writeFileSync(join(process.env.EDEN_HOME!, "env.json"), JSON.stringify(process.env));
+     console.log("EDEN_LOCAL_READY 9");
+     setTimeout(() => {}, 60_000);`,
+  );
+  const eden = new LocalEden([process.execPath, script], {
+    home: join(dir, "data"),
+    model: "opt-model",
+    modelApiKey: "k",
+    modelTimeoutMs: 90_000,
+    env: {
+      HOME: dir,
+      PATH: process.env.PATH,
+      EDEN_MODEL: "env-model",
+      EDEN_MODEL_BASE_URL: "http://env/v1",
+      OPENROUTER_API_KEY: "secret",
+    },
+    readyTimeoutMs: 10_000,
+    warn: () => {},
+  });
+  try {
+    expect(await eden.endpoint()).not.toBeNull();
+    const child = JSON.parse(readFileSync(join(dir, "data", "env.json"), "utf8"));
+    // The option wins where set; the owner's own variable carries the rest.
+    expect(child.EDEN_MODEL).toBe("opt-model");
+    expect(child.EDEN_MODEL_BASE_URL).toBe("http://env/v1");
+    expect(child.EDEN_MODEL_API_KEY).toBe("k");
+    expect(child.EDEN_MODEL_TIMEOUT_MS).toBe("90000");
+    expect(child.OPENROUTER_API_KEY).toBeUndefined();
+  } finally {
+    eden.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("sharePath: a second owner attaches to the recorded daemon, which outlives the first", async () => {
   const dir = tmpDir("eden-local-shared-");
   const share = join(dir, "eden", "local-endpoint.json");

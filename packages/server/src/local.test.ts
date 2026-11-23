@@ -46,6 +46,26 @@ test("a state dir makes local state durable: a generated key, frozen dir, file s
   expect(second.persist!.dir).toBe(config.persist!.dir);
 });
 
+test("local mode keeps the local-model env and drops other model credentials (D2109)", () => {
+  const env: Record<string, string> = {
+    EDEN_LOCAL: "1",
+    EDEN_LOCAL_TOKEN: token,
+    EDEN_MODEL_BASE_URL: "http://localhost:11434/v1",
+    EDEN_MODEL: "qwen3:8b",
+    EDEN_MODEL_API_KEY: "local-key",
+    EDEN_MODEL_TIMEOUT_MS: "60000",
+    OPENROUTER_API_KEY: "paid-key",
+    EDEN_SESSION_SECRET: "inherited",
+  };
+  expect(localConfig(env)).not.toBeNull();
+  expect(env.EDEN_MODEL_BASE_URL).toBe("http://localhost:11434/v1");
+  expect(env.EDEN_MODEL).toBe("qwen3:8b");
+  expect(env.EDEN_MODEL_API_KEY).toBe("local-key");
+  expect(env.EDEN_MODEL_TIMEOUT_MS).toBe("60000");
+  expect(env.OPENROUTER_API_KEY).toBeUndefined();
+  expect(env.EDEN_SESSION_SECRET).toBeUndefined();
+});
+
 test("all local console diagnostics leave stdout empty", async () => {
   const file = new URL("./local.ts", import.meta.url).pathname;
   const child = Bun.spawn(
