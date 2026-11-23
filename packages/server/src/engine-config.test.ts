@@ -217,12 +217,33 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     }
     expect(roles.reader!.id).toBe("fake-local");
     expect(roles.scrub!("header Bearer k-local").includes("k-local")).toBe(false);
+    // A loopback endpoint bills nothing: roles are built free of the tenant cap and the model is told
+    // its calls cannot spend (D2109).
+    expect(seen.every((o) => o.freeCalls === true)).toBe(true);
+    expect(roles.usdPerTenantDay).toBe(Number.POSITIVE_INFINITY);
+    // Off this machine the cap still binds and an unpriced reply is priced like an OpenRouter call.
+    seen.length = 0;
+    const remote = modelRolesFromEnv(
+      { EDEN_MODEL_BASE_URL: "http://192.168.1.5:8000/v1", EDEN_MODEL: "m", EDEN_MODEL_USD_PER_TENANT_DAY: "4" },
+      undefined,
+      makeLocal as never,
+    );
+    expect(seen[0]!.freeCalls).toBe(false);
+    expect(remote.usdPerTenantDay).toBe(4);
     // Ambiguous or incomplete configurations stop startup rather than silently picking a provider.
     expect(() =>
       modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "http://x/v1", EDEN_MODEL: "m", OPENROUTER_API_KEY: "k" }),
     ).toThrow(/not both/);
     expect(() => modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "http://x/v1" })).toThrow(/EDEN_MODEL/);
-    expect(() => modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "not a url", EDEN_MODEL: "m" })).toThrow(/must be a URL/);
+    // A malformed base URL stops startup without echoing the value: it can carry credentials and the
+    // error goes to the log (D2109).
+    try {
+      modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "not a url:secret@h", EDEN_MODEL: "m" });
+      expect.unreachable();
+    } catch (e) {
+      expect(String(e)).toContain("must be a URL");
+      expect(String(e)).not.toContain("secret");
+    }
     expect(() => modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "ftp://x/v1", EDEN_MODEL: "m" })).toThrow(/http/);
     expect(() =>
       modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "http://x/v1", EDEN_MODEL: "m", EDEN_MODEL_TIMEOUT_MS: "soon" }),

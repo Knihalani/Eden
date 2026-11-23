@@ -123,7 +123,9 @@ export function modelRolesFromEnv(
     try {
       parsed = new URL(baseUrl);
     } catch {
-      throw new Error(`EDEN_MODEL_BASE_URL must be a URL, got ${baseUrl}`);
+      // The value stays out of the error: a base URL can carry credentials (`…://user:key@host`) and
+      // startup errors go to the server log, where a key must never land (D2109).
+      throw new Error("EDEN_MODEL_BASE_URL must be a URL");
     }
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       throw new Error(`EDEN_MODEL_BASE_URL must be http or https, got ${parsed.protocol}`);
@@ -132,6 +134,7 @@ export function modelRolesFromEnv(
     if (!model) {
       throw new Error("EDEN_MODEL_BASE_URL needs EDEN_MODEL to name the model the endpoint serves");
     }
+    const free = loopbackModelBase(baseUrl);
     // One hold for every role, as on OpenRouter: a local server can answer 429 too.
     const options: LocalModelOptions = {
       baseUrl,
@@ -139,12 +142,16 @@ export function modelRolesFromEnv(
       apiKey: env.EDEN_MODEL_API_KEY,
       timeoutMs: modelTimeout(env.EDEN_MODEL_TIMEOUT_MS),
       rateHold: new RateHold(),
+      freeCalls: free,
     };
     return {
       reader: makeLocal(options),
       cards: makeLocal(options),
       cardsRetry: makeLocal(options),
-      usdPerTenantDay,
+      // A loopback endpoint bills nothing, so the tenant spend cap is lifted for it: a 0 there would
+      // otherwise refuse free calls (the per-session and per-user estimates stay, tiny and unsettled
+      // at $0 — D2109). Off this machine the cap keeps binding, priced when the server stays silent.
+      usdPerTenantDay: free ? Number.POSITIVE_INFINITY : usdPerTenantDay,
       scrub: keyScrubber(env.EDEN_MODEL_API_KEY ?? ""),
     };
   }

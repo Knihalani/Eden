@@ -261,7 +261,7 @@ async function serve(config: ServerConfig): Promise<void> {
         : "; frozen users NOT persisted (EDEN_PERSIST=off or dev mode): a restart re-reads every user's sources") +
       (child
         ? `; router child ${child.index} of ${child.count}, per-tenant caps divided by ${child.count}:` +
-          ` $${round(models.usdPerTenantDay / child.count)}/day,` +
+          ` ${Number.isFinite(models.usdPerTenantDay) ? `$${round(models.usdPerTenantDay / child.count)}` : "uncapped (free endpoint)"}/day,` +
           ` ${round(config.tenantRatePerSec)} rps, burst ${round(config.tenantBurst)}`
         : "") +
       ")",
