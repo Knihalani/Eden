@@ -1274,7 +1274,11 @@ export abstract class PartnerVerdict extends PartnerCheck {
     const want = dayKeys(days);
     const clsOf = (item: ContextItem): number | undefined => {
       const f = dayFactsOf(item.title, item.text);
-      if (f === 0) return item.meta?.start !== undefined && days.has(item.meta.start.slice(0, 10)) ? 0 : undefined;
+      if (f === 0) {
+        if (item.meta?.start !== undefined && days.has(item.meta.start.slice(0, 10))) return 0;
+        if (item.meta?.day !== undefined && days.has(dayOf(item.meta.day, cue.offset))) return 2;
+        return undefined;
+      }
       const c = dayFactsClass(f, days, want, item.updatedAt ?? this.now());
       return c > 0 ? c : undefined;
     };

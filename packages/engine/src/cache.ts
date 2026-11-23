@@ -632,6 +632,18 @@ function indexEntry(u: UserCache, e: Entry, by: 1 | -1, affiliations = true): vo
   const start = e.item.meta?.start;
   const raw = start && rawStartDay(start);
   if (raw) bucket(u.starts, raw, e, by);
+  // `meta.day` (a local source's "present on this day", e.g. a file's modified day): day-seated but
+  // never an event — `starts`, `timed`, zone and clash paths read `meta.start` only. A bare
+  // "YYYY-MM-DD" buckets itself; an instant buckets the UTC day and either side, so the exact check
+  // can seat it on the day it is at the user's offset (up to a day either way of UTC).
+  const metaDay = e.item.meta?.day;
+  if (metaDay !== undefined) {
+    const keys = metaDay.length === 10 ? [metaDay] : nearbyDays(metaDay.slice(0, 10));
+    for (const d of keys) {
+      const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(d);
+      if (m) bucket(u.days, (Number(m[1]) - 1) * 32 + Number(m[2]), e, by);
+    }
+  }
   const facts = e.dayIndex ?? e.dates;
   if (facts !== undefined) for (const k of factDays(facts)) bucket(u.days, k, e, by);
 }
@@ -683,7 +695,7 @@ export interface CacheHit {
   matched: number;
   /**
    * `timed`/`dated` only: how the item sits on a requested day — 0 starts that day, 1 covers it (a span, or a
-   * weekday it recurs on), 2 names it in text. Undefined for a word-found hit.
+   * weekday it recurs on), 2 names it in text or is stamped `meta.day`. Undefined for a word-found hit.
    */
   dayCls?: number;
 }
@@ -1897,6 +1909,13 @@ export class ItemCache {
         const t = parseWhen(start);
         found.push({ e, cls: 0, at: Number.isNaN(t) ? Number.POSITIVE_INFINITY : t });
         all?.set(e.doc, 0);
+        continue;
+      }
+      // `meta.day` sits on its day like a written date (class 2), ordered by newest edit. An instant
+      // is read at the user's offset (`dayOf`), a bare day keeps its date.
+      if (e.item.meta?.day !== undefined && days.has(dayOf(e.item.meta.day, offset))) {
+        found.push({ e, cls: 2, at: -(e.item.updatedAt ?? 0) });
+        all?.set(e.doc, 2);
         continue;
       }
       e.dates ??= e.dayIndex!;

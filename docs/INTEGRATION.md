@@ -254,7 +254,7 @@ The server reads the end user's accounts with that user's credentials, never ano
   ```
 
   The file is checked at startup (a bad entry or an unset env header stops the server with a message naming it) and
-  re-read when it changes, entry by entry (a broken entry is that user's error; the rest apply). `EDEN_SOURCES_FILE` stays for static documents every user shares; its entries need `docs`.
+  re-read when it changes, entry by entry (a broken entry is that user's error; the rest apply). `EDEN_SOURCES_FILE` stays for static documents every user shares; its entries need `docs` — or `kind: "file"` with `paths` (below).
   Since the 2026-11-05 audit the server checks this file at start and exits with code 2, naming the entry, where it
   once loaded silently: an entry with no `description`, an id outside `[A-Za-z0-9._:@-]` (such as "My Notes"), a
   duplicate id, a document missing `ref`, `title` or `text`, or a file that is not a list (`{}`). Fix the named entry;
@@ -282,6 +282,20 @@ and five sources are read in about ten seconds. Send one as soon as the user has
 their first request: `observe({ kind: "session_start" })` is enough (no text, no request). A user whose first event
 is their first request gets that request answered from live searches alone: on the lab's new users Eden surfaced
 48% of hidden facts at second 0 and 78% ten seconds later (docs/research/o4-new-user.md).
+
+## Local files as a source (A3)
+
+A `kind: "file"` entry watches local paths — directories (recursively) or glob patterns — with no connector to run.
+One line in `EDEN_SOURCES_FILE` (shared) or a user's `EDEN_USER_SOURCES_FILE` entry:
+
+```json
+{ "kind": "file", "id": "notes", "description": "The user's notes", "paths": ["~/notes", "~/docs/**/*.md"] }
+```
+
+`paths` entries are a file, a directory tree, or a glob; `~` expands to the daemon's home. Each poll rescans the
+paths and re-reads only files whose mtime or size changed (a deleted file reports gone by ref). Optional `maxBytes`
+(per-file text cut, default 512 KiB) and `maxFiles` (default 10,000, newest kept). Binary files are skipped; text is
+cut, never refused.
 
 ### Connector presets (D294)
 
