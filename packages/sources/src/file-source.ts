@@ -80,21 +80,17 @@ function readText(path: string, maxBytes: number): string | null {
   }
 }
 
-/** The device's own YYYY-MM-DD for an mtime: the day the file's owner would call it. */
-function localDay(mtimeMs: number): string {
-  const d = new Date(mtimeMs);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 /**
- * Item meta for a file: directory, extension and size always; `day` (the mtime's local day) only when
- * the file itself names no day. `meta.day` marks the note as present on that day for the day index and
+ * Item meta for a file: directory, extension and size always; `day` (the mtime as an instant) only when
+ * the file itself names no day. `meta.day` marks the note as present on its day for the day index and
  * seat days — it is NOT `meta.start`: an event start would pull a plain note into clash checks, the
  * calendar's zone tally and supersession rules, which a touched file must not reach.
  */
 function fileMeta(path: string, size: number, mtimeMs: number, text: string): Record<string, string> {
   const meta: Record<string, string> = { dir: dirname(path), ext: extname(path), size: String(size) };
-  if (dayFactsOf(basename(path), text) === 0) meta.day = localDay(mtimeMs);
+  // `meta.day` is the instant the file belongs to day-wise (its mtime), resolved at the user's offset by the
+  // readers that seat it — a day stamped here at the daemon's zone would sit a day off when they differ.
+  if (dayFactsOf(basename(path), text) === 0) meta.day = new Date(mtimeMs).toISOString();
   return meta;
 }
 
@@ -193,10 +189,12 @@ export class FileSource implements Source {
     const w = query.window;
     if (!w || items.length >= query.limit) return items;
     const have = new Set(items.map((i) => i.ref));
+    // The window's days are at the user's offset (`offsetMinutes`), so the mtime day is read there too.
+    const offset = (w.offsetMinutes ?? 0) * 60_000;
     for (const { doc, mtimeMs } of [...this.held.values()].sort((a, b) => b.mtimeMs - a.mtimeMs)) {
       if (items.length >= query.limit) break;
       if (have.has(doc.ref)) continue;
-      const day = localDay(mtimeMs);
+      const day = new Date(mtimeMs + offset).toISOString().slice(0, 10);
       if (day >= w.start && day < w.end) {
         items.push({ ...doc, id: itemId(this.id, doc.ref), sourceId: this.id });
       }
