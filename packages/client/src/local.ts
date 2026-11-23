@@ -53,7 +53,14 @@ function* credentialNames(value: unknown): Generator<string> {
  * agent runs on a local model gives its Eden the same. An explicit `LocalEdenOptions` field wins over the
  * owner process's own variable of the same name.
  */
-const MODEL_ENV = ["EDEN_MODEL", "EDEN_MODEL_BASE_URL", "EDEN_MODEL_API_KEY", "EDEN_MODEL_TIMEOUT_MS"] as const;
+const MODEL_ENV = [
+  "EDEN_MODEL",
+  "EDEN_MODEL_BASE_URL",
+  "EDEN_MODEL_API_KEY",
+  "EDEN_MODEL_TIMEOUT_MS",
+  // No option of its own: an owner's role allowlist is inherited like the rest of the endpoint's env.
+  "EDEN_MODEL_ROLES",
+] as const;
 
 function allowed(name: string): boolean {
   const upper = name.toUpperCase();

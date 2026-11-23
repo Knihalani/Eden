@@ -43,7 +43,14 @@ def _allowed(name):
 # The spawned Eden's own model configuration (D2109): the OpenAI-compatible endpoint its roles call.
 # These are Eden's settings, not credentials — they pass through ``_allowed``'s ``EDEN_`` block on
 # purpose, so an embedder whose agent runs on a local model gives its Eden the same.
-_MODEL_ENV = ("EDEN_MODEL", "EDEN_MODEL_BASE_URL", "EDEN_MODEL_API_KEY", "EDEN_MODEL_TIMEOUT_MS")
+# No kwarg of its own: an owner's role allowlist is inherited like the rest of the endpoint's env.
+_MODEL_ENV = (
+    "EDEN_MODEL",
+    "EDEN_MODEL_BASE_URL",
+    "EDEN_MODEL_API_KEY",
+    "EDEN_MODEL_TIMEOUT_MS",
+    "EDEN_MODEL_ROLES",
+)
 
 
 _HOLDER = (

@@ -39,6 +39,8 @@ const ALLOWED = new Set([
   "EDEN_MODEL_BASE_URL",
   "EDEN_MODEL_API_KEY",
   "EDEN_MODEL_TIMEOUT_MS",
+  // The role allowlist rides along too: an embedder that cut a role at the owner means it cut.
+  "EDEN_MODEL_ROLES",
 ]);
 
 /** The detached daemon's stderr cap: the file is renamed to `.1` past it, once per start (as the client's cap). */
