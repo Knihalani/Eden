@@ -130,25 +130,36 @@ function localState(dir: string | undefined): {
     key = null;
   }
   if (key === null) {
-    key = randomBytes(32);
-    // Offer the key atomically: a per-process tmp is fully written, then hard-linked so the first
+    // Offer a key atomically: a per-process tmp is fully written, then hard-linked so the first
     // sidecar of a shared profile to link wins and every loser re-reads the winner's file — each
     // daemon ends with the same key (a losing key held only in memory would orphan its frozen
     // blobs on the next restart). A filesystem without hard links falls back to rename.
+    const ours = `${Buffer.from(randomBytes(32)).toString("hex")}\n`;
     const tmp = `${keyPath}.${process.pid}.tmp`;
     try {
-      writeFileSync(tmp, `${Buffer.from(key).toString("hex")}\n`, { mode: 0o600 });
+      writeFileSync(tmp, ours, { mode: 0o600 });
       try {
         linkSync(tmp, keyPath);
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "EEXIST") renameSync(tmp, keyPath);
       }
-      unlinkSync(tmp);
+      if (existsSync(tmp)) unlinkSync(tmp);
       const raw = readFileSync(keyPath, "utf8").trim();
       key = raw.length === 64 ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
       if (key.length !== 32) key = null;
     } catch {
-      return null; // A read-only home stays volatile rather than stopping the daemon.
+      key = null;
+    }
+    if (key === null) {
+      // No winner answered (or a corrupt one: a crashed writer's half file, which otherwise never
+      // heals): replace it with our tmp. Any failure here keeps the home volatile, not a failed start.
+      try {
+        writeFileSync(tmp, ours, { mode: 0o600 });
+        renameSync(tmp, keyPath);
+        key = Buffer.from(ours.trim(), "hex");
+      } catch {
+        return null; // A read-only home stays volatile rather than stopping the daemon.
+      }
     }
   }
   if (key === null) return null;
