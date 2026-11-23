@@ -230,6 +230,13 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     );
     expect(seen[0]!.freeCalls).toBe(false);
     expect(remote.usdPerTenantDay).toBe(4);
+    // Loopback with a cap the operator set: it binds, for a gateway that fronts a paid provider.
+    const gated = modelRolesFromEnv(
+      { EDEN_MODEL_BASE_URL: "http://localhost:11434/v1", EDEN_MODEL: "m", EDEN_MODEL_USD_PER_TENANT_DAY: "0.5" },
+      undefined,
+      makeLocal as never,
+    );
+    expect(gated.usdPerTenantDay).toBe(0.5);
     // Ambiguous or incomplete configurations stop startup rather than silently picking a provider.
     expect(() =>
       modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "http://x/v1", EDEN_MODEL: "m", OPENROUTER_API_KEY: "k" }),

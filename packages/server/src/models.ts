@@ -148,10 +148,11 @@ export function modelRolesFromEnv(
       reader: makeLocal(options),
       cards: makeLocal(options),
       cardsRetry: makeLocal(options),
-      // A loopback endpoint bills nothing, so the tenant spend cap is lifted for it: a 0 there would
-      // otherwise refuse free calls (the per-session and per-user estimates stay, tiny and unsettled
-      // at $0 — D2109). Off this machine the cap keeps binding, priced when the server stays silent.
-      usdPerTenantDay: free ? Number.POSITIVE_INFINITY : usdPerTenantDay,
+      // A loopback endpoint bills nothing, so an unset tenant spend cap is lifted for it: a 0 there
+      // would refuse free calls (the per-session and per-user estimates stay, tiny and unsettled at
+      // $0 — D2109). A configured cap keeps binding: a loopback gateway can front a paid provider.
+      usdPerTenantDay:
+        free && env.EDEN_MODEL_USD_PER_TENANT_DAY === undefined ? Number.POSITIVE_INFINITY : usdPerTenantDay,
       scrub: keyScrubber(env.EDEN_MODEL_API_KEY ?? ""),
     };
   }
