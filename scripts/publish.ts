@@ -19,7 +19,8 @@ const out = join(root, "dist", "publish");
 const FLAGS = new Set(["--yes", "--npm", "--pypi"]);
 const args = process.argv.slice(2);
 const bad = args.filter((a) => !FLAGS.has(a));
-if (bad.length > 0) throw new Error(`unknown flags: ${bad.join(", ")} (allowed: --yes, --npm, --pypi)`);
+// The raw values are not echoed: an argument may itself be a credential typed in the wrong place.
+if (bad.length > 0) throw new Error(`${bad.length} unknown flag(s) (allowed: --yes, --npm, --pypi)`);
 const yes = args.includes("--yes");
 const doNpm = !args.includes("--pypi") || args.includes("--npm");
 const doPy = !args.includes("--npm") || args.includes("--pypi");
