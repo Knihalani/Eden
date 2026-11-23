@@ -25,6 +25,9 @@ const ALLOWED = new Set([
   "EDEN_LOCAL_DETACHED",
   "EDEN_LOCAL_LOG",
   "EDEN_LOCAL_STATE_DIR",
+  // The daemon's durable home: a LocalEden passes its `home` through as EDEN_HOME; under it the
+  // source map and frozen-user blobs live, so a replacement daemon resumes, encrypted (D1966).
+  "EDEN_HOME",
   "EDEN_SOURCES_FILE",
   "EDEN_USER_SOURCES_FILE",
   // A sidecar's model roles run only on an OpenAI-compatible endpoint the embedder names (D2109): these are the
@@ -110,7 +113,11 @@ function localState(dir: string | undefined): {
   sourceMapPath: string;
 } | null {
   if (!dir?.trim()) return null;
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } catch {
+    return null; // An unwritable home stays volatile rather than stopping the daemon.
+  }
   const keyPath = join(dir, "persist.key");
   let key: Uint8Array | null = null;
   try {
@@ -156,8 +163,11 @@ export function localConfig(env = process.env): ServerConfig | null {
   if (!/^[A-Za-z0-9_-]{32,256}$/.test(token)) {
     throw new Error("EDEN_LOCAL_TOKEN must be 32-256 URL-safe characters");
   }
-  const state = localState(env.EDEN_LOCAL_STATE_DIR);
+  // EDEN_LOCAL_STATE_DIR wins when both are set (the explicit opt-in); EDEN_HOME is a LocalEden's
+  // `home` and names the same durable directory in eden-local (ignored before, D2109's follow-up).
+  const state = localState(env.EDEN_LOCAL_STATE_DIR ?? env.EDEN_HOME);
   delete env.EDEN_LOCAL_STATE_DIR;
+  delete env.EDEN_HOME;
   return {
     keys: new Map([[token, "local"]]),
     dev: false,
