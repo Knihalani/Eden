@@ -237,6 +237,28 @@ class LocalTests(unittest.TestCase):
         self.assertNotIn(endpoint[1], str(owner._process.args) + warnings.getvalue())
         self.assertEqual(owner._process.args, [str(self.binary())])
 
+    def test_model_env_passthrough_options_win_over_base_env(self):
+        env = {"EDEN_MODEL": "env-model", "EDEN_MODEL_BASE_URL": "http://env/v1",
+               "OPENROUTER_API_KEY": "secret", "PATH": os.defpath, "HOME": str(self.root), **WINDOWS_ENV}
+        owner = self.owner("dump-env", base_env=env, model="opt-model", model_api_key="k",
+                           model_timeout_ms=90_000)
+        self.assertIsNotNone(owner.endpoint())
+        child = json.loads((self.root / "env").read_text())
+        # The option wins where set; the owner's own variable carries the rest (D2109).
+        self.assertEqual(child["EDEN_MODEL"], "opt-model")
+        self.assertEqual(child["EDEN_MODEL_BASE_URL"], "http://env/v1")
+        self.assertEqual(child["EDEN_MODEL_API_KEY"], "k")
+        self.assertEqual(child["EDEN_MODEL_TIMEOUT_MS"], "90000")
+        self.assertNotIn("OPENROUTER_API_KEY", child)
+        # The share record's model fingerprint is the same resolved env, hashed (D2109).
+        self.assertEqual(owner._model_env(), {"EDEN_MODEL": "opt-model", "EDEN_MODEL_API_KEY": "k",
+                                             "EDEN_MODEL_BASE_URL": "http://env/v1",
+                                             "EDEN_MODEL_TIMEOUT_MS": "90000"})
+        sig = owner._model_sig()
+        self.assertEqual([name for name, _ in sig],
+                         ["EDEN_MODEL", "EDEN_MODEL_BASE_URL", "EDEN_MODEL_API_KEY", "EDEN_MODEL_TIMEOUT_MS"])
+        self.assertTrue(all(len(h) == 64 and all(c in "0123456789abcdef" for c in h) for _, h in sig))
+
     def test_invalid_sources_forward_no_credentials(self):
         source = self.root / "broken"
         source.write_text("not json")

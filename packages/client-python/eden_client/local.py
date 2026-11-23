@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -39,6 +40,12 @@ def _allowed(name):
             and not upper.startswith(("EDEN_", "LD_", "DYLD_", "PYTHON", "BUN_", "NODE_")))
 
 
+# The spawned Eden's own model configuration (D2109): the OpenAI-compatible endpoint its roles call.
+# These are Eden's settings, not credentials — they pass through ``_allowed``'s ``EDEN_`` block on
+# purpose, so an embedder whose agent runs on a local model gives its Eden the same.
+_MODEL_ENV = ("EDEN_MODEL", "EDEN_MODEL_BASE_URL", "EDEN_MODEL_API_KEY", "EDEN_MODEL_TIMEOUT_MS")
+
+
 _HOLDER = (
     # Keeps the detached server's stdin pipe open past the spawning process's exit; dies with the server.
     "import os,sys,time\n"
@@ -70,13 +77,22 @@ class LocalEden:
     """
 
     def __init__(self, binary, data_dir, *, sources_file=None, user_sources_file=None, log_path=None,
-                 base_env: Optional[Mapping[str, str]] = None, ready_timeout=10.0, share_path=None):
+                 base_env: Optional[Mapping[str, str]] = None, ready_timeout=10.0, share_path=None,
+                 model=None, model_base_url=None, model_api_key=None, model_timeout_ms=None):
         self._binary = str(binary)
         self._home = str(data_dir)
         self._sources = sources_file
         self._users = user_sources_file
         self._log_path = Path(log_path) if log_path else None
         self._env = dict(os.environ if base_env is None else base_env)
+        # The spawned Eden's model roles (D2109): each kwarg wins over the owner's own variable of
+        # the EDEN_MODEL_* name, which is inherited when no kwarg is given.
+        self._model = {
+            "EDEN_MODEL": model,
+            "EDEN_MODEL_BASE_URL": model_base_url,
+            "EDEN_MODEL_API_KEY": model_api_key,
+            "EDEN_MODEL_TIMEOUT_MS": None if model_timeout_ms is None else str(model_timeout_ms),
+        }
         self._timeout = max(0.01, min(float(ready_timeout), 10.0))
         self._lock = threading.Lock()
         self._process = None
@@ -110,6 +126,7 @@ class LocalEden:
                         env[name] = self._env[name]
             except Exception:
                 pass
+        env.update(self._model_env())
         env.update(EDEN_LOCAL="1", EDEN_LOCAL_TOKEN=token, HOST="127.0.0.1", PORT="0", EDEN_HOME=self._home)
         for key, value in (("EDEN_SOURCES_FILE", self._sources), ("EDEN_USER_SOURCES_FILE", self._users)):
             if value:
@@ -220,6 +237,19 @@ class LocalEden:
         self._backoff = min(60.0, self._backoff * 2)
         self._warn(problem)
 
+    def _model_env(self):
+        """The model env the spawned child gets; shared-server records fingerprint it too (D2109)."""
+        out = {}
+        for name in _MODEL_ENV:
+            value = self._model[name] if self._model[name] is not None else self._env.get(name)
+            if value:
+                out[name] = str(value)
+        return out
+
+    def _model_sig(self):
+        """[name, hash] pairs over the resolved model env — the share record must not carry the key."""
+        return [[name, hashlib.sha256(value.encode()).hexdigest()] for name, value in self._model_env().items()]
+
     def _sources_sig(self):
         """The configured source files' identity: a server started before they existed/changed is stale."""
         sig = []
@@ -245,7 +275,10 @@ class LocalEden:
             url, token, generation = str(data["url"]), str(data["token"]), str(data["generation"])
         except Exception:
             return None
-        stale = data.get("sources", []) != self._sources_sig()
+        stale = (data.get("sources", []) != self._sources_sig()
+                 # A record written before model settings existed reads as model-free; it is stale
+                 # when the owner has model settings now.
+                 or data.get("model", []) != self._model_sig())
         try:
             # Bypass proxies: some environments route loopback through a refusing HTTP proxy.
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -277,9 +310,15 @@ class LocalEden:
         try:
             self._share.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             tmp = self._share.with_name(self._share.name + ".tmp")
-            tmp.write_text(json.dumps({"url": self._endpoint[0], "token": self._endpoint[1],
-                                       "pid": self._process.pid, "generation": self._endpoint[2],
-                                       "sources": self._sources_sig()}))
+            # Created mode 0o600 at open: the record carries the bearer token, and a default-mode
+            # window before chmod would expose it (the model fingerprint is hashed, not a secret).
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                os.write(fd, json.dumps({"url": self._endpoint[0], "token": self._endpoint[1],
+                                        "pid": self._process.pid, "generation": self._endpoint[2],
+                                        "sources": self._sources_sig(), "model": self._model_sig()}).encode())
+            finally:
+                os.close(fd)
             os.chmod(tmp, 0o600)
             tmp.replace(self._share)
         except Exception:

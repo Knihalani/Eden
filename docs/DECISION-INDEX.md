@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2109 | 2026-11-23 | Eden's model roles run on any OpenAI-compatible endpoint via `EDEN_MODEL_BASE_URL`, so a local model (Ollama, LM Studio, vLLM, llama.cpp)… | adopted |
 | D2108 | 2026-11-22 | Adopt OpenRouter throughput sorting for the push checker by default (`pushCheckProviderSort`); null keeps existing model routing. | adopted |
 | D2107 | 2026-11-22 | Trial `pushCheckedFacts` (default off): checked packets state faithful source facts, not just excerpts. | adopted |
 | D2106 | 2026-11-22 | Adopt `pushConstraintStemSeats` and `pushPartyOrgLink` as default on, superseding the default-off trials D2100/D2101. | adopted |

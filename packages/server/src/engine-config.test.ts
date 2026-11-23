@@ -9,7 +9,7 @@ import { SourceMap } from "@eden/graph";
 import { buildPartner, openSourceMap } from "./build";
 import { stdioSourceMapPath } from "./config";
 import { engineConfig, parseEngineConfig } from "./engine-config";
-import { DEFAULT_USD_PER_TENANT_DAY, modelRolesFromEnv, NO_MODELS } from "./models";
+import { DEFAULT_USD_PER_TENANT_DAY, loopbackModelBase, modelRolesFromEnv, NO_MODELS } from "./models";
 
 const dir = mkdtempSync(join(edenHome(), "engine-config-"));
 const file = (name: string, body: string): string => {
@@ -185,6 +185,89 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     expect(() => modelRolesFromEnv({ OPENROUTER_API_KEY: "k", EDEN_MODEL_CACHE: "ON" }, make as never)).toThrow(
       /EDEN_MODEL_CACHE must be on or off/,
     );
+  });
+
+  test("model roles on a local endpoint (D2109): EDEN_MODEL_BASE_URL builds LocalModel roles, strictly", () => {
+    const seen: Record<string, unknown>[] = [];
+    const makeLocal = (o: Record<string, unknown>) => {
+      seen.push(o);
+      return { id: "fake-local", chat: async () => ({}) } as never;
+    };
+    const roles = modelRolesFromEnv(
+      {
+        EDEN_MODEL_BASE_URL: "http://localhost:11434/v1",
+        EDEN_MODEL: "qwen3:8b",
+        EDEN_MODEL_API_KEY: "k-local",
+        EDEN_MODEL_TIMEOUT_MS: "60000",
+      },
+      undefined,
+      makeLocal as never,
+    );
+    expect(seen.length).toBe(3);
+    for (const o of seen) {
+      expect(o).toMatchObject({
+        baseUrl: "http://localhost:11434/v1",
+        model: "qwen3:8b",
+        apiKey: "k-local",
+        timeoutMs: 60_000,
+      });
+      // One shared rate hold across roles; no OpenRouter routing fields anywhere.
+      expect(o.rateHold).toBe(seen[0]!.rateHold);
+      expect(o.sort).toBeUndefined();
+    }
+    expect(roles.reader!.id).toBe("fake-local");
+    expect(roles.scrub!("header Bearer k-local").includes("k-local")).toBe(false);
+    // A loopback endpoint bills nothing: roles are built free of the tenant cap and the model is told
+    // its calls cannot spend (D2109).
+    expect(seen.every((o) => o.freeCalls === true)).toBe(true);
+    expect(roles.usdPerTenantDay).toBe(Number.POSITIVE_INFINITY);
+    // Off this machine the cap still binds and an unpriced reply is priced like an OpenRouter call.
+    seen.length = 0;
+    const remote = modelRolesFromEnv(
+      { EDEN_MODEL_BASE_URL: "http://192.168.1.5:8000/v1", EDEN_MODEL: "m", EDEN_MODEL_USD_PER_TENANT_DAY: "4" },
+      undefined,
+      makeLocal as never,
+    );
+    expect(seen[0]!.freeCalls).toBe(false);
+    expect(remote.usdPerTenantDay).toBe(4);
+    // Loopback with a cap the operator set: it binds, for a gateway that fronts a paid provider.
+    const gated = modelRolesFromEnv(
+      { EDEN_MODEL_BASE_URL: "http://localhost:11434/v1", EDEN_MODEL: "m", EDEN_MODEL_USD_PER_TENANT_DAY: "0.5" },
+      undefined,
+      makeLocal as never,
+    );
+    expect(gated.usdPerTenantDay).toBe(0.5);
+    // Ambiguous or incomplete configurations stop startup rather than silently picking a provider.
+    expect(() =>
+      modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "http://x/v1", EDEN_MODEL: "m", OPENROUTER_API_KEY: "k" }),
+    ).toThrow(/not both/);
+    expect(() => modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "http://x/v1" })).toThrow(/EDEN_MODEL/);
+    // A malformed base URL stops startup without echoing the value: it can carry credentials and the
+    // error goes to the log (D2109).
+    try {
+      modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "not a url:secret@h", EDEN_MODEL: "m" });
+      expect.unreachable();
+    } catch (e) {
+      expect(String(e)).toContain("must be a URL");
+      expect(String(e)).not.toContain("secret");
+    }
+    expect(() => modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "ftp://x/v1", EDEN_MODEL: "m" })).toThrow(/http/);
+    expect(() =>
+      modelRolesFromEnv({ EDEN_MODEL_BASE_URL: "http://x/v1", EDEN_MODEL: "m", EDEN_MODEL_TIMEOUT_MS: "soon" }),
+    ).toThrow(/EDEN_MODEL_TIMEOUT_MS/);
+  });
+
+  test("loopbackModelBase (D2109): this machine's endpoints are free, anything else may bill", () => {
+    for (const url of [
+      "http://localhost:11434/v1",
+      "http://127.0.0.1:1234/v1",
+      "http://[::1]:8080/v1",
+      "http://0.0.0.0/v1",
+      "http://a.b.localhost/v1",
+    ])
+      expect(loopbackModelBase(url)).toBe(true);
+    for (const url of ["https://openrouter.ai/api/v1", "http://192.168.1.5:11434/v1", "not a url"])
+      expect(loopbackModelBase(url)).toBe(false);
   });
 
   test("an unknown key is warned about and skipped; the strict parse still stops on it (D5)", () => {

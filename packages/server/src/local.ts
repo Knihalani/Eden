@@ -1,7 +1,7 @@
 /**
  * Hermes' private local sidecar: volatile state avoids independent CLI/gateway processes racing persistent files.
- * Reads only EDEN_LOCAL, EDEN_LOCAL_TOKEN, EDEN_SOURCES_FILE and EDEN_USER_SOURCES_FILE;
- * other Eden/model env is scrubbed.
+ * Reads only EDEN_LOCAL, EDEN_LOCAL_TOKEN, EDEN_SOURCES_FILE, EDEN_USER_SOURCES_FILE and the EDEN_MODEL_* names a
+ * local model endpoint's configuration arrives through (D2109); other Eden/model env is scrubbed.
  */
 import { Console } from "node:console";
 import { randomBytes, timingSafeEqual } from "node:crypto";
@@ -27,6 +27,13 @@ const ALLOWED = new Set([
   "EDEN_LOCAL_STATE_DIR",
   "EDEN_SOURCES_FILE",
   "EDEN_USER_SOURCES_FILE",
+  // A sidecar's model roles run only on an OpenAI-compatible endpoint the embedder names (D2109): these are the
+  // only model env a spawned Eden sees, so roles stay off unless the embedder opted in. OPENROUTER_API_KEY stays
+  // scrubbed — a local Eden must not make paid calls a sidecar's owner never asked for.
+  "EDEN_MODEL",
+  "EDEN_MODEL_BASE_URL",
+  "EDEN_MODEL_API_KEY",
+  "EDEN_MODEL_TIMEOUT_MS",
 ]);
 
 /** The detached daemon's stderr cap: the file is renamed to `.1` past it, once per start (as the client's cap). */

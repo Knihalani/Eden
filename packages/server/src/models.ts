@@ -1,8 +1,9 @@
 /**
  * The model roles the shipped servers wire (D112): the card and intent calls in the background and the ask-time
  * reader on the request path, on one OpenRouter model with D12's routing (`provider.data_collection: "deny"`, ZDR).
- * Gated on OPENROUTER_API_KEY: without it every role is null, the partner gets no card enricher and no reader, and the
- * same default configuration runs its no-model path. No judge is wired: the measured default ran without one.
+ * Gated on OPENROUTER_API_KEY or EDEN_MODEL_BASE_URL: with neither, every role is null, the partner gets no card
+ * enricher and no reader, and the same default configuration runs its no-model path. No judge is wired: the
+ * measured default ran without one.
  *
  * EDEN_MODEL                     the roles' model, default `anthropic/claude-haiku-5.5` (the measured model, D98, D99).
  *                                An Anthropic model is sent no reasoning request (it does not think, D144); any other
@@ -18,9 +19,29 @@
  *                                sending none (`OpenRouterModel.cacheLevel`), so the default cannot fail a call; one
  *                                that never serves a read stops getting them after 50 calls that should have read.
  *
+ * A local (or any plain OpenAI-compatible) endpoint serves the roles instead of OpenRouter (D2109):
+ * EDEN_MODEL_BASE_URL            the endpoint's base URL with its version path — Ollama
+ *                                `http://localhost:11434/v1`, LM Studio `http://localhost:1234/v1`, vLLM,
+ *                                llama.cpp, or the front a custom app's agent already calls. Turns the roles
+ *                                on without a key: a loopback endpoint bills nothing (`LocalModel` reports
+ *                                costUsd 0 unless the server says otherwise), so the tenant cap never trips.
+ *                                Needs `EDEN_MODEL` to name the model the endpoint serves; set with
+ *                                OPENROUTER_API_KEY, startup stops — which provider is ambiguous.
+ * EDEN_MODEL_API_KEY             the endpoint's bearer, only when it wants one (llama.cpp `--api-key`,
+ *                                vLLM's); Ollama and LM Studio need none, and none is sent.
+ * EDEN_MODEL_TIMEOUT_MS          the roles' own call deadline on that endpoint, default 120,000: local
+ *                                inference on a small box is far slower than a hosted route.
+ *
  * The Anthropic provider is lab only (D97): nothing here constructs it.
  */
-import { OpenRouterModel, RateHold, type Model, type OpenRouterOptions } from "@eden/llm";
+import {
+  LocalModel,
+  OpenRouterModel,
+  RateHold,
+  type LocalModelOptions,
+  type Model,
+  type OpenRouterOptions,
+} from "@eden/llm";
 
 /** The measured model (Haiku 5.5, D98, D99), through OpenRouter. */
 export const DEFAULT_ROLE_MODEL = "anthropic/claude-haiku-5.5";
@@ -56,16 +77,85 @@ export const NO_MODELS: ModelRoles = {
 
 /** How a role's model is made from its OpenRouter options: the real client, or a fake in tests (no network). */
 export type MakeRoleModel = (options: OpenRouterOptions) => Model;
+/** The same for an OpenAI-compatible local endpoint (EDEN_MODEL_BASE_URL, D2109). */
+export type MakeLocalModel = (options: LocalModelOptions) => Model;
 
 /**
- * The roles from the environment; all null without OPENROUTER_API_KEY. Throws on a malformed cap. The eval's `--live`
+ * Whether an EDEN_MODEL_BASE_URL names this machine: a loopback endpoint (Ollama, LM Studio, a local
+ * front) bills nothing, so a dev server may run the roles on it without EDEN_ALLOW_MODEL_ROLES=1 (D858's
+ * guard is about spend, D2109). A malformed URL is not loopback: `modelRolesFromEnv` rejects it outright.
+ */
+export function loopbackModelBase(baseUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return false;
+  }
+  const host = url.hostname;
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "0.0.0.0" ||
+    host === "[::1]" ||
+    host === "::1" ||
+    host.startsWith("127.")
+  );
+}
+
+/**
+ * The roles from the environment; all null without OPENROUTER_API_KEY or EDEN_MODEL_BASE_URL. Throws on a
+ * malformed cap, and on an ambiguous or incomplete local-endpoint configuration. The eval's `--live`
  * builds its reader from this very function (D128), so what it measures is what ships.
  */
 export function modelRolesFromEnv(
   env: Record<string, string | undefined> = process.env,
   make: MakeRoleModel = (options) => new OpenRouterModel(options),
+  makeLocal: MakeLocalModel = (options) => new LocalModel(options),
 ): ModelRoles {
   const usdPerTenantDay = tenantCap(env.EDEN_MODEL_USD_PER_TENANT_DAY);
+  const baseUrl = env.EDEN_MODEL_BASE_URL;
+  if (baseUrl !== undefined && baseUrl !== "") {
+    if (env.OPENROUTER_API_KEY) {
+      throw new Error("set EDEN_MODEL_BASE_URL or OPENROUTER_API_KEY, not both");
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(baseUrl);
+    } catch {
+      // The value stays out of the error: a base URL can carry credentials (`…://user:key@host`) and
+      // startup errors go to the server log, where a key must never land (D2109).
+      throw new Error("EDEN_MODEL_BASE_URL must be a URL");
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error(`EDEN_MODEL_BASE_URL must be http or https, got ${parsed.protocol}`);
+    }
+    const model = env.EDEN_MODEL;
+    if (!model) {
+      throw new Error("EDEN_MODEL_BASE_URL needs EDEN_MODEL to name the model the endpoint serves");
+    }
+    const free = loopbackModelBase(baseUrl);
+    // One hold for every role, as on OpenRouter: a local server can answer 429 too.
+    const options: LocalModelOptions = {
+      baseUrl,
+      model,
+      apiKey: env.EDEN_MODEL_API_KEY,
+      timeoutMs: modelTimeout(env.EDEN_MODEL_TIMEOUT_MS),
+      rateHold: new RateHold(),
+      freeCalls: free,
+    };
+    return {
+      reader: makeLocal(options),
+      cards: makeLocal(options),
+      cardsRetry: makeLocal(options),
+      // A loopback endpoint bills nothing, so an unset tenant spend cap is lifted for it: a 0 there
+      // would refuse free calls (the per-session and per-user estimates stay, tiny and unsettled at
+      // $0 — D2109). A configured cap keeps binding: a loopback gateway can front a paid provider.
+      usdPerTenantDay:
+        free && env.EDEN_MODEL_USD_PER_TENANT_DAY === undefined ? Number.POSITIVE_INFINITY : usdPerTenantDay,
+      scrub: keyScrubber(env.EDEN_MODEL_API_KEY ?? ""),
+    };
+  }
   const apiKey = env.OPENROUTER_API_KEY;
   if (!apiKey) return { ...NO_MODELS, usdPerTenantDay };
   // One hold for every role (D2046, S1-P9): the account's rate limit is shared, so a 429 on one role holds them
@@ -123,6 +213,14 @@ function cacheOn(raw: string | undefined): boolean {
   if (raw === "off") return false;
   if (raw === undefined || raw === "" || raw === "on") return true;
   throw new Error(`EDEN_MODEL_CACHE must be on or off, got ${raw}`);
+}
+
+/** `EDEN_MODEL_TIMEOUT_MS`: unset keeps `LocalModel`'s default; a bad value stops startup. */
+function modelTimeout(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw === "") return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`EDEN_MODEL_TIMEOUT_MS must be milliseconds, got ${raw}`);
+  return n;
 }
 
 function tenantCap(raw: string | undefined): number {

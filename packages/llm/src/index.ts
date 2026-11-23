@@ -6,6 +6,7 @@ export {
   OpenRouterModel,
   type OpenRouterOptions,
 } from "./openrouter";
+export { LOCAL_TIMEOUT_MS, LocalModel, type LocalModelOptions } from "./local";
 export { PRICES, priceFor, costOf, type Price } from "./pricing";
 export { Budget, DEFAULT_LIMITS, TenantSpend, type BudgetLimits, type Reservation } from "./budget";
 export { FakeModel } from "./fake";

@@ -7,11 +7,16 @@
  *   EDEN_DEV=1 EDEN_SOURCES_FILE=examples/personal-agent/sources.json bun run dev    # terminal 1
  *   bun examples/personal-agent/agent.ts "move lunch with Priya Raman to Friday"     # terminal 2, offline (default)
  *   OPENAI_API_KEY=… bun examples/personal-agent/agent.ts "move lunch with Priya Raman to Friday"   # a real model
+ *   OPENAI_BASE_URL=http://localhost:11434/v1 AGENT_MODEL=qwen3:8b \
+ *     bun examples/personal-agent/agent.ts "move lunch with Priya Raman to Friday"        # a local model (Ollama)
  *
- * Without OPENAI_API_KEY (or with AGENT_MODEL=stub) the agent is a scripted stand-in that needs no key and no
+ * With AGENT_MODEL=stub — or no model endpoint at all — the agent is a scripted stand-in that needs no key and no
  * network beyond Eden: it calls `ask_context` once with the user's request, then replies with what it was given, so
  * the whole loop (observe, injected context, ask) runs for free. OPENAI_BASE_URL / AGENT_MODEL point the agent at
- * any OpenAI-compatible endpoint (OpenRouter works); EDEN_URL at a server other than http://127.0.0.1:8790.
+ * any OpenAI-compatible endpoint (OpenRouter works; a local Ollama, LM Studio or vLLM needs no key — the
+ * Authorization header is sent only when OPENAI_API_KEY is set); EDEN_URL at a server other than
+ * http://127.0.0.1:8790. Eden's own background roles run on the same kind of endpoint with
+ * EDEN_MODEL_BASE_URL + EDEN_MODEL on the server side (D2109).
  */
 import { ASK_CONTEXT_DESCRIPTION, EdenClient, guardTools, withContext } from "@eden/client";
 
@@ -24,10 +29,13 @@ const eden = new EdenClient({
   sessionId: `demo-${Date.now()}`,
   onError: (e) => console.error(`[eden] ${e instanceof Error ? e.message : e}`),
 });
-const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+const baseUrl = process.env.OPENAI_BASE_URL;
 const model = process.env.AGENT_MODEL ?? "gpt-4o-mini";
-const offline = !process.env.OPENAI_API_KEY || model === "stub";
-if (offline) console.error("[agent] no OPENAI_API_KEY: running the offline stub model (AGENT_MODEL=stub)");
+// The stub runs when nothing real can be called: no key for the default OpenAI endpoint, and no
+// OPENAI_BASE_URL pointing at one that needs none (a local Ollama/LM Studio takes a request keyless).
+const offline = model === "stub" || (!process.env.OPENAI_API_KEY && !baseUrl);
+if (offline)
+  console.error("[agent] no model endpoint (OPENAI_API_KEY or OPENAI_BASE_URL): running the offline stub model");
 
 type Message = { role: string; content: string | null; tool_calls?: ToolCall[]; tool_call_id?: string };
 type ToolCall = { id: string; function: { name: string; arguments: string } };
@@ -88,9 +96,11 @@ function stub(messages: Message[]): Message {
 
 async function chat(messages: Message[]): Promise<Message> {
   if (offline) return stub(messages);
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (process.env.OPENAI_API_KEY) headers.authorization = `Bearer ${process.env.OPENAI_API_KEY}`;
+  const res = await fetch(`${baseUrl ?? "https://api.openai.com/v1"}/chat/completions`, {
     method: "POST",
-    headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "content-type": "application/json" },
+    headers,
     body: JSON.stringify({ model, messages, tools }),
   });
   if (!res.ok) throw new Error(`model ${res.status}: ${await res.text()}`);

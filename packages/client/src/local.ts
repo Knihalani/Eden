@@ -6,6 +6,7 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   appendFileSync,
   chmodSync,
@@ -46,6 +47,14 @@ function* credentialNames(value: unknown): Generator<string> {
   }
 }
 
+/**
+ * The spawned Eden's own model configuration (D2109): the OpenAI-compatible endpoint its roles call. These are
+ * Eden's settings, not credentials — they pass through `allowed`'s EDEN_ block on purpose, so an embedder whose
+ * agent runs on a local model gives its Eden the same. An explicit `LocalEdenOptions` field wins over the
+ * owner process's own variable of the same name.
+ */
+const MODEL_ENV = ["EDEN_MODEL", "EDEN_MODEL_BASE_URL", "EDEN_MODEL_API_KEY", "EDEN_MODEL_TIMEOUT_MS"] as const;
+
 function allowed(name: string): boolean {
   const upper = name.toUpperCase();
   return (
@@ -71,6 +80,20 @@ export interface LocalEdenOptions {
   sharePath?: string;
   /** The environment the child filters down from (default `process.env`). */
   env?: Record<string, string | undefined>;
+  /**
+   * The model the spawned Eden's roles run on, when it has any (D2109): the model name an OpenAI-compatible
+   * endpoint serves (`EDEN_MODEL`). Unset, the owner's own EDEN_MODEL is inherited.
+   */
+  model?: string;
+  /**
+   * That model's endpoint (`EDEN_MODEL_BASE_URL`): `http://localhost:11434/v1` for Ollama, `:1234/v1` for
+   * LM Studio, or any OpenAI-compatible base URL. Unset, the owner's EDEN_MODEL_BASE_URL is inherited.
+   */
+  modelBaseUrl?: string;
+  /** The endpoint's bearer when it wants one (`EDEN_MODEL_API_KEY`); Ollama and LM Studio need none. */
+  modelApiKey?: string;
+  /** The roles' call deadline in ms (`EDEN_MODEL_TIMEOUT_MS`). */
+  modelTimeoutMs?: number | string;
   readyTimeoutMs?: number;
   /** For the caller's log lines; defaults to `console.error`-style stderr writes. */
   warn?: (problem: string) => void;
@@ -126,6 +149,9 @@ export class LocalEden {
     for (const name of names) {
       if (allowed(name) && this.env[name] !== undefined) env[name] = this.env[name]!;
     }
+    // The embedder's model endpoint for the roles (MODEL_ENV): the option wins, else the owner's own
+    // variable of the name — an app whose agent already runs on a local model sets it once for both.
+    Object.assign(env, this.modelEnv());
     Object.assign(env, {
       EDEN_LOCAL: "1",
       EDEN_LOCAL_TOKEN: token,
@@ -225,6 +251,39 @@ export class LocalEden {
     this.warn(problem);
   }
 
+  /**
+   * The model env the spawned child gets (MODEL_ENV resolved: option, else the owner's variable).
+   * Shared-server records fingerprint it too: a daemon started with other model settings is stale
+   * even when its sources are unchanged (D2109).
+   */
+  private modelEnv(): Record<string, string> {
+    const options = {
+      EDEN_MODEL: this.options.model,
+      EDEN_MODEL_BASE_URL: this.options.modelBaseUrl,
+      EDEN_MODEL_API_KEY: this.options.modelApiKey,
+      EDEN_MODEL_TIMEOUT_MS:
+        this.options.modelTimeoutMs === undefined ? undefined : String(this.options.modelTimeoutMs),
+    };
+    const out: Record<string, string> = {};
+    for (const name of MODEL_ENV) {
+      const value = options[name] ?? envOf(this.env, name);
+      if (value !== undefined) out[name] = value;
+    }
+    return out;
+  }
+
+  /**
+   * The share record's model fingerprint: [name, hash] pairs over the resolved model env, in
+   * MODEL_ENV order. The values are hashed: a share file must never carry EDEN_MODEL_API_KEY in
+   * cleartext, and the pairs' fixed order keeps the record byte-compatible with the Python client.
+   */
+  private modelSig(): [string, string][] {
+    return Object.entries(this.modelEnv()).map(([name, value]) => [
+      name,
+      createHash("sha256").update(value).digest("hex"),
+    ]);
+  }
+
   /** The configured source files' identity: a server started before they existed/changed is stale. */
   private sourcesSig(): [string, number | null, number | null][] {
     const sig: [string, number | null, number | null][] = [];
@@ -250,7 +309,14 @@ export class LocalEden {
    */
   private async attach(): Promise<{ url: string; token: string; generation: number | string } | null> {
     const share = this.options.sharePath!;
-    let data: { url?: unknown; token?: unknown; generation?: unknown; pid?: unknown; sources?: unknown };
+    let data: {
+      url?: unknown;
+      token?: unknown;
+      generation?: unknown;
+      pid?: unknown;
+      sources?: unknown;
+      model?: unknown;
+    };
     try {
       data = JSON.parse(readFileSync(share, "utf8"));
     } catch {
@@ -260,7 +326,11 @@ export class LocalEden {
     const token = String(data.token ?? "");
     const generation = String(data.generation ?? "");
     if (!url || !token || !generation) return null;
-    const stale = JSON.stringify(data.sources ?? []) !== JSON.stringify(this.sourcesSig());
+    const stale =
+      JSON.stringify(data.sources ?? []) !== JSON.stringify(this.sourcesSig()) ||
+      // A record written before model settings existed reads as model-free; it is stale when the
+      // owner has model settings now (the daemon runs without them either way).
+      JSON.stringify(data.model ?? []) !== JSON.stringify(this.modelSig());
     try {
       // Node's fetch never honors HTTP(S)_PROXY, so loopback cannot be routed through a refusing proxy.
       const res = await fetch(`${url}/healthz`, {
@@ -373,7 +443,9 @@ export class LocalEden {
           pid: this.process.pid,
           generation: this.endpointValue.generation,
           sources: this.sourcesSig(),
+          model: this.modelSig(),
         }),
+        { mode: 0o600 },
       );
       chmodSync(tmp, 0o600);
       renameSync(tmp, share);
