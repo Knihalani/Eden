@@ -79,7 +79,7 @@ test("a note with no dates of its own is placed on its modified day; a dated not
     const items = (await s.list(scope, undefined, 10, signal)).items;
     // meta.day is the mtime as an instant: the engine resolves it to the user's day at their offset.
     expect(items.find((i) => i.title === "plain.md")?.meta?.day).toBe(monday.toISOString());
-    const want = `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, "0")}-${String(monday.getUTCDate()).padStart(2, "0")}`;
+    const want = monday.toISOString().slice(0, 10);
     expect(items.find((i) => i.title === "plain.md")?.meta?.start).toBeUndefined();
     expect(items.find((i) => i.title === "dated.md")?.meta?.day).toBeUndefined();
 
