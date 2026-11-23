@@ -80,15 +80,21 @@ function readText(path: string, maxBytes: number): string | null {
   }
 }
 
+/** The device's own YYYY-MM-DD for an mtime: the day the file's owner would call it. */
+function localDay(mtimeMs: number): string {
+  const d = new Date(mtimeMs);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /**
- * Item meta for a file: directory, extension and size always; `start` (the mtime day) only when the
- * file itself names no day. A stamped `meta.start` makes the note a dated instance the day index and
- * seat days can place on its modified day — a dated lookup would otherwise drop a note matched only
- * by mtime — while a file whose name or text writes dates keeps them (meta.start would mask those).
+ * Item meta for a file: directory, extension and size always; `day` (the mtime's local day) only when
+ * the file itself names no day. `meta.day` marks the note as present on that day for the day index and
+ * seat days — it is NOT `meta.start`: an event start would pull a plain note into clash checks, the
+ * calendar's zone tally and supersession rules, which a touched file must not reach.
  */
 function fileMeta(path: string, size: number, mtimeMs: number, text: string): Record<string, string> {
   const meta: Record<string, string> = { dir: dirname(path), ext: extname(path), size: String(size) };
-  if (dayFactsOf(basename(path), text) === 0) meta.start = new Date(mtimeMs).toISOString();
+  if (dayFactsOf(basename(path), text) === 0) meta.day = localDay(mtimeMs);
   return meta;
 }
 
@@ -181,7 +187,7 @@ export class FileSource implements Source {
   async search(query: SearchQuery, _signal: AbortSignal): Promise<ContextItem[]> {
     this.scan();
     const items = await this.inner!.search(query);
-    // Undated files list on their modified day through fileMeta's meta.start; this merge adds the
+    // Undated files list on their modified day through fileMeta's meta.day; this merge adds the
     // mtime day for files that name days of their own too — a note written Monday about Friday also
     // answers "what did I touch Monday", never masking the days its text names (a meta.start would).
     const w = query.window;
@@ -190,7 +196,7 @@ export class FileSource implements Source {
     for (const { doc, mtimeMs } of [...this.held.values()].sort((a, b) => b.mtimeMs - a.mtimeMs)) {
       if (items.length >= query.limit) break;
       if (have.has(doc.ref)) continue;
-      const day = new Date(mtimeMs).toISOString().slice(0, 10);
+      const day = localDay(mtimeMs);
       if (day >= w.start && day < w.end) {
         items.push({ ...doc, id: itemId(this.id, doc.ref), sourceId: this.id });
       }

@@ -780,3 +780,24 @@ describe("readMark: a page listed before a later read never downgrades what it s
     expect(cache.get(alice, "notes:q1", now)!.text).toContain("Lisbon");
   });
 });
+
+describe("meta.day: a day-stamped item sits on its day without being an event (A3 review)", () => {
+  test("dated seats it class 2; timed, the zone tally and start day never see it", () => {
+    const cache = new ItemCache({ expireEveryMs: 0 });
+    const at = Date.parse("2026-11-17T00:00:00Z");
+    cache.put(alice, [
+      {
+        ...item("files", "1", "met Sam for coffee"),
+        meta: { day: "2026-11-16" },
+        updatedAt: Date.parse("2026-11-16T10:00:00Z"),
+      },
+    ]);
+    const days = new Set(["2026-11-16"]);
+    const hits = cache.dated(alice, days, () => false, at, 10);
+    expect(hits.map((h) => [h.item.id, h.dayCls])).toEqual([["files:1", 2]]);
+    expect(cache.timed(alice, days, at, 10)).toEqual([]);
+    expect(cache.offsetOf(alice)).toBe(0);
+    cache.removeItems(alice, ["files:1"], at, 10 * 60 * 1000);
+    expect(cache.dated(alice, days, () => false, at, 10)).toEqual([]);
+  });
+});

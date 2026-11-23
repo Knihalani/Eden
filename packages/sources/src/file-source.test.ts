@@ -77,13 +77,14 @@ test("a note with no dates of its own is placed on its modified day; a dated not
     const s = new FileSource("docs", "d", { paths: [dir] });
 
     const items = (await s.list(scope, undefined, 10, signal)).items;
-    expect(items.find((i) => i.title === "plain.md")?.meta?.start).toBe("2026-11-16T10:00:00.000Z");
-    expect(items.find((i) => i.title === "dated.md")?.meta?.start).toBeUndefined();
+    const want = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+    expect(items.find((i) => i.title === "plain.md")?.meta?.day).toBe(want);
+    expect(items.find((i) => i.title === "plain.md")?.meta?.start).toBeUndefined();
+    expect(items.find((i) => i.title === "dated.md")?.meta?.day).toBeUndefined();
 
-    // The stamped day is what the engine's day index and seat days read for a dated lookup.
-    const hits = await s.search(
-      { scope, text: "", entities: [], limit: 10, window: { start: "2026-11-16", end: "2026-11-17" } },
-      signal,
-    );
+    // The stamped day answers a dated lookup on the file's own day (the engine reads meta.day).
+    const next = new Date(monday.getTime() + 86_400_000);
+    const end = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    const hits = await s.search({ scope, text: "", entities: [], limit: 10, window: { start: want, end } }, signal);
     expect(hits.map((h) => h.title)).toEqual(["plain.md"]);
   }));
