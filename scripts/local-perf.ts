@@ -3,26 +3,28 @@
  * p50/p95 of /v1/events and /v1/ask. Run: `bun scripts/local-perf.ts` (needs bun on PATH;
  * spawns `packages/server/src/main.ts` itself).
  */
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { randomBytes } from "node:crypto";
 
-const token = "perf-" + "a".repeat(48);
-const home = join(tmpdir(), `eden-perf-${process.pid}`);
+const token = randomBytes(32).toString("hex");
+const home = mkdtempSync(join(tmpdir(), "eden-perf-")); // 0700, unique: no prepositioned path
 const userSourcesFile = join(home, "user-sources.json");
+// State-dir env the operator may have exported must not redirect the benchmark (EDEN_LOCAL_STATE_DIR
+// wins over EDEN_HOME in localConfig): scrub both, then point EDEN_HOME at the scratch dir.
 const env = {
   ...process.env,
+  EDEN_LOCAL_STATE_DIR: undefined,
+  EDEN_PERSIST: undefined,
   EDEN_LOCAL: "1",
   EDEN_LOCAL_TOKEN: token,
   EDEN_HOME: home,
   EDEN_USER_SOURCES_FILE: userSourcesFile,
 };
-await import("node:fs/promises").then((fs) => fs.mkdir(home, { recursive: true }));
-await import("node:fs/promises").then((fs) =>
-  fs.writeFile(
-    userSourcesFile,
-    JSON.stringify({ users: { "local/u": [{ kind: "static", id: "docs", description: "d", docs: [] }] } }),
-  ),
+writeFileSync(
+  userSourcesFile,
+  JSON.stringify({ users: { "local/u": [{ kind: "static", id: "docs", description: "d", docs: [] }] } }),
 );
 
 async function boot() {
