@@ -509,7 +509,14 @@ describe("change notifications (syncPush)", () => {
     expect(await (await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items })).json()).toEqual({
       ok: true,
       stored: 0,
+      skipped: 0,
     });
+    // Entries with no usable ref or text are skipped and counted, so the caller can fall back to a signal.
+    expect(
+      await (
+        await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: [...items, { text: "no ref" }] })
+      ).json(),
+    ).toEqual({ ok: true, stored: 0, skipped: 1 });
     // A sourceId that is not one of the user's configured sources is a 422, not a silent {stored:0}.
     for (const path of ["/v1/sources/items", "/v1/sources/refs", "/v1/sources/removed"]) {
       const body = path.endsWith("items")

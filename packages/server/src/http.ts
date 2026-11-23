@@ -353,13 +353,17 @@ export function createHandler(
         // The changed items themselves (a Slack event, a trigger's payload): held as synced, with no source call.
         const checked = checkSourceItems(body);
         if (!checked.ok) return fail(400, checked.error);
-        const { userId, sourceId, items } = checked.value;
+        const { userId, sourceId, items, skipped } = checked.value;
         stats.notice(tenant, "items");
         // A sourceId that is not one of the user's configured sources is a caller error, not a no-op.
         if (!(await partner.hasSource({ tenantId: tenant, userId }, sourceId))) {
           return fail(422, `unconfigured source "${sourceId}"`);
         }
-        return json({ ok: true, stored: await partner.sourceItems({ tenantId: tenant, userId }, sourceId, items) });
+        return json({
+          ok: true,
+          stored: await partner.sourceItems({ tenantId: tenant, userId }, sourceId, items),
+          skipped,
+        });
       }
       case "/v1/sources/refs": {
         // What changed, named but not carried (a Gmail history's ids, a webhook's resource id): Eden reads those

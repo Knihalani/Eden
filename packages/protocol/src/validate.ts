@@ -2,6 +2,7 @@
  * Runtime checks for what arrives over the wire. Hand-written rather than schema-library based: the shapes are
  * small, and the server must reject a malformed event with a clear message rather than a stack trace.
  */
+import { createHash } from "node:crypto";
 import { itemId } from "./ids";
 import type { AgentEvent, AskRequest, ContextItem } from "./types";
 
@@ -11,6 +12,17 @@ const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 /** The longest text an event field may carry; an integration cuts longer text to it rather than lose the event. */
 export const MAX_TEXT_CHARS = 1_000_000;
 const isText = (v: unknown, max = MAX_TEXT_CHARS): v is string => typeof v === "string" && v.length <= max;
+/** The longest ref an item may carry; past it a ref is cut to a prefix plus a hash of the whole, so it stays unique. */
+export const MAX_REF_CHARS = 8_192;
+/**
+ * A ref kept whole up to MAX_REF_CHARS, or cut to a prefix plus a sha256 of the whole: unique, bounded and
+ * deterministic — the same long ref clamps the same way whether it was pushed or listed.
+ */
+export function clampRef(ref: string, max = MAX_REF_CHARS): string {
+  if (ref.length <= max) return ref;
+  const hash = createHash("sha256").update(ref).digest("hex").slice(0, 16);
+  return `${ref.slice(0, max - 17)}-${hash}`;
+}
 /** The message for a field that is not a string of at most `max` characters: too long is named, not misread. */
 const textError = (field: string, max: number) =>
   `${field} must be a string of at most ${max.toLocaleString("en-US")} characters`;
@@ -329,7 +341,7 @@ export function checkSourceChanged(v: unknown): Checked<{ tenantId: string; user
  */
 export function checkSourceItems(
   v: unknown,
-): Checked<{ tenantId: string; userId: string; sourceId: string; items: ContextItem[] }> {
+): Checked<{ tenantId: string; userId: string; sourceId: string; items: ContextItem[]; skipped: number }> {
   const head = checkSourceChanged(v);
   if (!head.ok) return head;
   const raw = (v as Record<string, unknown>).items;
@@ -342,7 +354,9 @@ export function checkSourceItems(
   const items: ContextItem[] = [];
   for (const [n, x] of raw.entries()) {
     if (!isRecord(x)) continue;
-    const ref = typeof x.ref === "string" && x.ref ? x.ref.slice(0, 512) : null;
+    // A long ref is kept whole, hashed only past MAX_REF_CHARS — truncating would merge two refs sharing a
+    // prefix and stop a pushed copy matching its listed one.
+    const ref = typeof x.ref === "string" && x.ref ? clampRef(x.ref) : null;
     if (!ref) continue;
     const text =
       typeof x.text === "string"
@@ -383,7 +397,9 @@ export function checkSourceItems(
     });
   }
   if (items.length === 0) return { ok: false, error: "items must be a non-empty array" };
-  return { ok: true, value: { ...head.value, items } };
+  // `skipped` lets the caller know entries were dropped: a partial push should still fall back to a plain
+  // change signal so the source's listing re-reads (and normalizes) them.
+  return { ok: true, value: { ...head.value, items, skipped: raw.length - items.length } };
 }
 
 /**

@@ -10,7 +10,7 @@
  */
 import { createHash } from "node:crypto";
 import { McpClient, type Tool, type Transport } from "./mcp";
-import { itemId, type ContextItem, type Scope } from "@eden/protocol";
+import { clampRef, itemId, type ContextItem, type Scope } from "@eden/protocol";
 import {
   buildArgs,
   buildFetchArgs,
@@ -202,11 +202,28 @@ export class McpSource implements Source {
     for (const t of [...reads].sort(searchFirst)) {
       if (!this.searchName && usable(mapSearchArgs(schema(t)))) this.searchName = t.name;
     }
-    for (const t of reads) {
-      if (t.name === this.searchName) continue;
-      if (!this.listName && listUsable(mapListArgs(schema(t)))) this.listName = t.name;
-      else if (!this.fetchName && fetchUsable(mapFetchArgs(schema(t)))) this.fetchName = t.name;
+    // List and fetch candidates are name-ranked too: an unrelated no-arg read tool (get_status) would otherwise
+    // claim the list role just for being declared first (a connector discovery review finding).
+    const listFirst = (a: Tool, b: Tool) =>
+      Number(/list|all|feed|browse|inbox|recent|timeline|history|entries|updates|collection/i.test(b.name)) -
+      Number(/list|all|feed|browse|inbox|recent|timeline|history|entries|updates|collection/i.test(a.name));
+    const rest = reads.filter((t) => t.name !== this.searchName);
+    for (const t of [...rest].sort(listFirst)) {
+      if (listUsable(mapListArgs(schema(t)))) {
+        this.listName = t.name;
+        break;
+      }
     }
+    const fetchFirst = (a: Tool, b: Tool) =>
+      Number(/get|fetch|read|download|open|show|view|load|detail|lookup/i.test(b.name)) -
+      Number(/get|fetch|read|download|open|show|view|load|detail|lookup/i.test(a.name));
+    for (const t of rest.filter((t) => t.name !== this.listName).sort(fetchFirst)) {
+      if (fetchUsable(mapFetchArgs(schema(t)))) {
+        this.fetchName = t.name;
+        break;
+      }
+    }
+
     if (!this.searchName && !this.listName && !this.fetchName) {
       this.lastError = new ArgumentMappingError(`${this.id}: no read tool's schema maps to search, list or fetch`);
     }
@@ -370,9 +387,11 @@ export class McpSource implements Source {
     // The record itself first: a reply that is one object with this id wins over the rows it holds (Gmail's
     // get_thread is `{id, messages: [...]}`, whose rows carry message ids, never the thread's; D294).
     const json = blockJson(result.content);
+    // Matched by the same ref rule rowItem derives: a row keyed only by an id-like name (blob_id) resolves
+    // by that key, not just the fixed ID_KEYS.
     const row =
-      topObjects(result.content, result.structuredContent, json).find((r) => first(r, ID_KEYS) === ref) ??
-      jsonRows(result.content, result.structuredContent, json).find((r) => first(r, ID_KEYS) === ref);
+      topObjects(result.content, result.structuredContent, json).find((r) => rowRef(r) === ref) ??
+      jsonRows(result.content, result.structuredContent, json).find((r) => rowRef(r) === ref);
     return row ? rowItem(this.id, row) : null;
   }
 
@@ -601,10 +620,15 @@ const VOLATILE = /^(_.*|score|rank|distance|distances|relevance|similarity|highl
 /** A row key ending in an id (`doc_id`, `messageID`, `externalId`): the ref when it is the only one. */
 const ID_LIKE = /(^|_)(id|ID)$|[a-z0-9](Id|ID)$/;
 
-function rowItem(sourceId: string, row: Row): ContextItem {
+/** A row's ref as rowItem derives it, or undefined when only a content hash could name it. */
+function rowRef(row: Row): string | undefined {
   const idLike = Object.keys(row).filter((k) => ID_LIKE.test(k) && str(row[k]));
-  const ref =
-    first(row, ID_KEYS) ?? (idLike.length === 1 ? str(row[idLike[0]!]) : undefined) ?? contentRef(identity(row));
+  return first(row, ID_KEYS) ?? (idLike.length === 1 ? str(row[idLike[0]!]) : undefined);
+}
+
+function rowItem(sourceId: string, row: Row): ContextItem {
+  // A long ref clamps the same way a pushed one does (checkSourceItems), so the copies match.
+  const ref = clampRef(rowRef(row) ?? contentRef(identity(row)));
   const url = URL_KEYS.map((k) => str(row[k])).find((u) => u && /^https?:\/\//.test(u));
   const meta = structureOf(row);
   return {

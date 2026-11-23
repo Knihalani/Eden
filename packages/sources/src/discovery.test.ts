@@ -124,6 +124,29 @@ describe("tool discovery (A4)", () => {
     await s.close();
   });
 
+  test("an unrelated no-arg tool cannot claim the list role; fetch resolves an id-like key", async () => {
+    const server = new McpServer({ name: "blobs", version: "1" });
+    server.registerTool("get_status", { inputSchema: {}, annotations: { readOnlyHint: true } }, async () => ({
+      content: [{ type: "text" as const, text: "ok" }],
+    }));
+    server.registerTool("list_blobs", { inputSchema: {}, annotations: { readOnlyHint: true } }, async () => ({
+      content: [{ type: "text" as const, text: JSON.stringify({ blobs: [{ blob_id: "b1", body: "blob one" }] }) }],
+    }));
+    server.registerTool(
+      "download_blob",
+      { inputSchema: { blob_id: z.string() }, annotations: { readOnlyHint: true } },
+      async ({ blob_id }) => ({
+        content: [{ type: "text" as const, text: JSON.stringify({ blob_id, body: "blob one" }) }],
+      }),
+    );
+    const s = discovered("blobs", server);
+    const p = await s.list!(alice, undefined, 10, AbortSignal.timeout(2_000));
+    expect(p.items.map((i) => [i.ref, i.text])).toEqual([["b1", "blob one"]]);
+    // blob_id is not a fixed ID_KEYS name, but the ref rowItem derived — fetch must find it (review).
+    expect((await s.fetch("b1", alice, AbortSignal.timeout(2_000)))?.text).toBe("blob one");
+    await s.close();
+  });
+
   test("a server with no mappable read connects cleanly: search [], list a failed sync", async () => {
     const server = new McpServer({ name: "write-only", version: "1" });
     server.registerTool("create_thing", { inputSchema: { name: z.string() } }, async () => ({ content: [] }));

@@ -433,4 +433,34 @@ describe("an over-long field is refused with a message naming the limit, not a w
     const huge = checkSourceItems({ ...base, items: [{ ref: "r", text: "x".repeat(200_001) }] });
     expect(huge.ok && huge.value.items[0]!.text.length).toBe(200_000);
   });
+
+  test("long refs stay whole up to MAX_REF_CHARS and clamp distinct; skipped entries are counted", () => {
+    const base = { tenantId: "t", userId: "u", sourceId: "src" };
+    const shared = "x".repeat(600);
+    const two = checkSourceItems({
+      ...base,
+      items: [
+        { ref: `${shared}a`, text: "one" },
+        { ref: `${shared}b`, text: "two" },
+      ],
+    });
+    expect(two.ok).toBe(true);
+    if (two.ok) {
+      expect(two.value.items[0]!.ref).toBe(`${shared}a`);
+      expect(two.value.items[0]!.id).not.toBe(two.value.items[1]!.id);
+      expect(two.value.skipped).toBe(0);
+    }
+    const long = "y".repeat(9_000);
+    const clamped = checkSourceItems({ ...base, items: [{ ref: `${long}a`, text: "t" }] });
+    expect(clamped.ok).toBe(true);
+    if (clamped.ok) {
+      const r = clamped.value.items[0]!.ref;
+      expect(r.length).toBeLessThanOrEqual(8_192);
+      expect(r.startsWith("y".repeat(100))).toBe(true);
+      expect(r.endsWith("a")).toBe(false);
+    }
+    const mixed = checkSourceItems({ ...base, items: [{ ref: "ok", text: "t" }, { text: "no ref" }] });
+    expect(mixed.ok).toBe(true);
+    if (mixed.ok) expect(mixed.value.skipped).toBe(1);
+  });
 });
