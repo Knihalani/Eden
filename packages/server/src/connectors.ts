@@ -8,8 +8,8 @@
  */
 import { readFileSync } from "node:fs";
 import type { Scope } from "@eden/protocol";
-import { StaticSource, type Source, type SourceResolver } from "@eden/sources";
-import { checkSpecs, fileDirectory, SourceConfigError, UserSources, type StaticSpec } from "./user-sources";
+import { FileSource, StaticSource, type Source, type SourceResolver } from "@eden/sources";
+import { checkSpecs, fileDirectory, SourceConfigError, UserSources } from "./user-sources";
 
 export function staticResolver(path: string | undefined): SourceResolver {
   const sources = staticSources(path);
@@ -40,19 +40,24 @@ export function staticSources(path: string | undefined): Source[] {
   const entries: unknown[] = file.sources;
   entries.forEach((s, i) => {
     // Before checkSpecs, so an MCP-shaped entry gets the D108 pointer rather than a bare "docs must be an array".
-    if (isObject(s) && !Array.isArray(s.docs)) {
+    // `kind: "file"` entries are allowed too (A3): local paths have no credentials and serve every user.
+    if (isObject(s) && s.kind !== "file" && !Array.isArray(s.docs)) {
       throw new SourceConfigError(
         `EDEN_SOURCES_FILE sources[${i}] has no docs: it holds static sources shared by every user; ` +
           "MCP sources are per user, in EDEN_USER_SOURCES_FILE (D108)",
       );
     }
   });
-  // `kind` last: every shared entry is static whatever it says, so none is checked (or built) as an MCP source.
+  // `kind` last: every shared entry is static unless it asked for the file source, so none is built as MCP.
   const specs = checkSpecs(
-    entries.map((s) => (isObject(s) ? { ...s, kind: "static" } : s)),
+    entries.map((s) => (isObject(s) ? { ...s, kind: s.kind === "file" ? "file" : "static" } : s)),
     "EDEN_SOURCES_FILE.sources",
-  ) as StaticSpec[];
-  return specs.map((s) => new StaticSource(s.id, s.description, s.docs));
+  );
+  return specs.map((s) =>
+    s.kind === "file"
+      ? new FileSource(s.id, s.description, { paths: s.paths, maxBytes: s.maxBytes, maxFiles: s.maxFiles })
+      : new StaticSource(s.id, s.description, s.docs),
+  );
 }
 
 /**

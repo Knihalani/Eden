@@ -25,6 +25,7 @@ import { isId, scopeKey, type Scope } from "@eden/protocol";
 import { expandPreset } from "./connector-presets";
 import {
   McpSource,
+  FileSource,
   StaticSource,
   StreamableHttpTransport,
   type McpSourceOptions,
@@ -81,7 +82,17 @@ export interface McpSpec {
   callPriced?: boolean;
 }
 
-export type SourceSpec = StaticSpec | McpSpec;
+export interface FileSpec {
+  kind: "file";
+  id: string;
+  description: string;
+  /** Directory trees and/or glob patterns to index; ~ expands (A3). */
+  paths: string[];
+  maxBytes?: number;
+  maxFiles?: number;
+}
+
+export type SourceSpec = StaticSpec | McpSpec | FileSpec;
 
 /**
  * An MCP spec by preset (D294): a common server's read tools filled in by `checkSpecs` (`connector-presets.ts`); any
@@ -385,6 +396,13 @@ class Lease implements Source {
 
 function build(spec: SourceSpec): Source {
   if (spec.kind === "static") return new StaticSource(spec.id, spec.description, spec.docs);
+  if (spec.kind === "file") {
+    return new FileSource(spec.id, spec.description, {
+      paths: spec.paths,
+      ...(spec.maxBytes !== undefined ? { maxBytes: spec.maxBytes } : {}),
+      ...(spec.maxFiles !== undefined ? { maxFiles: spec.maxFiles } : {}),
+    });
+  }
   let transport = spec.transport;
   if (!transport) {
     const url = new URL(spec.url!);
@@ -469,7 +487,18 @@ export function checkSpecs(input: unknown, where: string): SourceSpec[] {
       });
       return;
     }
-    if (s.kind !== "mcp") throw new SourceConfigError(`${at}.kind must be "static" or "mcp"`);
+    if (s.kind === "file") {
+      if (!Array.isArray(s.paths) || s.paths.length === 0 || !s.paths.every((p) => typeof p === "string" && p.trim())) {
+        throw new SourceConfigError(`${at}.paths must be a non-empty array of dirs/globs`);
+      }
+      for (const f of ["maxBytes", "maxFiles"] as const) {
+        if (s[f] !== undefined && (typeof s[f] !== "number" || s[f] <= 0)) {
+          throw new SourceConfigError(`${at}.${f} must be a positive number`);
+        }
+      }
+      return;
+    }
+    if (s.kind !== "mcp") throw new SourceConfigError(`${at}.kind must be "static", "mcp" or "file"`);
     if ((s.url === undefined) === (s.transport === undefined)) {
       throw new SourceConfigError(`${at} needs exactly one of url or transport`);
     }
