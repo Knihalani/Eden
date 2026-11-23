@@ -3,7 +3,7 @@
  * line in a sources file, no connector to run. Each `list`/`search` rescans paths and re-reads only
  * files whose mtime or size changed; a deleted file reports gone by ref.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import type { ContextItem, Scope } from "@eden/protocol";
@@ -59,15 +59,23 @@ function matchPaths(entry: string): string[] {
   }
 }
 
-/** One text read of a file, or null for binary/unreadable: text is cut at maxBytes. */
+/**
+ * One text read of a file, or null for binary/unreadable: text is cut at maxBytes. At most maxBytes + 1
+ * bytes are read — a giant file in a watched dir must not be loaded whole for the cut or the sniff.
+ */
 function readText(path: string, maxBytes: number): string | null {
+  let fd: number | undefined;
   try {
-    const buf = readFileSync(path);
-    const sniff = buf.subarray(0, BINARY_SNIFF);
-    if (sniff.includes(0)) return null;
-    return buf.subarray(0, maxBytes).toString("utf8");
+    fd = openSync(path, "r");
+    const buf = Buffer.alloc(maxBytes + 1);
+    const n = readSync(fd, buf, 0, buf.length, 0);
+    const read = buf.subarray(0, n);
+    if (read.subarray(0, BINARY_SNIFF).includes(0)) return null;
+    return read.subarray(0, maxBytes).toString("utf8");
   } catch {
     return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
 }
 
@@ -93,21 +101,29 @@ export class FileSource implements Source {
     this.entries = spec.paths.map(expand);
   }
 
-  /** Rescan: re-read files whose mtime or size changed, drop the missing. Rebuilds the term index. */
+  /**
+   * Rescan: re-read files whose mtime or size changed, drop the missing. The cap keeps the maxFiles
+   * *newest* matches — cutting the scan order would keep whichever files sort first and never drop
+   * held entries past it. Rebuilds the term index.
+   */
   private scan(): void {
-    const seen = new Set<string>();
-    const next: string[] = [];
-    for (const e of this.entries) for (const p of matchPaths(e)) if (!seen.has(p)) (seen.add(p), next.push(p));
-    let dirty = false;
-    for (const path of next.slice(0, this.maxFiles)) {
-      let st;
+    const matched = new Set<string>();
+    for (const e of this.entries) for (const p of matchPaths(e)) matched.add(p);
+    const statred: { path: string; mtimeMs: number; size: number }[] = [];
+    for (const path of matched) {
       try {
-        st = statSync(path);
+        const st = statSync(path);
+        statred.push({ path, mtimeMs: st.mtimeMs, size: st.size });
       } catch {
-        continue;
+        /* vanished between glob and stat */
       }
+    }
+    statred.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    const keep = new Set(statred.slice(0, this.maxFiles).map((s) => s.path));
+    let dirty = false;
+    for (const { path, mtimeMs, size } of statred.slice(0, this.maxFiles)) {
       const old = this.held.get(path);
-      if (old && old.mtimeMs === st.mtimeMs && old.size === st.size) continue;
+      if (old && old.mtimeMs === mtimeMs && old.size === size) continue;
       const text = readText(path, this.maxBytes);
       if (text === null) {
         if (old) this.held.delete(path);
@@ -116,20 +132,25 @@ export class FileSource implements Source {
       }
       dirty = true;
       this.held.set(path, {
-        mtimeMs: st.mtimeMs,
-        size: st.size,
+        mtimeMs,
+        size,
         doc: {
           ref: path,
           title: basename(path),
           text,
           url: `file://${path}`,
-          updatedAt: st.mtimeMs,
-          meta: { dir: dirname(path), ext: extname(path), size: String(st.size) },
+          updatedAt: mtimeMs,
+          meta: {
+            dir: dirname(path),
+            ext: extname(path),
+            size: String(size),
+            start: new Date(mtimeMs).toISOString().slice(0, 10),
+          },
         },
       });
     }
     for (const p of [...this.held.keys()]) {
-      if (!seen.has(p)) {
+      if (!keep.has(p)) {
         this.held.delete(p);
         dirty = true;
       }
@@ -162,19 +183,11 @@ export class FileSource implements Source {
   }
 
   async fetch(ref: string, _scope: Scope, _signal: AbortSignal): Promise<ContextItem | null> {
-    if (!existsSync(ref)) return null;
-    const st = statSync(ref);
-    const text = readText(ref, this.maxBytes);
-    if (text === null) return null;
-    return {
-      id: itemId(this.id, ref),
-      sourceId: this.id,
-      ref,
-      title: basename(ref),
-      text,
-      url: `file://${ref}`,
-      updatedAt: st.mtimeMs,
-      meta: { dir: dirname(ref), ext: extname(ref), size: String(st.size) },
-    };
+    // Only refs the configured paths cover are ever opened: a pushed ref naming an arbitrary local
+    // path (`/etc/passwd`) must not be read into an item (SEC: fetch is not a file API).
+    this.scan();
+    const held = this.held.get(ref);
+    if (!held) return null;
+    return { id: itemId(this.id, ref), sourceId: this.id, ...held.doc };
   }
 }
