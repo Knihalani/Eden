@@ -355,6 +355,10 @@ export function createHandler(
         if (!checked.ok) return fail(400, checked.error);
         const { userId, sourceId, items } = checked.value;
         stats.notice(tenant, "items");
+        // A sourceId that is not one of the user's configured sources is a caller error, not a no-op.
+        if (!(await partner.hasSource({ tenantId: tenant, userId }, sourceId))) {
+          return fail(422, `unconfigured source "${sourceId}"`);
+        }
         return json({ ok: true, stored: await partner.sourceItems({ tenantId: tenant, userId }, sourceId, items) });
       }
       case "/v1/sources/refs": {
@@ -364,6 +368,9 @@ export function createHandler(
         if (!checked.ok) return fail(400, checked.error);
         const { userId, sourceId, refs } = checked.value;
         stats.notice(tenant, "refs");
+        if (!(await partner.hasSource({ tenantId: tenant, userId }, sourceId))) {
+          return fail(422, `unconfigured source "${sourceId}"`);
+        }
         const { settled, ...result } = partner.sourceRefs({ tenantId: tenant, userId }, sourceId, refs);
         void settled.catch(() => 0);
         return json({ ok: true, ...result });
@@ -375,6 +382,9 @@ export function createHandler(
         const { userId, sourceId, refs } = checked.value;
         stats.notice(tenant, "removed");
         await partner.ready({ tenantId: tenant, userId }); // D325, as above.
+        if (!(await partner.hasSource({ tenantId: tenant, userId }, sourceId))) {
+          return fail(422, `unconfigured source "${sourceId}"`);
+        }
         return json({ ok: true, removed: partner.sourceRemoved({ tenantId: tenant, userId }, sourceId, refs) });
       }
       case "/v1/sources": {

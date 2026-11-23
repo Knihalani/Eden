@@ -510,6 +510,13 @@ describe("change notifications (syncPush)", () => {
       ok: true,
       stored: 0,
     });
+    // A sourceId that is not one of the user's configured sources is a 422, not a silent {stored:0}.
+    for (const path of ["/v1/sources/items", "/v1/sources/refs", "/v1/sources/removed"]) {
+      const body = path.endsWith("items") ? { userId: "u1", sourceId: "bogus", items } : { userId: "u1", sourceId: "bogus", refs: ["d1"] };
+      const res = await post(path, body);
+      expect(res.status).toBe(422);
+      expect(await res.text()).toContain("bogus");
+    }
     expect((await post("/v1/sources/changed", { userId: "u1" })).status).toBe(400);
     expect((await post("/v1/sources/changed", { userId: "u1", sourceId: "a/b" })).status).toBe(400);
     expect((await post("/v1/sources/changed", { userId: "u1", sourceId: "crm", tenantId: "other" })).status).toBe(403);
