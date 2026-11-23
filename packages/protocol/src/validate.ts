@@ -2,6 +2,7 @@
  * Runtime checks for what arrives over the wire. Hand-written rather than schema-library based: the shapes are
  * small, and the server must reject a malformed event with a clear message rather than a stack trace.
  */
+import { createHash } from "node:crypto";
 import { itemId } from "./ids";
 import type { AgentEvent, AskRequest, ContextItem } from "./types";
 
@@ -11,6 +12,17 @@ const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 /** The longest text an event field may carry; an integration cuts longer text to it rather than lose the event. */
 export const MAX_TEXT_CHARS = 1_000_000;
 const isText = (v: unknown, max = MAX_TEXT_CHARS): v is string => typeof v === "string" && v.length <= max;
+/** The longest ref an item may carry; past it a ref is cut to a prefix plus a hash of the whole, so it stays unique. */
+export const MAX_REF_CHARS = 8_192;
+/**
+ * A pushed ref kept whole up to MAX_REF_CHARS, or cut to a prefix plus a sha256 of the whole: unique, bounded and
+ * deterministic. Listed refs are never clamped — a fetch resolves them at the connector, so they stay whole.
+ */
+export function clampRef(ref: string, max = MAX_REF_CHARS): string {
+  if (ref.length <= max) return ref;
+  const hash = createHash("sha256").update(ref).digest("hex").slice(0, 16);
+  return `${ref.slice(0, max - 17)}-${hash}`;
+}
 /** The message for a field that is not a string of at most `max` characters: too long is named, not misread. */
 const textError = (field: string, max: number) =>
   `${field} must be a string of at most ${max.toLocaleString("en-US")} characters`;
@@ -329,45 +341,65 @@ export function checkSourceChanged(v: unknown): Checked<{ tenantId: string; user
  */
 export function checkSourceItems(
   v: unknown,
-): Checked<{ tenantId: string; userId: string; sourceId: string; items: ContextItem[] }> {
+): Checked<{ tenantId: string; userId: string; sourceId: string; items: ContextItem[]; skipped: number }> {
   const head = checkSourceChanged(v);
   if (!head.ok) return head;
   const raw = (v as Record<string, unknown>).items;
   if (!Array.isArray(raw) || raw.length === 0) return { ok: false, error: "items must be a non-empty array" };
   if (raw.length > MAX_PUSHED_ITEMS) return { ok: false, error: `at most ${MAX_PUSHED_ITEMS} items per call` };
   const { sourceId } = head.value;
+  // Normalize, never reject (A4): a connector's odd-but-real item is trimmed and coerced, not a 400 that
+  // drops the whole notification. An entry still needs a ref and some text; items that have neither are
+  // skipped, and only a call with nothing usable at all is a caller error.
   const items: ContextItem[] = [];
   for (const [n, x] of raw.entries()) {
-    if (!isRecord(x)) return { ok: false, error: `items[${n}] must be an object` };
-    if (!isText(x.ref, 512) || !x.ref) return { ok: false, error: `items[${n}].ref must be 1-512 characters` };
-    if (x.title !== undefined && !isText(x.title, 2_000))
-      return { ok: false, error: textError(`items[${n}].title`, 2_000) };
-    if (!isText(x.text, MAX_PUSHED_TEXT)) return { ok: false, error: textError(`items[${n}].text`, MAX_PUSHED_TEXT) };
-    if (x.url !== undefined && !isText(x.url, 2_000)) return { ok: false, error: textError(`items[${n}].url`, 2_000) };
-    if (x.updatedAt !== undefined && !(typeof x.updatedAt === "number" && Number.isFinite(x.updatedAt))) {
-      return { ok: false, error: `items[${n}].updatedAt must be epoch milliseconds` };
+    if (!isRecord(x)) continue;
+    // A long ref is kept whole, hashed only past MAX_REF_CHARS — truncating would merge two refs sharing a
+    // prefix and stop a pushed copy matching its listed one.
+    const ref = typeof x.ref === "string" && x.ref ? clampRef(x.ref) : null;
+    if (!ref) continue;
+    const text =
+      typeof x.text === "string"
+        ? x.text.slice(0, MAX_PUSHED_TEXT)
+        : typeof x.text === "number" || typeof x.text === "boolean"
+          ? String(x.text)
+          : null;
+    if (!text) continue;
+    const title = typeof x.title === "string" ? x.title.slice(0, 2_000) : "";
+    const url = typeof x.url === "string" && x.url.length <= 2_000 ? x.url : undefined;
+    let updatedAt: number | undefined;
+    if (typeof x.updatedAt === "number" && Number.isFinite(x.updatedAt)) updatedAt = x.updatedAt;
+    else if (typeof x.updatedAt === "string") {
+      // Non-epoch forms a connector may send: epoch digits ("1736546400000" or seconds) or an ISO date.
+      const num = /^\d{9,13}$/.test(x.updatedAt) ? Number(x.updatedAt) : NaN;
+      const parsed = Number.isFinite(num) ? num : Date.parse(x.updatedAt);
+      if (Number.isFinite(parsed)) updatedAt = parsed < 10_000_000_000 ? parsed * 1000 : parsed;
     }
     let meta: Record<string, string> | undefined;
-    if (x.meta !== undefined) {
-      if (!isRecord(x.meta)) return { ok: false, error: `items[${n}].meta must be an object of strings` };
-      const entries = Object.entries(x.meta);
-      if (entries.length > 20 || entries.some(([k, m]) => k.length > 64 || !isText(m, 2_000))) {
-        return { ok: false, error: `items[${n}].meta must be at most 20 short string values` };
+    if (isRecord(x.meta)) {
+      meta = {};
+      for (const [k, v] of Object.entries(x.meta).slice(0, 20)) {
+        if (!k || k.length > 64 || v === undefined) continue;
+        const s = typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : null;
+        if (s !== null) meta[k] = s.slice(0, 2_000);
       }
-      meta = Object.fromEntries(entries) as Record<string, string>;
+      if (Object.keys(meta).length === 0) meta = undefined;
     }
     items.push({
-      id: itemId(sourceId, x.ref),
+      id: itemId(sourceId, ref),
       sourceId,
-      ref: x.ref,
-      title: (x.title as string | undefined) ?? "",
-      text: x.text,
-      ...(x.url !== undefined ? { url: x.url as string } : {}),
-      ...(x.updatedAt !== undefined ? { updatedAt: x.updatedAt as number } : {}),
+      ref,
+      title,
+      text,
+      ...(url !== undefined ? { url } : {}),
+      ...(updatedAt !== undefined ? { updatedAt } : {}),
       ...(meta ? { meta } : {}),
     });
   }
-  return { ok: true, value: { ...head.value, items } };
+  if (items.length === 0) return { ok: false, error: "items must be a non-empty array" };
+  // `skipped` lets the caller know entries were dropped: a partial push should still fall back to a plain
+  // change signal so the source's listing re-reads (and normalizes) them.
+  return { ok: true, value: { ...head.value, items, skipped: raw.length - items.length } };
 }
 
 /**

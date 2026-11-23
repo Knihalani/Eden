@@ -303,7 +303,7 @@ describe("UserSources: per-user sources and connections (D108)", () => {
     const bad = [
       [{ kind: "mcp", id: "mail", description: "m", searchTool: { name: "s" } }, /exactly one of url or transport/],
       [{ kind: "mcp", id: "mail", description: "m", url: "ftp://x", searchTool: { name: "s" } }, /url must be http/],
-      [{ kind: "mcp", id: "mail", description: "m", url: "https://x" }, /searchTool.name/],
+      [{ kind: "mcp", id: "mail", description: "m", url: "https://x", searchTool: { name: 5 } }, /searchTool.name/],
       [{ kind: "ldap", id: "mail", description: "m" }, /kind must be/],
       [{ kind: "static", id: "a/b", description: "m", docs: [] }, /id must be/],
     ] as const;
@@ -381,7 +381,9 @@ describe("source files at startup", () => {
     );
     expect(() => fileDirectory(write("b.json", { sources: [] }))).toThrow(/must be \{"users"/);
     expect(() => fileDirectory(write("c.json", { users: { alice: [] } }))).toThrow(/"<tenantId>\/<userId>"/);
-    const bad = { users: { "acme/alice": [{ kind: "mcp", id: "m", description: "", url: "https://x" }] } };
+    const bad = {
+      users: { "acme/alice": [{ kind: "mcp", id: "m", description: "", url: "https://x", searchTool: "s" }] },
+    };
     expect(() => fileDirectory(write("d.json", bad))).toThrow(/users\["acme\/alice"\]\[0\]\.searchTool\.name/);
   });
 

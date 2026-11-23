@@ -447,7 +447,9 @@ export class EdenClient {
       if (r === null || !r.synced) delivered = false;
     }
     for (let i = 0; i < items.length; i += MAX_PUSHED_ITEMS) {
-      if ((await this.sourceItemsReached(sourceId, items.slice(i, i + MAX_PUSHED_ITEMS))) === null) delivered = false;
+      const r = await this.sourceItemsReached(sourceId, items.slice(i, i + MAX_PUSHED_ITEMS));
+      // Entries the server skipped are not delivered: the signal below lets the listing re-read them.
+      if (r === null || r.skipped > 0) delivered = false;
     }
     for (let i = 0; i < removed.length; i += MAX_PUSHED_ITEMS) {
       if ((await this.sourceRemovedReached(sourceId, removed.slice(i, i + MAX_PUSHED_ITEMS))) === null) {
@@ -532,19 +534,23 @@ export class EdenClient {
    * with no source call. Never throws; resolves to how many were stored new or changed (0 when unreachable).
    */
   async sourceItems(sourceId: string, items: PushedItem[]): Promise<number> {
-    return (await this.sourceItemsReached(sourceId, items)) ?? 0;
+    return (await this.sourceItemsReached(sourceId, items))?.stored ?? 0;
   }
 
   /** `/v1/sources/items`: how many were stored new or changed, or null when the server did not take the call. */
-  private async sourceItemsReached(sourceId: string, items: PushedItem[]): Promise<number | null> {
+  private async sourceItemsReached(
+    sourceId: string,
+    items: PushedItem[],
+  ): Promise<{ stored: number; skipped: number } | null> {
     const { tenantId, userId } = this.options;
-    const res = await this.post<{ stored: number }>(
+    const res = await this.post<{ stored: number; skipped?: number }>(
       "/v1/sources/items",
       { ...(tenantId ? { tenantId } : {}), userId, sourceId, items },
       undefined,
       undefined,
       (v) => isRecord(v) && typeof v.stored === "number",
     );
-    return res ? res.stored : null;
+    // An older server sends no `skipped`: its answer meant every entry was held.
+    return res ? { stored: res.stored, skipped: typeof res.skipped === "number" ? res.skipped : 0 } : null;
   }
 }

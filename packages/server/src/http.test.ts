@@ -509,7 +509,14 @@ describe("change notifications (syncPush)", () => {
     expect(await (await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items })).json()).toEqual({
       ok: true,
       stored: 0,
+      skipped: 0,
     });
+    // Entries with no usable ref or text are skipped and counted, so the caller can fall back to a signal.
+    expect(
+      await (
+        await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: [...items, { text: "no ref" }] })
+      ).json(),
+    ).toEqual({ ok: true, stored: 0, skipped: 1 });
     // A sourceId that is not one of the user's configured sources is a 422, not a silent {stored:0}.
     for (const path of ["/v1/sources/items", "/v1/sources/refs", "/v1/sources/removed"]) {
       const body = path.endsWith("items")
@@ -528,8 +535,9 @@ describe("change notifications (syncPush)", () => {
     );
     const many = Array.from({ length: 101 }, (_, i) => ({ ref: `r${i}`, text: "x" }));
     expect((await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: many })).status).toBe(400);
-    const badMeta = [{ ref: "r", text: "x", meta: { a: 1 } }];
-    expect((await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: badMeta })).status).toBe(400);
+    // Odd-but-real item fields are coerced, not a 400 (A4): a non-string meta value becomes a string.
+    const oddMeta = [{ ref: "r", text: "x", meta: { a: 1 } }];
+    expect((await post("/v1/sources/items", { userId: "u1", sourceId: "crm", items: oddMeta })).status).toBe(200);
   });
 });
 
