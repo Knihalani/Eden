@@ -1331,6 +1331,19 @@ export class ContextPartner extends PartnerAsk {
   }
 
   /**
+   * Whether `sourceId` is one of the user's configured sources (`deps.sources`): `/v1/sources/items`, `/refs` and
+   * `/removed` answer 422 naming an unconfigured one rather than storing nothing (D2109's follow-up).
+   */
+  async hasSource(scope: Scope, sourceId: string): Promise<boolean> {
+    // The sync's populated view is cheap and current for engaged users; the resolver covers an
+    // unengaged or new user (whose `status` answers fresh on its first sighting) — a just-added
+    // connector is rejected only while neither holds it (config TTL), never silently dropped.
+    if (this.sync?.has(scope, sourceId)) return true;
+    const all = await this.deps.sources(scope).catch((): Source[] => []);
+    return all.some((x) => x.id === sourceId);
+  }
+
+  /**
    * Items a change notification carried (`syncPush`): a Slack event's message, a Graph notification's resource data, a
    * trigger's payload. They pass the secret gate and are stored as synced, with no source call. Items naming another
    * source are left out. Returns how many were new or changed; 0 when push is off or the source is not synced yet.

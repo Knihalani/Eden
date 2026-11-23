@@ -1079,6 +1079,11 @@ export class SyncManager {
     return this.users.get(scopeKey(scope))?.sources.get(sourceId)?.engaged === true;
   }
 
+  /** Whether the source is one the sync holds for the user (`u.sources`): cheap and current with `seen`. */
+  has(scope: Scope, sourceId: string): boolean {
+    return this.users.get(scopeKey(scope))?.sources.has(sourceId) ?? false;
+  }
+
   /** Ids of the items synced from a source for the user, oldest synced first (a copy). */
   syncedIds(scope: Scope, sourceId: string): string[] {
     const s = this.users.get(scopeKey(scope))?.sources.get(sourceId);
