@@ -273,7 +273,7 @@ export class LocalEden {
     };
     const out: Record<string, string> = {};
     for (const name of MODEL_ENV) {
-      const value = options[name] ?? envOf(this.env, name);
+      const value = (options as Record<string, string | undefined>)[name] ?? envOf(this.env, name);
       if (value !== undefined) out[name] = value;
     }
     return out;
