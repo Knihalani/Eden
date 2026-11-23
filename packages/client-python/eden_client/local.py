@@ -248,7 +248,8 @@ class LocalEden:
         """The model env the spawned child gets; shared-server records fingerprint it too (D2109)."""
         out = {}
         for name in _MODEL_ENV:
-            value = self._model[name] if self._model[name] is not None else self._env.get(name)
+            given = self._model.get(name)
+            value = given if given is not None else self._env.get(name)
             if value:
                 out[name] = str(value)
         return out
