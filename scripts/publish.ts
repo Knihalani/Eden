@@ -16,10 +16,13 @@ import { packClient } from "../packages/client/pack";
 
 const root = resolve(import.meta.dir, "..");
 const out = join(root, "dist", "publish");
-const args = new Set(process.argv.slice(2));
-const yes = args.has("--yes");
-const doNpm = !args.has("--pypi") || args.has("--npm");
-const doPy = !args.has("--npm") || args.has("--pypi");
+const FLAGS = new Set(["--yes", "--npm", "--pypi"]);
+const args = process.argv.slice(2);
+const bad = args.filter((a) => !FLAGS.has(a));
+if (bad.length > 0) throw new Error(`unknown flags: ${bad.join(", ")} (allowed: --yes, --npm, --pypi)`);
+const yes = args.includes("--yes");
+const doNpm = !args.includes("--pypi") || args.includes("--npm");
+const doPy = !args.includes("--npm") || args.includes("--pypi");
 const python = process.env.PYTHON ?? "python3";
 
 async function run(cmd: string[], cwd: string, env?: Record<string, string>): Promise<number> {
@@ -33,9 +36,8 @@ function versionOf(dir: string): string {
   return v;
 }
 
-async function npmPublish() {
-  const dir = await packClient(join(out, "eden-client"));
-  const version = versionOf(dir);
+async function npmPublish(version: string) {
+  const dir = join(out, "eden-client");
   if (!yes) return console.log(`npm: would publish @eden/client@${version} --access public`);
   if (!process.env.NPM_TOKEN) throw new Error("NPM_TOKEN is not set (org secrets → environment)");
   writeFileSync(join(dir, ".npmrc"), "//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n");
@@ -47,11 +49,17 @@ async function npmPublish() {
   console.log(`npm: published @eden/client@${version}`);
 }
 
-async function pypiPublish() {
+function pypiVersion(): string {
+  const src = join(root, "packages", "client-python", "pyproject.toml");
+  const version = readFileSync(src, "utf8").match(/^version = "([^"]+)"/m)?.[1];
+  if (!version || version === "0.0.0") throw new Error(`eden-client version is "${version}" — bump it first`);
+  return version;
+}
+
+async function pypiPublish(version: string) {
   const token = process.env.PYPI_TOKEN;
   if (!token) {
-    console.log("pypi: PYPI_TOKEN not set — skipped");
-    return;
+    if (yes) throw new Error("PYPI_TOKEN is not set (org secrets → environment)");
   }
   const has = await run([python, "-c", "import build, twine"], root);
   if (has !== 0) throw new Error(`${python} lacks build/twine (pip install build twine)`);
@@ -63,19 +71,26 @@ async function pypiPublish() {
     cpSync(join(src, f), join(stage, f), { recursive: true });
   cpSync(join(root, "LICENSE"), join(stage, "LICENSE"));
   rmSync(join(stage, "eden_client", "__pycache__"), { recursive: true, force: true });
-  const version = readFileSync(join(stage, "pyproject.toml"), "utf8").match(/^version = "([^"]+)"/m)?.[1];
-  if (!version || version === "0.0.0") throw new Error(`eden-client version is "${version}" — bump it first`);
-  if (!yes) return console.log(`pypi: would publish eden-client@${version}`);
+  if (!yes) {
+    console.log(
+      `pypi: would publish eden-client@${version}` + (token ? "" : " (PYPI_TOKEN needed at publish time)"),
+    );
+    return;
+  }
   if ((await run([python, "-m", "build", "-o", "dist", "."], stage)) !== 0) throw new Error("python -m build failed");
   const dists = readdirSync(join(stage, "dist")).map((f) => join(stage, "dist", f));
   const code = await run([python, "-m", "twine", "upload", "--non-interactive", ...dists], stage, {
     TWINE_USERNAME: "__token__",
-    TWINE_PASSWORD: token,
+    TWINE_PASSWORD: token!,
   });
   if (code !== 0) throw new Error(`twine upload failed (${code})`);
   console.log(`pypi: published eden-client@${version}`);
 }
 
+// Every selected side validates before anything publishes: an npm upload that precedes a PyPI version
+// rejection leaves the rerun unable to retry the combined release (the npm version already exists).
+const npmVersion = doNpm ? versionOf(await packClient(join(out, "eden-client"))) : null;
+const pyVersion = doPy ? pypiVersion() : null;
 console.log(yes ? "publishing…" : "dry run — pass --yes to publish for real");
-if (doNpm) await npmPublish();
-if (doPy) await pypiPublish();
+if (npmVersion) await npmPublish(npmVersion);
+if (pyVersion) await pypiPublish(pyVersion);
