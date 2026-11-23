@@ -15,8 +15,8 @@ const isText = (v: unknown, max = MAX_TEXT_CHARS): v is string => typeof v === "
 /** The longest ref an item may carry; past it a ref is cut to a prefix plus a hash of the whole, so it stays unique. */
 export const MAX_REF_CHARS = 8_192;
 /**
- * A ref kept whole up to MAX_REF_CHARS, or cut to a prefix plus a sha256 of the whole: unique, bounded and
- * deterministic — the same long ref clamps the same way whether it was pushed or listed.
+ * A pushed ref kept whole up to MAX_REF_CHARS, or cut to a prefix plus a sha256 of the whole: unique, bounded and
+ * deterministic. Listed refs are never clamped — a fetch resolves them at the connector, so they stay whole.
  */
 export function clampRef(ref: string, max = MAX_REF_CHARS): string {
   if (ref.length <= max) return ref;

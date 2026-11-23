@@ -10,7 +10,7 @@
  */
 import { createHash } from "node:crypto";
 import { McpClient, type Tool, type Transport } from "./mcp";
-import { clampRef, itemId, type ContextItem, type Scope } from "@eden/protocol";
+import { itemId, type ContextItem, type Scope } from "@eden/protocol";
 import {
   buildArgs,
   buildFetchArgs,
@@ -627,8 +627,9 @@ function rowRef(row: Row): string | undefined {
 }
 
 function rowItem(sourceId: string, row: Row): ContextItem {
-  // A long ref clamps the same way a pushed one does (checkSourceItems), so the copies match.
-  const ref = clampRef(rowRef(row) ?? contentRef(identity(row)));
+  // A listed ref is kept whole however long: fetch calls the connector with it, and a clamped copy
+  // (checkSourceItems bounds pushed ones) would resolve no record.
+  const ref = rowRef(row) ?? contentRef(identity(row));
   const url = URL_KEYS.map((k) => str(row[k])).find((u) => u && /^https?:\/\//.test(u));
   const meta = structureOf(row);
   return {
