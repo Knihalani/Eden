@@ -34,10 +34,10 @@ Stub connectors through `SourceFanout` (4 at 1–3 ms, 1 at 200 ms, 1 throwing),
 `timeoutMs: 60`:
 
 ```
-p50=3.2ms p95=60.4ms max=60.6ms items/lookup=8 statuses={"ok":4,"open":2}
+p50=3.1ms p95=60.4ms max=60.6ms items/lookup=8 statuses={"ok":4,"open":2}
 ```
 
-Command: `bun /tmp/a5/fanout-perf.ts` (script in the A5 notes; six stubs, 60 iterations).
+Command: `bun scripts/fanout-perf.ts` (six stubs, 60 iterations).
 
 Read: one slow connector cannot stall a lookup — p95 equals the deadline, and the thrower's
 breaker opens after its first failure ("open" = refused without a call). One dead connector loses
