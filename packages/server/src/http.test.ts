@@ -169,6 +169,24 @@ describe("per-tenant rate limit", () => {
     expect(Number(third.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
     expect((await call(keyB)).status).toBe(200);
   });
+
+  test("tenantRatePerSec 0 (local mode) removes the limiter: a hot loop never sees 429", async () => {
+    const unlimited = createHandler(partner, {
+      keys: new Map([[key, "local"]]),
+      dev: false,
+      tenantRatePerSec: 0,
+      tenantBurst: 0,
+    });
+    const call = () =>
+      unlimited(
+        new Request("http://x/v1/pending", {
+          method: "POST",
+          headers: { authorization: `Bearer ${key}` },
+          body: JSON.stringify(who),
+        }),
+      );
+    for (let i = 0; i < 200; i++) expect((await call()).status).toBe(200);
+  });
 });
 
 describe("loadConfig", () => {

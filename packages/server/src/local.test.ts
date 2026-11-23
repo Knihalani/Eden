@@ -79,6 +79,8 @@ test("local mode keeps the local-model env and drops other model credentials (D2
   expect(env.EDEN_MODEL_API_KEY).toBe("local-key");
   expect(env.EDEN_MODEL_TIMEOUT_MS).toBe("60000");
   expect(env.EDEN_MODEL_ROLES).toBe("cards");
+  const cfg = localConfig({ EDEN_LOCAL: "1", EDEN_LOCAL_TOKEN: token, EDEN_MODEL_ROLES: "cards" })!;
+  expect(cfg.tenantRatePerSec).toBe(0);
   expect(env.OPENROUTER_API_KEY).toBeUndefined();
   expect(env.EDEN_SESSION_SECRET).toBeUndefined();
 });

@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2111 | 2026-11-23 | No per-tenant GCRA on `eden-local`. | adopted |
 | D2110 | 2026-11-23 | `EDEN_MODEL_ROLES` is the per-role off switch. | adopted |
 | D2109 | 2026-11-23 | Eden's model roles run on any OpenAI-compatible endpoint via `EDEN_MODEL_BASE_URL`, so a local model (Ollama, LM Studio, vLLM, llama.cpp)… | adopted |
 | D2108 | 2026-11-22 | Adopt OpenRouter throughput sorting for the push checker by default (`pushCheckProviderSort`); null keeps existing model routing. | adopted |
