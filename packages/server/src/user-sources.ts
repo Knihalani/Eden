@@ -63,7 +63,12 @@ export interface McpSpec {
    * Put credentials in `headers` (or `transport`), never in an `args` closure: `args` is compared by its source text,
    * so a rotated token captured there would not rebuild the connection.
    */
-  searchTool: McpSourceOptions["searchTool"];
+  /**
+   * The read tool to search with. Omitted, the source discovers its tools at connect: every read
+   * tool's schema is tried as a search, a listing and a fetch, and whatever maps is wired (A4) —
+   * a connector works whatever its tools are named.
+   */
+  searchTool?: McpSourceOptions["searchTool"];
   fetchTool?: McpSourceOptions["fetchTool"];
   listTool?: McpSourceOptions["listTool"];
   trustedReadTools?: string[];
@@ -496,7 +501,7 @@ export function checkSpecs(input: unknown, where: string): SourceSpec[] {
     }
     for (const role of ["searchTool", "fetchTool", "listTool"] as const) {
       const t = s[role];
-      if (t === undefined && role !== "searchTool") continue;
+      if (t === undefined) continue;
       if (!isObject(t) || typeof t.name !== "string" || !t.name) {
         throw new SourceConfigError(`${at}.${role}.name must be a tool name`);
       }

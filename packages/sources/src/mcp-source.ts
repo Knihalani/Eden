@@ -47,7 +47,12 @@ export interface McpSourceOptions {
    * mapping read from the tool's input schema at connect (`schema-args.ts`), with `fixed` values the operator sets
    * (a collection, a channel) sent on every call.
    */
-  searchTool: {
+  /**
+   * Without `searchTool` the source discovers its tools itself (A4): every read tool's schema is tried as a
+   * search, a list and a fetch, and whatever maps is wired — a connector with only a list tool still syncs,
+   * one with only a get still fetches, and a source with no mappable read connects cleanly and answers empty.
+   */
+  searchTool?: {
     name: string;
     args?: (query: SearchQuery) => Record<string, unknown>;
     fixed?: Record<string, unknown>;
@@ -115,6 +120,26 @@ async function listWantedTools(client: McpClient, wanted: ReadonlySet<string>): 
   return [...found.values()];
 }
 
+/**
+ * Every tool of the server, paged like listWantedTools but with no names to stop on: discovery mode
+ * (no `searchTool` configured) reads them all so each schema can be tried as a read.
+ */
+async function listAllTools(client: McpClient): Promise<Tool[]> {
+  const found = new Map<string, Tool>();
+  const cursors = new Set<string>();
+  let seen = 0;
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_TOOL_PAGES; page++) {
+    const res = await client.listTools(cursor ? { cursor } : undefined);
+    for (const t of res.tools) if (!found.has(t.name)) found.set(t.name, t);
+    seen += res.tools.length;
+    cursor = res.nextCursor;
+    if (!cursor || seen >= MAX_TOOLS_SEEN || cursors.has(cursor)) break;
+    cursors.add(cursor);
+  }
+  return [...found.values()];
+}
+
 export class McpSource implements Source {
   readonly kind = "mcp";
   readonly id: string;
@@ -127,20 +152,27 @@ export class McpSource implements Source {
   private mapping: ArgMapping | null = null;
   private fetchMapping: FetchMapping | null = null;
   private listMapping: ListMapping | null = null;
-  /** `list`, when a list tool is configured (D57); undefined otherwise, so the source is never synced. */
+  /** `list`, when a list tool is configured or discovery may find one; a source without any stays un-synced. */
   readonly list?: Source["list"];
   readonly notifies: boolean;
   readonly callPriced: boolean | undefined;
-  /** A get tool is wired (`fetchTool`): without one `fetch` answers null to every ref (D356). */
-  readonly fetchesById: boolean;
+  /** Resolved at connect in discovery mode: the tool names each role settled on, when not configured. */
+  private searchName: string | null = null;
+  private fetchName: string | null = null;
+  private listName: string | null = null;
+  /** A get tool is wired (`fetchTool`, or discovered): without one `fetch` answers null to every ref (D356). */
+  get fetchesById(): boolean {
+    return this.options.fetchTool !== undefined || this.fetchName !== null;
+  }
 
   constructor(private readonly options: McpSourceOptions) {
     this.id = options.id;
     this.description = options.description;
     this.notifies = options.notifies === true;
     this.callPriced = options.callPriced;
-    this.fetchesById = options.fetchTool !== undefined;
-    if (options.listTool) this.list = (scope, cursor, limit, signal) => this.listPage(scope, cursor, limit, signal);
+    if (options.listTool || !options.searchTool) {
+      this.list = (scope, cursor, limit, signal) => this.listPage(scope, cursor, limit, signal);
+    }
   }
 
   /**
@@ -152,6 +184,34 @@ export class McpSource implements Source {
     return signal ? untilAborted(this.connect(), signal) : this.connect();
   }
 
+  /**
+   * Discovery (A4): with no `searchTool` configured, pick the source's tools from the server's own
+   * schemas. Read-only tools only (declared or `trustedReadTools`), tried in a stable order: the
+   * first whose schema maps as a search is the search tool; of the rest, the first that maps as a
+   * listing is the list tool and the first that maps as a fetch is the fetch tool. A server with
+   * none of them connects cleanly — its searches answer empty, its list errors are a failed sync.
+   */
+  private discover(tools: Tool[]): void {
+    const reads = tools.filter(
+      (t) => t.annotations?.readOnlyHint === true || (this.options.trustedReadTools?.includes(t.name) ?? false),
+    );
+    const schema = (t: Tool) => t.inputSchema as ToolSchema;
+    const searchFirst = (a: Tool, b: Tool) =>
+      Number(/search|query|find|lookup|retrieve/i.test(b.name)) -
+      Number(/search|query|find|lookup|retrieve/i.test(a.name));
+    for (const t of [...reads].sort(searchFirst)) {
+      if (!this.searchName && usable(mapSearchArgs(schema(t)))) this.searchName = t.name;
+    }
+    for (const t of reads) {
+      if (t.name === this.searchName) continue;
+      if (!this.listName && listUsable(mapListArgs(schema(t)))) this.listName = t.name;
+      else if (!this.fetchName && fetchUsable(mapFetchArgs(schema(t)))) this.fetchName = t.name;
+    }
+    if (!this.searchName && !this.listName && !this.fetchName) {
+      this.lastError = new ArgumentMappingError(`${this.id}: no read tool's schema maps to search, list or fetch`);
+    }
+  }
+
   private async connect(): Promise<McpClient> {
     if (this.client) return this.client;
     if (Date.now() < this.retryAt) throw this.lastError;
@@ -160,46 +220,68 @@ export class McpSource implements Source {
       try {
         await client.connect(this.options.transport());
         const o = this.options;
-        const wanted = new Set([o.searchTool.name, o.fetchTool?.name, o.listTool?.name].filter((n) => n !== undefined));
-        const tools = await listWantedTools(client, wanted);
-        const tool = this.readTool(tools, this.options.searchTool.name);
-        if (!this.options.searchTool.args) {
-          const m = mapSearchArgs(tool.inputSchema as ToolSchema, this.options.searchTool.fixed);
+        const wanted = new Set(
+          [o.searchTool?.name, o.fetchTool?.name, o.listTool?.name].filter((n) => n !== undefined),
+        );
+        const tools = o.searchTool ? await listWantedTools(client, wanted) : await listAllTools(client);
+        // Discovery (A4): no search tool configured — try every read tool's schema as a search, a
+        // list and a fetch. A configured fetchTool/listTool keeps its name and is not re-picked.
+        if (!o.searchTool) this.discover(tools);
+        const searchName = o.searchTool?.name ?? this.searchName;
+        const tool = searchName ? this.readTool(tools, searchName) : null;
+        if (tool && !o.searchTool?.args) {
+          const m = mapSearchArgs(tool.inputSchema as ToolSchema, o.searchTool?.fixed);
           if (!usable(m)) {
             const why = m.text ? `required arguments with no value: ${m.missing.join(", ")}` : "no query argument";
-            throw new ArgumentMappingError(
-              `${this.id}: cannot call ${tool.name}: ${why}; set searchTool.fixed or args`,
-            );
+            if (o.searchTool) {
+              throw new ArgumentMappingError(
+                `${this.id}: cannot call ${tool.name}: ${why}; set searchTool.fixed or args`,
+              );
+            }
+            this.searchName = null;
+          } else {
+            this.mapping = m;
           }
-          this.mapping = m;
         }
         // A fetch tool is checked like the search tool, and a bad one fails the connect: an operator who configured
         // one expects refreshes, and a source that silently never refreshes would hide the mistake.
         const fetchTool = this.options.fetchTool;
-        if (fetchTool) {
-          const t = this.readTool(tools, fetchTool.name);
-          if (!fetchTool.args) {
-            const m = mapFetchArgs(t.inputSchema as ToolSchema, fetchTool.fixed);
+        const fetchName = fetchTool?.name ?? this.fetchName;
+        if (fetchName) {
+          const t = this.readTool(tools, fetchName);
+          if (!fetchTool?.args) {
+            const m = mapFetchArgs(t.inputSchema as ToolSchema, fetchTool?.fixed);
             if (!fetchUsable(m)) {
               const why = m.ref ? `required arguments with no value: ${m.missing.join(", ")}` : "no id argument";
-              throw new ArgumentMappingError(`${this.id}: cannot call ${t.name}: ${why}; set fetchTool.fixed or args`);
+              if (fetchTool) {
+                throw new ArgumentMappingError(
+                  `${this.id}: cannot call ${t.name}: ${why}; set fetchTool.fixed or args`,
+                );
+              }
+              this.fetchName = null;
+            } else {
+              this.fetchMapping = m;
             }
-            this.fetchMapping = m;
           }
         }
         // A list tool likewise: read-only or trusted, and mappable, or the connect fails and no tool is called.
         const listTool = this.options.listTool;
-        if (listTool) {
-          const t = this.readTool(tools, listTool.name);
-          if (!listTool.args) {
-            const m = mapListArgs(t.inputSchema as ToolSchema, listTool.fixed);
+        const listName = listTool?.name ?? this.listName;
+        if (listName) {
+          const t = this.readTool(tools, listName);
+          if (!listTool?.args) {
+            const m = mapListArgs(t.inputSchema as ToolSchema, listTool?.fixed);
             if (!listUsable(m)) {
-              throw new ArgumentMappingError(
-                `${this.id}: cannot call ${t.name}: required arguments with no value: ${m.missing.join(", ")}; ` +
-                  "set listTool.fixed or args",
-              );
+              if (listTool) {
+                throw new ArgumentMappingError(
+                  `${this.id}: cannot call ${t.name}: required arguments with no value: ${m.missing.join(", ")}; ` +
+                    "set listTool.fixed or args",
+                );
+              }
+              this.listName = null;
+            } else {
+              this.listMapping = m;
             }
-            this.listMapping = m;
           }
         }
         // A dropped connection (a stdio server that exited, an expired HTTP session) clears the client, so the next
@@ -241,10 +323,14 @@ export class McpSource implements Source {
 
   async search(query: SearchQuery, signal: AbortSignal): Promise<ContextItem[]> {
     const client = await this.connectFor(signal);
+    const name = this.options.searchTool?.name ?? this.searchName;
+    // A connector with no search-mappable tool (a list-only server) is a valid source: searched live,
+    // it simply finds nothing — its items still arrive through sync.
+    if (!name) return [];
     const result = await client.callTool(
       {
-        name: this.options.searchTool.name,
-        arguments: this.options.searchTool.args
+        name,
+        arguments: this.options.searchTool?.args
           ? this.options.searchTool.args(query)
           : buildArgs(this.mapping!, query.text, query.limit, Date.now(), query.window),
       },
@@ -273,13 +359,14 @@ export class McpSource implements Source {
    */
   async fetch(ref: string, _scope: Scope, signal?: AbortSignal): Promise<ContextItem | null> {
     const fetchTool = this.options.fetchTool;
-    if (!fetchTool || ref.startsWith(CONTENT_REF)) return null;
+    const fetchName = fetchTool?.name ?? this.fetchName;
+    if (!fetchName || ref.startsWith(CONTENT_REF)) return null;
     const client = await this.connectFor(signal);
-    const args = fetchTool.args ? fetchTool.args(ref) : buildFetchArgs(this.fetchMapping!, ref);
+    const args = fetchTool?.args ? fetchTool.args(ref) : buildFetchArgs(this.fetchMapping!, ref);
     if (!args) return null;
-    const result = await client.callTool({ name: fetchTool.name, arguments: args }, { signal });
+    const result = await client.callTool({ name: fetchName, arguments: args }, { signal });
     // An error result says nothing about the record, and may pass: thrown, so it is never held as the item's state.
-    if (result.isError) throw new FetchErrorResult(`${this.id}: ${fetchTool.name} returned an error`);
+    if (result.isError) throw new FetchErrorResult(`${this.id}: ${fetchName} returned an error`);
     // The record itself first: a reply that is one object with this id wins over the rows it holds (Gmail's
     // get_thread is `{id, messages: [...]}`, whose rows carry message ids, never the thread's; D294).
     const json = blockJson(result.content);
@@ -298,15 +385,17 @@ export class McpSource implements Source {
    * redacted here: whoever holds them runs them through the gate (D10).
    */
   private async listPage(_scope: Scope, cursor: string | undefined, limit: number, signal: AbortSignal) {
-    const listTool = this.options.listTool!;
     const client = await this.connectFor(signal);
-    const args = listTool.args ? listTool.args(cursor, limit) : buildListArgs(this.listMapping!, cursor, limit);
-    const result = await client.callTool({ name: listTool.name, arguments: args }, { signal });
-    if (result.isError) throw new Error(`${this.id}: ${listTool.name} returned an error`);
+    const listTool = this.options.listTool;
+    const listName = listTool?.name ?? this.listName;
+    if (!listName) throw new Error(`${this.id}: server has no list-mappable tool`);
+    const args = listTool?.args ? listTool.args(cursor, limit) : buildListArgs(this.listMapping!, cursor, limit);
+    const result = await client.callTool({ name: listName, arguments: args }, { signal });
+    if (result.isError) throw new Error(`${this.id}: ${listName} returned an error`);
     // Only an offset page may be cut to `limit`: Eden's next offset counts the rows it returns. A server's own token
     // points past the whole page it sent, so rows cut from a token page (a tool with no page-size argument, or an
     // operator's `args` that ignores `limit`) would never be listed; the page is kept whole, up to `MAX_LIST_ROWS`.
-    const offset = !listTool.args && this.listMapping?.cursor?.kind === "offset";
+    const offset = !listTool?.args && this.listMapping?.cursor?.kind === "offset";
     const keep = offset ? limit : Math.max(limit, MAX_LIST_ROWS);
     const json = blockJson(result.content);
     const items = toItems(this.id, result.content, keep, result.structuredContent, json);
@@ -314,7 +403,7 @@ export class McpSource implements Source {
     if (offset) {
       const at = cursor === undefined ? 0 : Number(cursor);
       page.next = items.length >= limit && Number.isSafeInteger(at) ? String(at + items.length) : null;
-    } else if (listTool.args || this.listMapping?.cursor) {
+    } else if (listTool?.args || this.listMapping?.cursor) {
       page.next = nextCursorOf(result.content, result.structuredContent, json);
     }
     return page;
@@ -509,8 +598,13 @@ const CONTAINER_KEYS = [
 /** Fields that change from one query to the next for the same row: left out of a content-hash ref. */
 const VOLATILE = /^(_.*|score|rank|distance|distances|relevance|similarity|highlights?|matches|snippet|excerpt|ex)$/i;
 
+/** A row key ending in an id (`doc_id`, `messageID`, `externalId`): the ref when it is the only one. */
+const ID_LIKE = /(^|_)(id|ID)$|[a-z0-9](Id|ID)$/;
+
 function rowItem(sourceId: string, row: Row): ContextItem {
-  const ref = first(row, ID_KEYS) ?? contentRef(identity(row));
+  const idLike = Object.keys(row).filter((k) => ID_LIKE.test(k) && str(row[k]));
+  const ref =
+    first(row, ID_KEYS) ?? (idLike.length === 1 ? str(row[idLike[0]!]) : undefined) ?? contentRef(identity(row));
   const url = URL_KEYS.map((k) => str(row[k])).find((u) => u && /^https?:\/\//.test(u));
   const meta = structureOf(row);
   return {

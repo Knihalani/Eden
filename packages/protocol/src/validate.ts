@@ -336,37 +336,53 @@ export function checkSourceItems(
   if (!Array.isArray(raw) || raw.length === 0) return { ok: false, error: "items must be a non-empty array" };
   if (raw.length > MAX_PUSHED_ITEMS) return { ok: false, error: `at most ${MAX_PUSHED_ITEMS} items per call` };
   const { sourceId } = head.value;
+  // Normalize, never reject (A4): a connector's odd-but-real item is trimmed and coerced, not a 400 that
+  // drops the whole notification. An entry still needs a ref and some text; items that have neither are
+  // skipped, and only a call with nothing usable at all is a caller error.
   const items: ContextItem[] = [];
   for (const [n, x] of raw.entries()) {
-    if (!isRecord(x)) return { ok: false, error: `items[${n}] must be an object` };
-    if (!isText(x.ref, 512) || !x.ref) return { ok: false, error: `items[${n}].ref must be 1-512 characters` };
-    if (x.title !== undefined && !isText(x.title, 2_000))
-      return { ok: false, error: textError(`items[${n}].title`, 2_000) };
-    if (!isText(x.text, MAX_PUSHED_TEXT)) return { ok: false, error: textError(`items[${n}].text`, MAX_PUSHED_TEXT) };
-    if (x.url !== undefined && !isText(x.url, 2_000)) return { ok: false, error: textError(`items[${n}].url`, 2_000) };
-    if (x.updatedAt !== undefined && !(typeof x.updatedAt === "number" && Number.isFinite(x.updatedAt))) {
-      return { ok: false, error: `items[${n}].updatedAt must be epoch milliseconds` };
+    if (!isRecord(x)) continue;
+    const ref = typeof x.ref === "string" && x.ref ? x.ref.slice(0, 512) : null;
+    if (!ref) continue;
+    const text =
+      typeof x.text === "string"
+        ? x.text.slice(0, MAX_PUSHED_TEXT)
+        : typeof x.text === "number" || typeof x.text === "boolean"
+          ? String(x.text)
+          : null;
+    if (!text) continue;
+    const title = typeof x.title === "string" ? x.title.slice(0, 2_000) : "";
+    const url = typeof x.url === "string" && x.url.length <= 2_000 ? x.url : undefined;
+    let updatedAt: number | undefined;
+    if (typeof x.updatedAt === "number" && Number.isFinite(x.updatedAt)) updatedAt = x.updatedAt;
+    else if (typeof x.updatedAt === "string") {
+      // Non-epoch forms a connector may send: epoch digits ("1736546400000" or seconds) or an ISO date.
+      const num = /^\d{9,13}$/.test(x.updatedAt) ? Number(x.updatedAt) : NaN;
+      const parsed = Number.isFinite(num) ? num : Date.parse(x.updatedAt);
+      if (Number.isFinite(parsed)) updatedAt = parsed < 10_000_000_000 ? parsed * 1000 : parsed;
     }
     let meta: Record<string, string> | undefined;
-    if (x.meta !== undefined) {
-      if (!isRecord(x.meta)) return { ok: false, error: `items[${n}].meta must be an object of strings` };
-      const entries = Object.entries(x.meta);
-      if (entries.length > 20 || entries.some(([k, m]) => k.length > 64 || !isText(m, 2_000))) {
-        return { ok: false, error: `items[${n}].meta must be at most 20 short string values` };
+    if (isRecord(x.meta)) {
+      meta = {};
+      for (const [k, v] of Object.entries(x.meta).slice(0, 20)) {
+        if (!k || k.length > 64 || v === undefined) continue;
+        const s = typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : null;
+        if (s !== null) meta[k] = s.slice(0, 2_000);
       }
-      meta = Object.fromEntries(entries) as Record<string, string>;
+      if (Object.keys(meta).length === 0) meta = undefined;
     }
     items.push({
-      id: itemId(sourceId, x.ref),
+      id: itemId(sourceId, ref),
       sourceId,
-      ref: x.ref,
-      title: (x.title as string | undefined) ?? "",
-      text: x.text,
-      ...(x.url !== undefined ? { url: x.url as string } : {}),
-      ...(x.updatedAt !== undefined ? { updatedAt: x.updatedAt as number } : {}),
+      ref,
+      title,
+      text,
+      ...(url !== undefined ? { url } : {}),
+      ...(updatedAt !== undefined ? { updatedAt } : {}),
       ...(meta ? { meta } : {}),
     });
   }
+  if (items.length === 0) return { ok: false, error: "items must be a non-empty array" };
   return { ok: true, value: { ...head.value, items } };
 }
 

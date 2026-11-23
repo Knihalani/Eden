@@ -359,8 +359,25 @@ describe("checkSourceItems", () => {
       meta: { channel: "general" },
     });
     expect(checkSourceItems({ tenantId: "t", userId: "u", sourceId: "slack", items: [{ ref: "r" }] }).ok).toBe(false);
+    // A non-epoch updatedAt is coerced (ISO, epoch digits, seconds) or dropped, never rejected (A4).
     const updated = { tenantId: "t", userId: "u", sourceId: "s", items: [{ ref: "r", text: "x", updatedAt: "now" }] };
-    expect(checkSourceItems(updated).ok).toBe(false);
+    const coerced = checkSourceItems(updated);
+    expect(coerced.ok).toBe(true);
+    if (coerced.ok) expect(coerced.value.items[0]!.updatedAt).toBeUndefined();
+    const iso = checkSourceItems({
+      tenantId: "t",
+      userId: "u",
+      sourceId: "s",
+      items: [{ ref: "r", text: "x", updatedAt: "2026-11-23T10:00:00Z" }],
+    });
+    expect(iso.ok && iso.value.items[0]!.updatedAt).toBe(Date.parse("2026-11-23T10:00:00Z"));
+    const secs = checkSourceItems({
+      tenantId: "t",
+      userId: "u",
+      sourceId: "s",
+      items: [{ ref: "r", text: "x", updatedAt: "1763911200" }],
+    });
+    expect(secs.ok && secs.value.items[0]!.updatedAt).toBe(1_763_911_200_000);
   });
 });
 
@@ -391,16 +408,29 @@ describe("an over-long field is refused with a message naming the limit, not a w
     );
   });
 
-  test("a pushed item's title or url that is not a string says so, as one past the limit does", () => {
+  test("a pushed item's odd fields are trimmed and coerced, never rejected (A4)", () => {
     const base = { tenantId: "t", userId: "u", sourceId: "src" };
-    expect(errorOf(checkSourceItems({ ...base, items: [{ ref: "r", text: "x", title: 5 }] }))).toBe(
-      "items[0].title must be a string of at most 2,000 characters",
-    );
-    expect(errorOf(checkSourceItems({ ...base, items: [{ ref: "r", text: "x", url: "u".repeat(2_001) }] }))).toBe(
-      "items[0].url must be a string of at most 2,000 characters",
-    );
-    expect(errorOf(checkSourceItems({ ...base, items: [{ ref: "r", text: "x".repeat(200_001) }] }))).toBe(
-      "items[0].text must be a string of at most 200,000 characters",
-    );
+    const coerced = checkSourceItems({
+      ...base,
+      items: [
+        {
+          ref: "r",
+          text: 42 as unknown as string,
+          title: "t".repeat(3_000),
+          url: "u".repeat(2_001),
+          meta: { a: 7, b: true, deep: { x: 1 }, long: "v".repeat(3_000) },
+        },
+      ],
+    });
+    expect(coerced.ok).toBe(true);
+    if (coerced.ok) {
+      const it = coerced.value.items[0]!;
+      expect(it.text).toBe("42");
+      expect(it.title).toHaveLength(2_000);
+      expect(it.url).toBeUndefined();
+      expect(it.meta).toEqual({ a: "7", b: "true", long: "v".repeat(2_000) });
+    }
+    const huge = checkSourceItems({ ...base, items: [{ ref: "r", text: "x".repeat(200_001) }] });
+    expect(huge.ok && huge.value.items[0]!.text.length).toBe(200_000);
   });
 });
