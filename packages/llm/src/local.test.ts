@@ -17,11 +17,11 @@ function fakeFetch(
     init: RequestInit,
   ) => { status?: number; json?: unknown } | Response | Promise<Response>,
 ) {
-  const calls: { body: Record<string, unknown>; headers: Record<string, string> }[] = [];
+  const calls: { url: string; body: Record<string, unknown>; headers: Record<string, string> }[] = [];
   const f = (async (url: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
     const headers = Object.fromEntries(new Headers(init?.headers).entries());
-    calls.push({ body, headers });
+    calls.push({ url: String(url), body, headers });
     const out = await handler(body, init ?? {});
     if (out instanceof Response) return out;
     return Response.json(out.json ?? {}, { status: out.status ?? 200 });
@@ -40,7 +40,7 @@ const ok = (text = "hello") => ({
 describe("LocalModel", () => {
   test("sends only the OpenAI-compatible fields a local server takes, with no bearer by default", async () => {
     const { calls, fetch } = fakeFetch(() => ok());
-    const model = new LocalModel({ baseUrl: "http://localhost:11434/v1/", model: "qwen3:8b", fetch });
+    const model = new LocalModel({ baseUrl: "http://localhost:11434/v1/", model: "qwen3:8b", fetch, freeCalls: true });
     const res = await model.chat({ ...REQ, temperature: 0.2, stop: ["END"], json: true });
     expect(res).toMatchObject({ text: "hello", model: "served/qwen", costUsd: 0, truncated: false });
     expect(res.usage).toMatchObject({ inputTokens: 10, outputTokens: 5 });
@@ -99,6 +99,22 @@ describe("LocalModel", () => {
     await expect(model.chat({ ...REQ, stop: ["x"] })).rejects.toThrow("local-model 400");
     expect(calls.length).toBe(1);
     await expect(model.chat(REQ)).rejects.toThrow("local-model 500");
+  });
+
+  test("a gateway base URL's query is kept and the route is appended to the path", async () => {
+    const { calls, fetch } = fakeFetch(() => ok());
+    const model = new LocalModel({ baseUrl: "http://gw.example/v1?key=abc", model: "m", fetch });
+    await model.chat(REQ);
+    expect(calls[0]!.url).toBe("http://gw.example/v1/chat/completions?key=abc");
+  });
+
+  test("an endpoint that reports tokens but no cost is priced off this machine, $0 on it", async () => {
+    const { fetch } = fakeFetch(() => ok());
+    const remote = new LocalModel({ baseUrl: "http://gw.example/v1", model: "m", fetch });
+    const local = new LocalModel({ baseUrl: "http://localhost:11434/v1", model: "m", fetch, freeCalls: true });
+    // "m" is an unknown model, priced high on purpose (1/4 per Mtok): 10 in + 5 out -> 30e-6.
+    expect((await remote.chat(REQ)).costUsd).toBeCloseTo(0.00003);
+    expect((await local.chat(REQ)).costUsd).toBe(0);
   });
 
   test("a shared hold: a 429 holds every caller; a call while held sends nothing", async () => {

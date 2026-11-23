@@ -13,14 +13,17 @@
  * is sent once more without (some local servers reject the field; the prompts still ask for JSON and
  * the engine still validates the reply), matching the cache-fallback rule in `openrouter.ts`.
  *
- * Nothing here costs money by default: `costUsd` is the server's own `usage.cost` when it reports
- * one, else 0 — a local endpoint bills nothing, and the per-tenant daily cap stays a safety net for a
- * `EDEN_MODEL_BASE_URL` that is not in fact free rather than a thing a local run must size.
+ * Nothing on this machine costs money: with `freeCalls` (a loopback endpoint bills nothing)
+ * `costUsd` is the server's own `usage.cost` when it reports one, else 0. Without it — a base URL off
+ * this machine may in fact bill — an answered call that reports tokens but no `usage.cost` is priced
+ * like an OpenRouter call of the same model (`costOf`/`priceFor`, unknown names priced high), so the
+ * per-tenant daily cap still bounds it (D2109).
  *
  * Auth is optional: `apiKey` sends `Authorization: Bearer` (llama.cpp's `--api-key`, vLLM's
  * `--api-key`); unset, no header is sent, which is what Ollama and LM Studio expect.
  */
 import { ModelHeldError, type RateHold } from "./pacing";
+import { costOf, priceFor } from "./pricing";
 import type { ChatRequest, ChatResponse, Model, Usage } from "./types";
 
 export interface LocalModelOptions {
@@ -38,6 +41,11 @@ export interface LocalModelOptions {
   fetch?: typeof fetch;
   /** Shared with the process's other model roles (D2046): a local server can answer 429 too. */
   rateHold?: RateHold;
+  /**
+   * Set when the endpoint cannot bill (this machine's; `modelRolesFromEnv` sets it on a loopback base
+   * URL): a reply without `usage.cost` books $0 instead of a price-table estimate.
+   */
+  freeCalls?: boolean;
 }
 
 /** The default call deadline (see `LocalModelOptions.timeoutMs`). */
@@ -47,9 +55,15 @@ export class LocalModel implements Model {
   readonly id: string;
   /** Set for the model's life once a 400 to a `response_format` request came back: it is not sent again. */
   private jsonRefused = false;
+  private readonly url: string;
 
   constructor(private readonly options: LocalModelOptions) {
     this.id = options.model;
+    // `<base>/chat/completions` on the path, keeping any query a gateway's base URL carries
+    // (string-appending would route `…/v1?key=k/chat/completions` at the wrong path, D2109).
+    const u = new URL(options.baseUrl);
+    u.pathname = u.pathname.replace(/\/+$/, "") + "/chat/completions";
+    this.url = u.toString();
   }
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
@@ -94,8 +108,7 @@ export class LocalModel implements Model {
     };
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.options.apiKey) headers.authorization = `Bearer ${this.options.apiKey}`;
-    const base = this.options.baseUrl.replace(/\/$/, "");
-    return (this.options.fetch ?? fetch)(`${base}/chat/completions`, {
+    return (this.options.fetch ?? fetch)(this.url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -117,7 +130,9 @@ export class LocalModel implements Model {
     return {
       text: data.choices?.[0]?.message?.content ?? "",
       usage,
-      costUsd: data.usage?.cost ?? 0,
+      // A remote endpoint may bill; one that reports no cost is priced like an OpenRouter call so the
+      // tenant cap still binds (a loopback `freeCalls` endpoint books $0 and needs no cap).
+      costUsd: data.usage?.cost ?? (this.options.freeCalls ? 0 : costOf(usage, priceFor(this.options.model))),
       model: data.model ?? this.options.model,
       latencyMs: Math.round(performance.now() - t0),
       truncated: data.choices?.[0]?.finish_reason === "length",
