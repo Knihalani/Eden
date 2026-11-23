@@ -2,18 +2,16 @@
 // Spawns it with a token, expects EDEN_LOCAL_READY, then a 200/401 pair on /v1/whoami.
 
 import { existsSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 
 const root = join(import.meta.dir, "..");
-const bin = join(
-  root,
-  "dist",
-  "local",
-  `eden-local-${process.platform}-${process.arch}${process.platform === "win32" ? ".exe" : ""}`,
-);
+const osName = process.platform === "win32" ? "windows" : process.platform;
+const bin = join(root, "dist", "local", `eden-local-${osName}-${process.arch}${osName === "windows" ? ".exe" : ""}`);
 if (!existsSync(bin)) throw new Error(`${bin} not built — run \`bun run build:local\` first`);
 
-const token = "local_" + "a".repeat(37);
+// A random token: a fixed one would hand every process on the machine the daemon's credential.
+const token = `local_${randomBytes(24).toString("hex")}`;
 const child = Bun.spawn([bin], {
   stdin: "pipe",
   stdout: "pipe",
