@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import type { ContextItem, Scope } from "@eden/protocol";
 import { itemId } from "@eden/protocol";
+import { dayFactsOf } from "@eden/primitives/day-facts";
 import type { ListPage, SearchQuery, Source } from "./source";
 import { StaticSource, type StaticDoc } from "./static-source";
 
@@ -79,6 +80,18 @@ function readText(path: string, maxBytes: number): string | null {
   }
 }
 
+/**
+ * Item meta for a file: directory, extension and size always; `start` (the mtime day) only when the
+ * file itself names no day. A stamped `meta.start` makes the note a dated instance the day index and
+ * seat days can place on its modified day — a dated lookup would otherwise drop a note matched only
+ * by mtime — while a file whose name or text writes dates keeps them (meta.start would mask those).
+ */
+function fileMeta(path: string, size: number, mtimeMs: number, text: string): Record<string, string> {
+  const meta: Record<string, string> = { dir: dirname(path), ext: extname(path), size: String(size) };
+  if (dayFactsOf(basename(path), text) === 0) meta.start = new Date(mtimeMs).toISOString();
+  return meta;
+}
+
 export class FileSource implements Source {
   readonly kind = "file";
   readonly callPriced = false;
@@ -143,7 +156,7 @@ export class FileSource implements Source {
           text,
           url: `file://${path}`,
           updatedAt: mtimeMs,
-          meta: { dir: dirname(path), ext: extname(path), size: String(size) },
+          meta: fileMeta(path, size, mtimeMs, text),
         },
       });
     }
@@ -168,9 +181,9 @@ export class FileSource implements Source {
   async search(query: SearchQuery, _signal: AbortSignal): Promise<ContextItem[]> {
     this.scan();
     const items = await this.inner!.search(query);
-    // A file whose only date is its mtime still answers a dated lookup: inner's windowed match reads
-    // meta.start and content dates, so the mtime day is added here — as a fall-back, never masking the
-    // days a note's own text names (a meta.start would).
+    // Undated files list on their modified day through fileMeta's meta.start; this merge adds the
+    // mtime day for files that name days of their own too — a note written Monday about Friday also
+    // answers "what did I touch Monday", never masking the days its text names (a meta.start would).
     const w = query.window;
     if (!w || items.length >= query.limit) return items;
     const have = new Set(items.map((i) => i.ref));
@@ -215,7 +228,7 @@ export class FileSource implements Source {
       text,
       url: `file://${ref}`,
       updatedAt: st.mtimeMs,
-      meta: { dir: dirname(ref), ext: extname(ref), size: String(st.size) },
+      meta: fileMeta(ref, st.size, st.mtimeMs, text),
     };
   }
 }

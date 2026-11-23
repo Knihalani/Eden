@@ -67,3 +67,23 @@ test("list pages by offset cursor", () =>
     expect(p2.items.length).toBe(1);
     expect(p2.next).toBeNull();
   }));
+
+test("a note with no dates of its own is placed on its modified day; a dated note keeps its days", () =>
+  withDir(async (dir) => {
+    const monday = new Date("2026-11-16T10:00:00Z");
+    writeFileSync(join(dir, "plain.md"), "met Sam for coffee");
+    writeFileSync(join(dir, "dated.md"), "the offsite is on 4 December");
+    utimesSync(join(dir, "plain.md"), monday, monday);
+    const s = new FileSource("docs", "d", { paths: [dir] });
+
+    const items = (await s.list(scope, undefined, 10, signal)).items;
+    expect(items.find((i) => i.title === "plain.md")?.meta?.start).toBe("2026-11-16T10:00:00.000Z");
+    expect(items.find((i) => i.title === "dated.md")?.meta?.start).toBeUndefined();
+
+    // The stamped day is what the engine's day index and seat days read for a dated lookup.
+    const hits = await s.search(
+      { scope, text: "", entities: [], limit: 10, window: { start: "2026-11-16", end: "2026-11-17" } },
+      signal,
+    );
+    expect(hits.map((h) => h.title)).toEqual(["plain.md"]);
+  }));
