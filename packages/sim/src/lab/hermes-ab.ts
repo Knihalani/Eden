@@ -123,7 +123,7 @@ import {
   RunJournal,
 } from "./run-journal";
 import { DiskCardMaker, harnessCoverage, harnessIntent, intentCoverage, intentLine, samePath } from "./cards-disk";
-import { isAnthropic, isCapError, keyFor, labAccess, labModel, providerPrefs } from "./free";
+import { isAnthropic, isCapError, keyFor, labAccess, labModel, localBaseUrl, providerPrefs } from "./free";
 import { parseHermesConditions, type HermesCondition } from "./hermes-conditions";
 import { edenMcpServer, labRouter, type StreamHost, type TaskBinding } from "./hermes-host";
 import { modelProxy, type RequestRecord } from "./hermes-proxy";
@@ -144,6 +144,9 @@ const opt = (name: string, fallback: string) => {
 const DRY = args.includes("--dry");
 // The OpenRouter key, needed only when some model of the run is not `claude-*` (checked once the models are known).
 const KEY = process.env.OPENROUTER_API_KEY;
+// A local endpoint (A8, D2112): the agent, the grader and Eden's roles all go to `EDEN_MODEL_BASE_URL`, at $0 with
+// `EDEN_MODEL_PRICE=0,0`; Anthropic and OpenRouter are not called.
+const LOCAL = localBaseUrl();
 const HERMES_SRC = resolve(opt("hermes-src", process.env.HERMES_SRC ?? ""));
 if (!existsSync(join(HERMES_SRC, "run_agent.py"))) throw new Error(`--hermes-src ${HERMES_SRC}: not a hermes checkout`);
 const HERMES_PY = opt("hermes-python", join(HERMES_SRC, ".venv/bin/python"));
@@ -205,14 +208,15 @@ const CONDITIONS: HermesCondition[] = parseHermesConditions(CONDITION_NAMES, {
 const usesCards = CONDITIONS.some((c) => c.withPartner && effective(c.config).cards);
 /** `askReader` (D95): the ask-time reader's model, `--reader-model` (default Haiku 5.5, on the spend ledger). */
 const READER_MODEL = opt("reader-model", "claude-haiku-5-5");
-const USES_READER = CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
+// `--reader-model none` / `--check-model none`: the role is not wired, as on a server with no model key (D276).
+const USES_READER = READER_MODEL !== "none" && CONDITIONS.some((c) => c.withPartner && effective(c.config).askReader);
 /**
  * `pushCheck` (D500, in the default since D828): the push check, on the reader's model as the servers wire it
  * (`buildPartner`), `--check-model` (default Haiku 5.5). Before B19 (D1042) hermes-ab wired no checker, so every
  * Hermes run left the default's `check` part inert.
  */
 const CHECK_MODEL = opt("check-model", "claude-haiku-5-5");
-const USES_CHECK = CONDITIONS.some((c) => c.withPartner && effective(c.config).pushCheck);
+const USES_CHECK = CHECK_MODEL !== "none" && CONDITIONS.some((c) => c.withPartner && effective(c.config).pushCheck);
 const RUN_MODELS = [
   MODEL,
   GRADER,
@@ -222,7 +226,7 @@ const RUN_MODELS = [
 ];
 const ACCESS = labAccess(args, RUN_MODELS);
 // Every model on Anthropic (`claude-*`, D97): no OpenRouter key needed, and none is used.
-if (!KEY && !DRY && RUN_MODELS.some((m) => !isAnthropic(m))) throw new Error("needs OPENROUTER_API_KEY");
+if (!KEY && !LOCAL && !DRY && RUN_MODELS.some((m) => !isAnthropic(m))) throw new Error("needs OPENROUTER_API_KEY");
 const PACER = ACCESS.pacer;
 /** A task starts only while the cap leaves room for all of it: its model requests (one spare) and its grading. */
 const TASK_REQUESTS = MAX_ITERATIONS + 2;
@@ -407,7 +411,8 @@ interface TaskRecord {
   apiCalls?: number;
 }
 
-const TASK_TIMEOUT_MS = 10 * 60_000;
+// `--task-timeout-min` (default 10; 30 on a local endpoint, whose CPU inference is far slower than a hosted route).
+const TASK_TIMEOUT_MS = Number(opt("task-timeout-min", LOCAL ? "30" : "10")) * 60_000;
 /** A worker that died is started again this many times in a stream before the stream stops. */
 const RESPAWNS = 2;
 let stoppedStreams = 0;
@@ -547,7 +552,7 @@ async function runWorld(
   // `askReader`: one budgeted call per ask about an action, on the running task's timeline and charged to it (D95).
   let readerTask: RunResult | null = null;
   const reader =
-    withPartner && effective(config).askReader
+    withPartner && effective(config).askReader && USES_READER
       ? new AskReader({
           maker: new ModelReaderMaker(
             meteredModel(
@@ -565,7 +570,7 @@ async function runWorld(
   if (reader) budgeted.reader.push(reader);
   // `pushCheck` (D500, D828): one budgeted call per push whose pool is constraint-like, charged to the running task.
   const checker =
-    withPartner && effective(config).pushCheck
+    withPartner && effective(config).pushCheck && USES_CHECK
       ? new PushChecker({
           model: meteredModel(
             ownedModel(
@@ -1108,15 +1113,15 @@ async function gradeTask(t: Task, r: RunResult, tl: Timeline, unit: OpenUnit | n
 
 let orphanRequests = 0;
 /** A `claude-*` grader goes through `AnthropicModel` on the spend ledger; any other through OpenRouter (`grade`). */
-const GRADER_MODEL = isAnthropic(GRADER) ? labModel(ACCESS, { apiKey: "", model: GRADER }, "grader") : null;
-const AGENT_METER = isAnthropic(MODEL) ? ACCESS.ledger!.meter("agent") : null;
+const GRADER_MODEL = LOCAL || isAnthropic(GRADER) ? labModel(ACCESS, { apiKey: "", model: GRADER }, "grader") : null;
+const AGENT_METER = !LOCAL && isAnthropic(MODEL) ? ACCESS.ledger!.meter("agent") : null;
 /** Hermes' model endpoint (hermes-proxy.ts): the pacer, the run's budget, and the key kept in this process. */
 const proxy = modelProxy({
-  key: KEY ?? "",
+  key: LOCAL ? (process.env.EDEN_MODEL_API_KEY ?? "") : (KEY ?? ""),
   fetch: ACCESS.fetch,
   model: MODEL,
   maxTokens: AGENT_MAX_TOKENS,
-  extraBody: providerPrefs(ACCESS),
+  ...(LOCAL ? { upstream: LOCAL.replace(/\/+$/, ""), timeoutMs: 600_000 } : { extraBody: providerPrefs(ACCESS) }),
   reserve,
   settle: (est, cost) => settle(est, cost, "agent"),
   price: (chars, out) => worstCase(MODEL, chars, out),

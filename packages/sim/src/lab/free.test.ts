@@ -72,6 +72,26 @@ describe("labAccess", () => {
     }
   });
 
+  test("with EDEN_MODEL_BASE_URL every role is a local model on that endpoint, whatever its id (A8)", async () => {
+    const urls: string[] = [];
+    const real = globalThis.fetch;
+    const before = process.env.EDEN_MODEL_BASE_URL;
+    process.env.EDEN_MODEL_BASE_URL = "http://127.0.0.1:11500/v1";
+    globalThis.fetch = (async (u: string) => {
+      urls.push(String(u));
+      return Response.json({ choices: [{ message: { content: "ok" } }], usage: {} });
+    }) as unknown as typeof fetch;
+    try {
+      const m = labModel(labAccess([], ["qwen3-4b"]), { apiKey: "", model: "qwen3-4b" });
+      expect((await m.chat({ messages: [{ role: "user", content: "hi" }], maxTokens: 5 })).text).toBe("ok");
+      expect(urls).toEqual(["http://127.0.0.1:11500/v1/chat/completions"]);
+    } finally {
+      globalThis.fetch = real;
+      if (before === undefined) delete process.env.EDEN_MODEL_BASE_URL;
+      else process.env.EDEN_MODEL_BASE_URL = before;
+    }
+  });
+
   test("isCapError sees the cap through a library's wrapping", () => {
     const wrapped = new Error("Connection error.", { cause: new RequestCapReached("request cap of 4 reached") });
     expect(isCapError(wrapped)).toBe(true);

@@ -16,6 +16,7 @@
  * 429 and 5xx answers are retried with jittered backoff, honouring Retry-After (`Pacer` in @eden/llm).
  */
 import {
+  LocalModel,
   AnthropicModel,
   Pacer,
   anthropicPrice,
@@ -43,6 +44,9 @@ export interface LabAccess {
   /** The hard spend cap for Anthropic calls (`--spend-ledger`, `--spend-cap`); required when a model is `claude-*`. */
   ledger: SpendLedger | null;
 }
+
+/** The local endpoint every lab model goes to when set (`EDEN_MODEL_BASE_URL`, A8); undefined otherwise. */
+export const localBaseUrl = (env = process.env) => env.EDEN_MODEL_BASE_URL?.trim() || undefined;
 
 /** Models served by Anthropic's Messages API directly (`AnthropicModel`), not OpenRouter. */
 export const isAnthropic = (model: string) => model.startsWith("claude-");
@@ -119,6 +123,17 @@ export function labModel(
   role = "eden",
   anthropic: { thinking?: "off" | "adaptive" } = {},
 ): Model {
+  // A local endpoint (A8, D2112): every role of the run goes to `EDEN_MODEL_BASE_URL` at $0, as agent-ab's agent,
+  // grader and judge do; the label of such a run names the local model, never a paid one's.
+  const local = localBaseUrl();
+  if (local) {
+    return new LocalModel({
+      baseUrl: local,
+      model: options.model,
+      ...(process.env.EDEN_MODEL_API_KEY ? { apiKey: process.env.EDEN_MODEL_API_KEY } : {}),
+      timeoutMs: Math.max(options.timeoutMs ?? 0, 300_000),
+    });
+  }
   if (isAnthropic(options.model)) {
     if (!access.ledger) throw new Error(`${options.model}: no spend ledger (pass it among labAccess's models)`);
     return new AnthropicModel({
