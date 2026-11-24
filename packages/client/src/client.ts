@@ -322,8 +322,11 @@ export class EdenClient {
     options: { waitMs?: number } = {},
   ): Promise<{ injections: Injection[]; pending: boolean }> {
     const res = await this.sendEvent(event, options.waitMs, true);
-    const first = res?.injection ? [res.injection] : [];
-    const queued = Array.isArray(res?.injections) ? res.injections.filter(isInjection) : await this.pending();
+    // The call failed (reported once): a second call to the same server would only fail again, after its own
+    // timeout. The queue stays where it is for the next call.
+    if (!res) return { injections: [], pending: false };
+    const first = res.injection ? [res.injection] : [];
+    const queued = Array.isArray(res.injections) ? res.injections.filter(isInjection) : await this.pending();
     return { injections: [...first, ...queued], pending: res?.pending === true };
   }
 

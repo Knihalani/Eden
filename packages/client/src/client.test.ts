@@ -793,6 +793,20 @@ describe("observeAll (one round trip)", () => {
     expect(urls.map((u) => new URL(u).pathname + new URL(u).search)).toEqual(["/v1/events?drain=1"]);
   });
 
+  test("a failed call makes no second one: Eden down costs one timeout, not two", async () => {
+    let calls = 0;
+    const fake = (async () => {
+      calls++;
+      throw new Error("connect ECONNREFUSED");
+    }) as unknown as typeof fetch;
+    const eden = new EdenClient({ userId: "u", sessionId: "s", fetch: fake, onError: () => {} });
+    expect(await eden.observeAll({ kind: "tool_result", tool: "t", output: "o" })).toEqual({
+      injections: [],
+      pending: false,
+    });
+    expect(calls).toBe(1);
+  });
+
   test("an older server that ignores drain: the queue comes from /v1/pending, as collect did", async () => {
     const paths: string[] = [];
     const fake = (async (url: string) => {

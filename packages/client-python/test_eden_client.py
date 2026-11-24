@@ -2,6 +2,7 @@
 ``python3 -m unittest -v test_eden_client`` (``bun run test:pkg client-python`` runs it with the end-to-end check)."""
 
 import json
+import os
 import threading
 import time
 import unittest
@@ -631,6 +632,32 @@ class KeepAlive(unittest.TestCase):
         finally:
             eden_client._closed_by_peer = real
         self.assertEqual((errors, len(conns)), ([], 2))
+
+    def test_a_forked_child_takes_none_of_the_parents_connections(self):
+        # Two processes on one socket would read each other's answers: the child starts its own.
+        import eden_client
+        url, conns = self.serve()
+        c, errors = client(url)
+        self.assertEqual(c.pending(), [])
+        pool = eden_client._POOL
+        real_pid = pool._pid
+        pool._pid = real_pid + 1  # as if this process were the parent's fork
+        try:
+            self.assertEqual(c.pending(), [])
+        finally:
+            pool._pid = os.getpid()
+        self.assertEqual((errors, len(conns)), ([], 2))
+
+    def test_observe_all_after_a_failed_call_makes_no_second_one(self):
+        # Eden down: one timeout, not the event's plus /v1/pending's.
+        c, errors = client("http://127.0.0.1:9")
+        calls = []
+        real = c._post
+        c._post = lambda *a, **k: (calls.append(a[0]), real(*a, **k))[1]
+        self.assertEqual(c.observe_all({"kind": "tool_result", "tool": "t", "output": "o"}),
+                         {"injections": [], "pending": False})
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(errors), 1)
 
     def test_an_error_status_keeps_its_reason(self):
         url, _ = self.serve()

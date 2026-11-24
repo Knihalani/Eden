@@ -61,10 +61,12 @@ class FakeClient:
         if self.fail:
             raise RuntimeError("down")
 
-    def observe(self, event):
+    def observe(self, event, wait_ms=None):
         self._maybe_fail()
         self.events.append(event)
-        packet = PACKET if event.get("kind") == "user_message" and not self.no_packet else None
+        kind = event.get("kind")
+        packet = (PACKET if kind == "user_message" and not self.no_packet
+                  else self.tool_packet if kind == "agent_message" else None)
         return {"injection": packet, "pending": False}
 
     def observe_all(self, event, wait_ms=None):
@@ -243,6 +245,21 @@ class Hermes(unittest.TestCase):
         self.assertEqual(c.events[-1], {"kind": "agent_message", "text": "Moved it to Friday."})
         ctx.hooks["post_llm_call"](session_id="s", assistant_response="   ")
         self.assertEqual(len(c.events), 2)
+
+    def test_the_answer_keeps_its_own_packet_and_leaves_the_queue(self):
+        # The answer's observe hands out a packet (Eden marked it shown): it goes with the next turn. What is only
+        # queued stays queued — a session that ends after this answer never marks it shown.
+        _, ctx = plugin()
+        ctx.hooks["pre_llm_call"](session_id="s", user_message="Move lunch with Priya")
+        c = FakeClient.made[0]
+        c.tool_packet = {"id": "a", "text": "<context>after the answer</context>"}
+        c.pending_queue = [{"id": "q", "text": "<context>queued</context>"}]
+        ctx.hooks["post_llm_call"](session_id="s", assistant_response="Moved it to Friday.")
+        self.assertEqual(len(c.pending_queue), 1)
+        c.tool_packet = None
+        out = ctx.hooks["pre_llm_call"](session_id="s", user_message="And dinner?")
+        self.assertEqual(out["context"].split("\n\n")[:2], ["<context>after the answer</context>", PACKET["text"]])
+        self.assertIn("<context>queued</context>", out["context"])
 
     def test_registration_warms_up_the_user_with_no_session(self):
         # The first turn should not pay the server's start, the user's thaw or the backfill's kick-off.

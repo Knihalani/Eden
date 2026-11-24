@@ -214,6 +214,8 @@ class EdenHermes:
             self.warm = WARM_DELAY_S
         if not self.warm > 0:  # 0, a negative or NaN: off
             self.warm = 0.0
+        # A delay past a minute is no warm-up (and ``inf`` would overflow the timer's wait): it waits a minute.
+        self.warm = min(self.warm, 60.0)
         # None: the acting-verb default; "*": every tool; otherwise exactly the names listed (empty: none).
         self.check_mode = "acting" if tools is None else "all" if tools.strip() == "*" else "list"
         self.check_tools = {t.strip() for t in (tools or "").split(",") if t.strip()}
@@ -280,7 +282,8 @@ class EdenHermes:
         if sid is None:
             return
         with self._lock:
-            got, _ = self._placing.get(sid, ([], False))
+            # Popped and re-inserted: the eviction below drops the least recently stashed session, not the oldest.
+            got, _ = self._placing.pop(sid, ([], False))
             self._placing[sid] = (got + list(injections or []), drained)
             while len(self._placing) > MAX_SESSIONS:
                 self._placing.pop(next(iter(self._placing)))
@@ -354,7 +357,10 @@ class EdenHermes:
             c = self.client(session_id, task_id)
             if c is None:
                 return None
-            got = c.observe_all({"kind": "agent_message", "text": assistant_response}, wait_ms=0)["injections"]
+            # Only the observe's own packet (Eden marks it shown) is kept; the queue stays queued for the next turn's
+            # ``pre_llm_call``, which drains it when it can show it — a session that ends here never marks it shown.
+            res = c.observe({"kind": "agent_message", "text": assistant_response}, wait_ms=0)
+            got = [res["injection"]] if isinstance(res, dict) and res.get("injection") else []
             self._place_later(session_id, task_id, got, drained=False)
         except Exception as e:  # noqa: BLE001
             _warn(f"post_llm_call: {e}")

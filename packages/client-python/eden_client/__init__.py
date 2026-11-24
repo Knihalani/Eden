@@ -176,8 +176,18 @@ class _Pool:
     def __init__(self) -> None:
         self._idle: Dict[Any, List[Any]] = {}
         self._lock = threading.Lock()
+        self._pid = os.getpid()
+
+    def _owned(self) -> None:
+        """A forked child starts with none of the parent's sockets: two processes on one connection would read each
+        other's answers (another session's packet). Dropped, not closed: the parent still uses them."""
+        if self._pid != os.getpid():
+            self._idle = {}
+            self._lock = threading.Lock()
+            self._pid = os.getpid()
 
     def take(self, key: Any) -> Any:
+        self._owned()
         with self._lock:
             idle = self._idle.get(key)
             while idle:
@@ -188,6 +198,7 @@ class _Pool:
         return None
 
     def give(self, key: Any, conn: Any) -> None:
+        self._owned()
         with self._lock:
             idle = self._idle.setdefault(key, [])
             if len(idle) < self.IDLE_PER_HOST:
@@ -503,7 +514,11 @@ class EdenClient:
         queue, and ``pending()`` fetches it as before."""
         res = self._event(event, wait_ms, True)
         first = [res["injection"]] if isinstance(res, dict) and _is_injection(res.get("injection")) else []
-        queued = res.get("injections") if isinstance(res, dict) else None
+        if not isinstance(res, dict):
+            # The call failed (reported once): a second call to the same server would only fail again, after its own
+            # timeout. The queue stays where it is for the next call.
+            return {"injections": [], "pending": False}
+        queued = res.get("injections")
         rest = [i for i in queued if _is_injection(i)] if isinstance(queued, list) else self.pending()
         return {"injections": first + rest, "pending": isinstance(res, dict) and res.get("pending") is True}
 
