@@ -113,8 +113,9 @@ Anthropic's `https://api.anthropic.com/v1`, a local server). For full control, u
 import { EdenClient, guardTools, withContext } from "@eden/client";
 
 const eden = new EdenClient({ apiKey, userId, sessionId }); // a sent user message waits up to 3 s for its lookup
-const { injection } = await eden.observe({ kind: "user_message", text });  // report each event
-messages = withContext(messages, await eden.collect(injection));           // before each model call
+const { injections } = await eden.observeAll({ kind: "user_message", text }); // report it; packet + queue, 1 call
+messages = withContext(messages, injections);                                // keep this list as the transcript
+messages = withContext(messages, await eden.pending());                     // before each later model call
 const answer = await eden.ask("What did Dana say about the renewal?");     // or expose as a tool
 const tools = guardTools(eden, { send_email, book_meeting });              // acting tools: checked before each call
 await eden.sourceChanged("gmail", { refs: changedMessageIds });            // a connector's change notice: send its refs

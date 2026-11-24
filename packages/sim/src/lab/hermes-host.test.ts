@@ -18,6 +18,7 @@ function stream(token: string, log: string[]): StreamHost {
       log.push(`tool:${tool}:${output}`);
     },
     pending: () => "",
+    answer: async (text) => void log.push(`answer:${text}`),
   };
   return {
     current: binding,
@@ -51,6 +52,14 @@ describe("hermes-ab's localhost routes", () => {
     expect((await route(post("/s/c/eden/observe", { token: "tok-a", text: "x" }))).status).toBe(404);
     expect(a).toEqual(["observe:book it"]);
     expect(b).toEqual([]);
+  });
+
+  test("the answer route hands the turn's answer to the task (D2116); a non-string is a 400", async () => {
+    const seen: string[] = [];
+    const route = labRouter(new Map([["a", stream("tok", seen)]]));
+    expect((await route(post("/s/a/eden/answer", { token: "tok", text: "Moved it." }))).status).toBe(200);
+    expect((await route(post("/s/a/eden/answer", { token: "tok", text: 3 }))).status).toBe(400);
+    expect(seen).toEqual(["answer:Moved it."]);
   });
 
   test("between tasks every Eden route is refused", async () => {

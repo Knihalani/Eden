@@ -9,6 +9,7 @@
  *   /s/<stream>/eden/observe       the Eden plugin's `pre_llm_call`: the user's message → the packet to inject
  *   /s/<stream>/eden/tool          its `post_tool_call`: a tool's result, observed by Eden
  *   /s/<stream>/eden/pending       its `transform_tool_result`: packets queued since, appended to the tool result
+ *   /s/<stream>/eden/answer        its `post_llm_call`: the turn's answer, observed as the agent's message (D2116)
  *
  * The Eden routes carry the task's token (the worker sets it per task): a call from another task, or one that lands
  * after its task ended, is refused with 409 and changes nothing. The plugin treats any refusal as "no context".
@@ -30,6 +31,8 @@ export interface TaskBinding {
   tool(tool: string, output: string): Promise<void>;
   /** Eden's packets queued since the last delivery, joined ("" for none). */
   pending(): string;
+  /** The turn's answer Hermes gave (its `post_llm_call`), for Eden to observe as the agent's message (D2116). */
+  answer?(text: string): Promise<void>;
 }
 
 export interface StreamHost {
@@ -105,6 +108,11 @@ export function labRouter(streams: ReadonlyMap<string, StreamHost>): (req: Reque
         return json(200, {});
       }
       if (rest === "pending") return json(200, { context: task.pending() });
+      if (rest === "answer") {
+        if (typeof body.text !== "string") return json(400, { error: "text must be a string" });
+        await task.answer?.(body.text);
+        return json(200, {});
+      }
       return json(404, { error: `no Eden route ${rest}` });
     } catch (e) {
       // The message only: a stack or a request body could quote user content.

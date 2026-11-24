@@ -952,6 +952,14 @@ async function runWorld(
         pending() {
           return partner ? deliver([...handed.splice(0), ...partner.takePending({ ...scope, sessionId })]) : "";
         },
+        async answer(text) {
+          if (!partner) return;
+          // As the shipped plugin's `post_llm_call` (D2116): the agent's words let Eden infer use; a packet the
+          // observe hands out is kept like a tool result's (`observe-tool.ts`).
+          const o = tl.begin("eden.observe", "eden", "path", { event: "agent_message" });
+          const injected = await observeToolResult(partner, ev({ kind: "agent_message", text }), (i) => handed.push(i));
+          tl.end(o, { injected });
+        },
       };
       task = { binding, tl, record, r, sessionId, uptake };
       tl.point("task.start", { condition, kind: t.kind });

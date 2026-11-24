@@ -60,6 +60,11 @@ class PluginTest(unittest.TestCase):
         want = {"tool": "mcp_sources_search_gmail", "output": '{"a": 1}', "token": "tok"}
         self.assertEqual(Eden.seen[2], ("tool", want))
 
+    def test_the_turns_answer_is_reported(self):
+        self.assertIsNone(plugin.post_llm_call(assistant_response="Moved it to Friday.", session_id="x"))
+        plugin.post_llm_call(assistant_response="  ")
+        self.assertEqual(Eden.seen, [("answer", {"text": "Moved it to Friday.", "token": "tok"})])
+
     def test_eden_own_answers_are_not_reported_back(self):
         plugin.post_tool_call(tool_name="mcp_eden_ask_context", result="answer")
         self.assertEqual(Eden.seen, [])

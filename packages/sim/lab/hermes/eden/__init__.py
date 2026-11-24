@@ -4,6 +4,7 @@
 - ``post_tool_call``: each tool result goes to Eden, so it does not deliver what the agent already read.
 - ``transform_tool_result``: packets Eden queued since then are appended to the tool's result, so context that
   arrives mid-task reaches the agent before its next model request.
+- ``post_llm_call``: the turn's answer goes to Eden as the agent's message, so it can infer use (D2116).
 
 Eden's ``ask_context`` is not here: it is Eden's own MCP server, configured beside the source tools.
 
@@ -72,7 +73,15 @@ def transform_tool_result(tool_name=None, result=None, **kwargs):
     return f"{result}\n\n{text}" if text else None
 
 
+def post_llm_call(assistant_response=None, **kwargs):
+    # The turn's answer, as the shipped plugin reports it (D2116): Eden infers from it whether a packet was used.
+    if isinstance(assistant_response, str) and assistant_response.strip():
+        _call("answer", {"text": assistant_response}, QUICK_TIMEOUT_S)
+    return None
+
+
 def register(ctx):
     ctx.register_hook("pre_llm_call", pre_llm_call)
+    ctx.register_hook("post_llm_call", post_llm_call)
     ctx.register_hook("post_tool_call", post_tool_call)
     ctx.register_hook("transform_tool_result", transform_tool_result)
