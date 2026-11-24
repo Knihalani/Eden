@@ -110,5 +110,8 @@ export function endpointFromArgs(url: string, model: string, env: Record<string,
     baseUrl: endpointBase(url),
     model: model || "eden-cards",
     ...(env.EDEN_LAB_CARDS_KEY ? { apiKey: env.EDEN_LAB_CARDS_KEY } : {}),
+    // A CPU-served model (llama.cpp, several slots sharing four cores) can take minutes per batch; a timed-out batch
+    // is uncovered, not retried, so the lab raises the cap rather than lose cards.
+    ...(Number(env.EDEN_LAB_CARDS_TIMEOUT_MS) > 0 ? { timeoutMs: Number(env.EDEN_LAB_CARDS_TIMEOUT_MS) } : {}),
   } satisfies EndpointOptions;
 }

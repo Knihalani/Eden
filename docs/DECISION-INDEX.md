@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2118 | 2026-11-24 | The lab runs Hermes A/Bs on a self-hosted model; first result: a no-key Eden helps a 4B agent only where its packet holds the fact. | adopted |
 | D2117 | 2026-11-24 | The Hermes plugin warms up after registration. | adopted |
 | D2116 | 2026-11-24 | A checked call credits a packet it acts on, and the Hermes plugin reports the agent's answer. | adopted |
 | D2115 | 2026-11-24 | The Python client keeps connections alive. | adopted |

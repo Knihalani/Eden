@@ -134,6 +134,14 @@ not strict yet.
 | Simulation          | `bun run sim`, `bun run sim:perf`              | Generated sessions (recall, precision, false fires) and the real server under load; `sim:perf memory --synced` and `steady --synced` (A3) backfill their users first (the scenarios otherwise never sync)                                                                                                                                       |
 | Connector lab       | `bun run sim:lab:build && bun run sim:lab`     | Real MCP servers in Docker over seeded backends                                                                                                                                                                                                                                                                                                 |
 
+**On a self-hosted model ($0, no approval needed; D2112, D2118).** With `EDEN_MODEL_BASE_URL` set to an
+OpenAI-compatible `/v1` (llama.cpp's `llama-server`, Ollama, vLLM), `hermes-ab.ts` and `agent-ab.ts` send the agent,
+grader and card roles there (`--model`, `--grader`, `--card-model` name the served models); `--reader-model none`
+and `--check-model none` turn those roles off. On CPU, build the world's cards once with
+`bun run funnel --cards-endpoint URL --cards-endpoint-model M --cards F` (several server slots: the card enricher runs
+`cardsLanes` calls at once and batched decode is nearly free; `EDEN_LAB_CARDS_TIMEOUT_MS` lifts the 120 s cap) and
+replay `F` with `--cards F` rather than make cards live beside the agent. Label every result with the model.
+
 Reports: `pi-ab-report.ts` (critical path, per-second profile, CPU; Hermes too), `agent-ab-report.ts` (shared tables,
 `--record <label>` into the ledger), `act-report.ts` (`--act` runs), `timeline-report.ts` (funnel timelines),
 `bench-compare.ts` (ledger entries).

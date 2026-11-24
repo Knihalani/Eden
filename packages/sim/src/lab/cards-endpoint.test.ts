@@ -91,6 +91,8 @@ describe("the lab card transport (cards-endpoint)", () => {
       model: "eden-cards",
     });
     expect(endpointFromArgs("https://x.modal.run", "m", { EDEN_LAB_CARDS_KEY: "k" }).apiKey).toBe("k");
+    expect(endpointFromArgs("https://x.modal.run", "m", { EDEN_LAB_CARDS_TIMEOUT_MS: "900000" }).timeoutMs).toBe(900_000);
+    expect(endpointFromArgs("https://x.modal.run", "m", { EDEN_LAB_CARDS_TIMEOUT_MS: "x" }).timeoutMs).toBeUndefined();
   });
 
   test("behind the disk cache: misses go to the endpoint once and are appended, so a rerun replays them", async () => {
