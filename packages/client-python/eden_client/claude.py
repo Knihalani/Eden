@@ -192,8 +192,11 @@ class EdenClaude(EdenHermes):
             if not isinstance(finding, dict) or not isinstance(finding.get("text"), str):
                 return None
             held = held_result(tool_name, finding)
-            # The agent sees the denial: reported like the tool_result it would have been.
-            c.observe({"kind": "tool_result", "tool": tool_name, "output": held}, wait_ms=0)
+            # The agent sees the denial: reported like the tool_result it would have been. Its packet, if
+            # any, waits in the state for the next hook that can show it (D2113).
+            with self._locked_state(session_id) as state:
+                self._stash(state, c, c.observe({"kind": "tool_result", "tool": tool_name, "output": held},
+                                                wait_ms=0))
             return {"deny": held}
         except Exception:  # noqa: BLE001
             return None

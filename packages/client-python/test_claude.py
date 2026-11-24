@@ -93,6 +93,19 @@ class EdenClaudeTests(unittest.TestCase):
         self.assertEqual(kinds_, ["tool_call", "tool_call", "tool_result"])
         self.assertIn("Not executed", FakeClient.made[0].events[2][0]["output"])
 
+    def test_a_held_calls_packet_reaches_the_next_hook(self):
+        # The denial is reported as a tool_result; a packet its observe hands out is marked shown by Eden, so it
+        # waits in the state for the next hook that can show it (D2113), not dropped.
+        p = plugin()
+        p.pre_tool("bash", {"cmd": "ls"}, "u0", "s1")
+        c = FakeClient.made[0]
+        c.check_answer = {"verdict": "finding", "finding": {"text": "f"}}
+        c.inject_kinds = {"tool_result"}
+        self.assertIn("deny", p.pre_tool("bash", {"cmd": "rm -rf ~"}, "u1", "s1"))
+        c.inject_kinds = set()
+        out = p.post_tool("bash", {"stdout": "ok"}, "u2", "s1")
+        self.assertEqual(out, {"context": PACKET["text"]})
+
     def test_post_tool_reports_once_per_use_id(self):
         p = plugin()
         p.post_tool("bash", {"stdout": "ok"}, "u1", "s1")

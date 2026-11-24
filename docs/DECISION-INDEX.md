@@ -19,7 +19,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 |---|---|---|---|
 | D2115 | 2026-11-24 | The Python client keeps connections alive. | adopted |
 | D2114 | 2026-11-24 | `observeAll` / `observe_all`: an event and the session's queue in one round trip (`/v1/events?drain=1`). | adopted |
-| D2113 | 2026-11-24 | An observe's packet is always placed: the shipped Hermes and gptme plugins, the TS surface's `report` and the personal-agent example… | adopted |
+| D2113 | 2026-11-24 | An observe's packet is always placed: the shipped Hermes and gptme plugins, the Claude Code family's held call (Gemini, Cursor, Qwen and… | adopted |
 | D2112 | 2026-11-24 | The held-out agent benchmark runs on a local model endpoint (`EDEN_MODEL_BASE_URL`) — the harness's keyless path, not a product change. | adopted |
 | D2111 | 2026-11-23 | No per-tenant GCRA on `eden-local`. | adopted |
 | D2110 | 2026-11-23 | `EDEN_MODEL_ROLES` is the per-role off switch. | adopted |

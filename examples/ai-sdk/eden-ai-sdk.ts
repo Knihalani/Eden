@@ -175,6 +175,8 @@ export function edenSession(eden: EdenClient): EdenSession {
    * them; the next model call waits for them first, so Eden sees the conversation in order.
    */
   let reported: Promise<unknown> = started;
+  /** Packets an answer's or tool call's observe handed out, placed on the next model call. */
+  const queued: Injection[] = [];
 
   const middleware: LanguageModelMiddleware = {
     // A one-turn agent's reply never comes back in a later prompt: report the answer's text and tool calls now, and
@@ -193,7 +195,11 @@ export function edenSession(eden: EdenClient): EdenSession {
           seen.set(key, 1);
           const events = eventsOf(answer);
           reported = reported.then(async () => {
-            for (const ev of events) await eden.observe(ev, { waitMs: 0 });
+            for (const ev of events) {
+              // Eden marks an observe's packet shown: it is placed on the next call, never dropped (D2113).
+              const { injection } = await eden.observe(ev, { waitMs: 0 });
+              if (injection) queued.push(injection);
+            }
           });
         }
       } catch {
@@ -237,7 +243,7 @@ export function edenSession(eden: EdenClient): EdenSession {
             if (injection) got.push(injection);
           }
         }
-        got.push(...(await eden.pending()));
+        got.push(...queued.splice(0), ...(await eden.pending()));
         if (got.length > 0 && lastUser >= 0) {
           const text = got.map((p) => p.text).join("\n\n");
           // A new turn's packet goes into its user message; one that lands between a turn's model calls goes after
