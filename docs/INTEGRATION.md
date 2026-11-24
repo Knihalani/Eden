@@ -698,9 +698,9 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
   create, update, add, respond, deploy: `send_email`, `sendEmail`, `create_event`, `mcp_gmail_send_message`, not
   `list_messages` or `read_file`). A tool that acts under another name is not checked: name your acting tools with
   `EDEN_CHECK_TOOLS=send_email,book_room` (exactly those), or `*` (every tool but Eden's own); empty checks none.
-- **At registration** the plugin starts the local server and sights the user in the background, so the first turn
-  does not pay for the server's start, the user's thaw or the start of their sources' backfill (D2117; `EDEN_WARM=0`
-  turns it off).
+- **A second after registration** the plugin starts the local server and sights the user in the background, so the
+  first turn does not pay for the server's start, the user's thaw or the start of their sources' backfill (D2117;
+  `EDEN_WARM` is the delay in seconds, `0` turns it off). A Hermes command that exits sooner starts nothing.
 - **`post_llm_call`**: the turn's answer is reported as the agent's message, so Eden can tell whether its packet was
   used (D2116); without the agent's own words every delivery expired "unused" and routing learned the sources that
   delivered do not help. A checked call (`pre_tool_call`) credits a packet it acts on too.

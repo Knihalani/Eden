@@ -246,7 +246,7 @@ class Hermes(unittest.TestCase):
 
     def test_registration_warms_up_the_user_with_no_session(self):
         # The first turn should not pay the server's start, the user's thaw or the backfill's kick-off.
-        p, _ = plugin({"EDEN_WARM": "1"})
+        p, _ = plugin({"EDEN_WARM": "0.01"})
         for _ in range(200):
             if FakeClient.made and FakeClient.made[0].polls:
                 break
@@ -346,7 +346,8 @@ class LocalHermesTests(unittest.TestCase):
             binary.chmod(0o700)
 
     def plugin(self, env=None, **kwargs):
-        plugin = EdenHermes(env={**self.env, **(env or {})}, **kwargs)
+        # The warm-up (D2117) would start the server behind these tests' backs; its own test turns it on.
+        plugin = EdenHermes(env={"EDEN_WARM": "0", **self.env, **(env or {})}, **kwargs)
         if plugin.local:
             self.addCleanup(plugin.local.close)
         ctx = Ctx()
@@ -356,6 +357,21 @@ class LocalHermesTests(unittest.TestCase):
     def starts(self):
         path = self.root / "starts"
         return path.read_text().splitlines() if path.exists() else []
+
+    def test_the_warm_up_starts_the_server_after_its_delay_and_never_on_registration(self):
+        p, _ = self.plugin({"EDEN_WARM": "0.2"})
+        self.assertFalse(self.starts())  # a command that exits within the delay starts nothing
+        for _ in range(300):
+            if self.starts() and (self.root / "requests").exists():
+                break
+            time.sleep(0.01)
+        self.assertEqual(len(self.starts()), 1)
+        requests = [json.loads(line) for line in (self.root / "requests").read_text().splitlines()]
+        self.assertEqual([(r["path"].split("?")[0], r["body"]["sessionId"]) for r in requests],
+                         [("/v1/pending", "eden-warm-up")])
+        # The first turn attaches to the warmed server: no second start.
+        p.client("s")
+        self.assertEqual(len(self.starts()), 1)
 
     def test_default_local_roundtrip_proxy_bypass_and_unload_reload(self):
         warnings = io.StringIO()

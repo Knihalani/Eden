@@ -35,6 +35,10 @@ class AsyncEden:
         """``EdenClient.observe`` in a worker thread."""
         return await asyncio.to_thread(self._sync.observe, event, wait_ms)
 
+    async def observe_all(self, event: Dict[str, Any], wait_ms: Optional[float] = None) -> Dict[str, Any]:
+        """``EdenClient.observe_all``: the event's packet and the queue in one round trip."""
+        return await asyncio.to_thread(self._sync.observe_all, event, wait_ms)
+
     async def pending(self) -> List[Dict[str, Any]]:
         """``EdenClient.pending`` in a worker thread."""
         return await asyncio.to_thread(self._sync.pending)

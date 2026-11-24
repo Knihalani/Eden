@@ -83,6 +83,9 @@ class AsyncSurface(unittest.TestCase):
                              {"injection": INJ, "pending": True})
             self.assertEqual(await e.pending(), [INJ])
             self.assertEqual(await e.collect(INJ), [INJ, INJ])
+            # The stub answers no `injections` (an older server): the queue comes from /v1/pending.
+            self.assertEqual(await e.observe_all({"kind": "tool_result", "tool": "t", "output": "o"}),
+                             {"injections": [INJ, INJ], "pending": True})
             self.assertEqual(await e.ask("q"), {"answer": "a", "citations": []})
             self.assertEqual((await e.check("send", {}))["verdict"], "proceed")
             self.assertIsNone(await e.feedback("inj_1", True))

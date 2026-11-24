@@ -28,5 +28,5 @@ def once(warm, typing_s):
 for typing in (2.0, 0.0):
     for warm in ("0", "1"):
         rs = [once(warm, typing) for _ in range(5)]
-        print(f"typing {typing}s warm={warm}: first turn p50 {statistics.median(r[0] for r in rs):.0f} ms "
+        print(f"typing {typing}s warm-up={"off" if warm == "0" else warm + " s"}: first turn p50 {statistics.median(r[0] for r in rs):.0f} ms "
               f"(min {min(r[0] for r in rs):.0f}, max {max(r[0] for r in rs):.0f}); packet {sum(r[1] for r in rs)}/5")

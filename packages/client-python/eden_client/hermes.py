@@ -71,6 +71,9 @@ ASK_TOOL = "ask_context"
 TOOLSET = "eden"
 #: The session id the registration's warm-up sights the user with (no session is opened for it).
 WARM_SESSION = "eden-warm-up"
+#: Seconds from registration to the warm-up (D2117): long enough that a Hermes command that never chats has exited
+#: (no daemon started, no backfill kicked for it), short against a person typing a first message.
+WARM_DELAY_S = 1.0
 #: Hermes sessions with a live client; the least recent is dropped past this.
 MAX_SESSIONS = 256
 #: The default ``EDEN_CHECK_TOOLS``: a tool whose name carries one of these verbs as a word acts on someone's behalf.
@@ -203,8 +206,14 @@ class EdenHermes:
         tools = env.get("EDEN_CHECK_TOOLS")
         # ``EDEN_ASK_HINT``: the question-turn nudge; only "0" turns it off.
         self.ask_hint = (env.get("EDEN_ASK_HINT") or "").strip() != "0"
-        # ``EDEN_WARM``: start the local server and sight the user at registration; only "0" turns it off.
-        self.warm = (env.get("EDEN_WARM") or "").strip() != "0"
+        # ``EDEN_WARM``: seconds after registration to start the local server and sight the user (default
+        # ``WARM_DELAY_S``); "0" turns it off. Not at once: a Hermes command that never chats exits first.
+        try:
+            self.warm = float((env.get("EDEN_WARM") or "").strip() or WARM_DELAY_S)
+        except ValueError:
+            self.warm = WARM_DELAY_S
+        if not self.warm > 0:  # 0, a negative or NaN: off
+            self.warm = 0.0
         # None: the acting-verb default; "*": every tool; otherwise exactly the names listed (empty: none).
         self.check_mode = "acting" if tools is None else "all" if tools.strip() == "*" else "list"
         self.check_tools = {t.strip() for t in (tools or "").split(",") if t.strip()}
@@ -478,7 +487,9 @@ class EdenHermes:
             if callable(getattr(ctx, "on_unload", None)):
                 ctx.on_unload(self.local.close)
         if self.warm:
-            threading.Thread(target=self._warm_up, name="eden-warm-up", daemon=True).start()
+            timer = threading.Timer(self.warm, self._warm_up)
+            timer.daemon = True
+            timer.start()
         ctx.register_hook("pre_llm_call", self.pre_llm_call)
         ctx.register_hook("post_llm_call", self.post_llm_call)
         ctx.register_hook("pre_tool_call", self.pre_tool_call)
