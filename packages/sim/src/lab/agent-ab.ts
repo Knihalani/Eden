@@ -64,8 +64,10 @@ const opt = (name: string, fallback: string) => {
 };
 const DRY = args.includes("--dry");
 // A local endpoint (A8): EDEN_MODEL_BASE_URL names it; EDEN_MODEL_API_KEY only when it wants a bearer.
+// With a base URL the OpenRouter key must not fall through — it would be sent to whatever server
+// is named. (SEC: key never leaves its own provider.)
 const BASE_URL = process.env.EDEN_MODEL_BASE_URL;
-const KEY = process.env.EDEN_MODEL_API_KEY ?? process.env.OPENROUTER_API_KEY;
+const KEY = BASE_URL ? process.env.EDEN_MODEL_API_KEY : process.env.OPENROUTER_API_KEY;
 if (!BASE_URL && !KEY && !DRY) throw new Error("needs EDEN_MODEL_BASE_URL or OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41,42,43").split(",").map(Number);
 const MAX_TASKS = Number(opt("tasks", "30"));
