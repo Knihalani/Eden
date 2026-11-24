@@ -25,6 +25,12 @@ On Hermes Agent the plugin does all of this for you: see "Hermes Agent" below. O
 `examples/ai-sdk/eden-ai-sdk.ts` does (D854): `edenSession(eden)`, then `session.wrap(model)`, `session.tools` and
 `session.guard(actingTools)` in `generateText`/`streamText` ([examples/ai-sdk](../examples/ai-sdk/README.md)).
 
+- **Place every packet an observe returns.** Eden marks what an observe hands out as shown and does not send it again
+  in the session, and a tool result's observe can hand one out (a check that finished late): an integration that
+  reports tool results and ignores the reply loses that context for good (D2113). Where a hook shows everything it
+  gets, `eden.observeAll(event)` (Python `observe_all`) returns the event's packet and the session's queue in one
+  round trip, `{ injections, pending }`, instead of `observe` then `collect` (D2114); an older server falls back to
+  `pending()` on its own.
 - **One `userId` per end user, one `sessionId` per conversation.** Eden keys every piece of state by tenant, user and
   session (D9); a shared id would mix users' context.
 - **Ids are 1-128 characters of `[A-Za-z0-9._:@-]`** (`isId` in `@eden/protocol`) for `tenantId`, `userId` and
@@ -692,8 +698,10 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
   create, update, add, respond, deploy: `send_email`, `sendEmail`, `create_event`, `mcp_gmail_send_message`, not
   `list_messages` or `read_file`). A tool that acts under another name is not checked: name your acting tools with
   `EDEN_CHECK_TOOLS=send_email,book_room` (exactly those), or `*` (every tool but Eden's own); empty checks none.
-- **`post_tool_call`, `transform_tool_result`**: tool results are reported, and packets Eden queued since are appended
-  to the result, so context found mid-turn reaches the next model call.
+- **`post_tool_call`, `transform_tool_result`**: each tool result is reported with `observe_all`, and what it returns
+  (the observe's own packet and the queue) is appended to that call's result by `transform_tool_result`, which Hermes
+  fires right after; anything a blocked or timed-out call left unplaced goes with the next turn's packet (D2113). One
+  round trip per tool step and per turn (D2114), on a kept-alive connection (D2115).
 - **`on_session_finalize`, `on_session_reset`**: each Hermes session is its own Eden session (its id through
   `eden_id`; a hook with no session id uses its task id, and with neither Eden is skipped), ended when Hermes tears
   the identity down. Not `on_session_end`, which Hermes fires after every turn: ending Eden's session there would

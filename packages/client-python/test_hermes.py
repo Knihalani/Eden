@@ -52,6 +52,9 @@ class FakeClient:
         self.cites = None
         self.fail = False
         self.no_packet = False
+        self.tool_packet = None
+        self.drains = 0
+        self.polls = 0
         FakeClient.made.append(self)
 
     def _maybe_fail(self):
@@ -64,11 +67,23 @@ class FakeClient:
         packet = PACKET if event.get("kind") == "user_message" and not self.no_packet else None
         return {"injection": packet, "pending": False}
 
+    def observe_all(self, event):
+        # As the real client against a server that drains: the observe's packet (``tool_packet`` on a tool
+        # result: a late push check's queued packet handed out there) then the queue.
+        self._maybe_fail()
+        self.events.append(event)
+        self.drains += 1
+        kind = event.get("kind")
+        packet = (PACKET if kind == "user_message" and not self.no_packet
+                  else self.tool_packet if kind == "tool_result" else None)
+        return {"injections": ([packet] if packet else []) + self.pending(counted=False), "pending": False}
+
     def collect(self, injection):
         return ([injection] if injection else []) + self.pending()
 
-    def pending(self):
+    def pending(self, counted=True):
         self._maybe_fail()
+        self.polls += counted
         out, self.pending_queue = self.pending_queue, []
         return out
 
@@ -189,6 +204,39 @@ class Hermes(unittest.TestCase):
         c.pending_queue = [PACKET]
         self.assertEqual(ctx.hooks["transform_tool_result"](tool_name="t", result="r", session_id="s"),
                          f"r\n\n{PACKET['text']}")
+
+    def test_a_tool_results_packet_is_placed_not_dropped(self):
+        # The engine marks what an observe hands out as shown: the plugin used to discard a tool result's
+        # observe reply, so that packet never reached the agent and was never sent again in the session.
+        _, ctx = plugin()
+        ctx.hooks["pre_llm_call"](session_id="s", user_message="hi")
+        c = FakeClient.made[0]
+        c.tool_packet = {"id": "late", "text": "<context>late check</context>"}
+        c.pending_queue = [{"id": "q", "text": "<context>queued</context>"}]
+        polls = c.polls
+        ctx.hooks["post_tool_call"](tool_name="terminal", args={}, result="ok", session_id="s")
+        out = ctx.hooks["transform_tool_result"](tool_name="terminal", result="ok", session_id="s")
+        self.assertEqual(out, "ok\n\n<context>late check</context>\n\n<context>queued</context>")
+        # One round trip for the tool step: the transform made no call of its own.
+        self.assertEqual(c.polls, polls)
+
+    def test_an_unplaced_tool_packet_rides_the_next_turn(self):
+        # A blocked or timed-out call fires neither hook's partner: whatever was stashed goes with the next turn.
+        _, ctx = plugin()
+        ctx.hooks["pre_llm_call"](session_id="s", user_message="hi")
+        c = FakeClient.made[0]
+        c.tool_packet = {"id": "late", "text": "<context>late check</context>"}
+        ctx.hooks["post_tool_call"](tool_name="terminal", args={}, result="ok", session_id="s")
+        c.tool_packet = None
+        out = ctx.hooks["pre_llm_call"](session_id="s", user_message="Move lunch with Priya")
+        self.assertEqual(out, {"context": "<context>late check</context>\n\n" + PACKET["text"]})
+        self.assertIsNone(ctx.hooks["transform_tool_result"](tool_name="t", result="r", session_id="s"))
+
+    def test_a_turn_is_one_round_trip(self):
+        _, ctx = plugin()
+        ctx.hooks["pre_llm_call"](session_id="s", user_message="Move lunch with Priya")
+        c = FakeClient.made[0]
+        self.assertEqual((c.drains, c.polls), (1, 0))
 
     def test_ask_context_and_session_finalize_and_reset(self):
         _, ctx = plugin()

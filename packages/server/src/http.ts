@@ -1,7 +1,8 @@
 /**
  * The HTTP API an agent integration calls. All routes take and return JSON.
  *
- *   POST /v1/events    an AgentEvent              → ObserveResult  (?waitMs= to wait for the slow path)
+ *   POST /v1/events    an AgentEvent              → ObserveResult  (?waitMs= to wait for the slow path; ?drain=1
+ *                                                    adds `injections`, the queue `/v1/pending` would return)
  *   POST /v1/ask       an AskRequest              → AskResponse
  *   POST /v1/check     a tool_call AgentEvent     → ActionCheck   (the party check, D376)
  *   POST /v1/pending   {tenantId,userId,sessionId} → {injections}
@@ -243,6 +244,14 @@ export function createHandler(
         const shadow = query.get("shadow") === "1";
         const observed = await partner.observe(checked.value, { waitMs, ...(shadow ? { shadow } : {}) });
         stats.event(tenant, checked.value, waitMs, observed.pending === true, shadow);
+        // `?drain=1`: the queue `/v1/pending` would return right after, in this reply (the clients' `observeAll`),
+        // so an integration that shows everything gets it in one round trip instead of two. Opt-in: a caller that
+        // reads only `injection` would otherwise have queued packets marked shown that it never shows.
+        if (query.get("drain") === "1") {
+          const who = { tenantId: tenant, userId: checked.value.userId, sessionId: checked.value.sessionId };
+          stats.pending(tenant, who.userId, who.sessionId, shadow);
+          return json({ ...observed, injections: partner.takePending(who, shadow ? { shadow } : {}) });
+        }
         return json(observed);
       }
       case "/v1/check": {

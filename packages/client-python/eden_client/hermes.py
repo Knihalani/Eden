@@ -204,6 +204,9 @@ class EdenHermes:
         self.check_tools = {t.strip() for t in (tools or "").split(",") if t.strip()}
         self._factory = client_factory or EdenClient
         self._clients: "OrderedDict[str, Any]" = OrderedDict()
+        # Per Eden session: packets a tool result's observe returned, not yet placed, and whether the queue was
+        # drained since the last placement (then ``transform_tool_result`` makes no call of its own).
+        self._placing: Dict[str, Any] = {}
         self._lock = threading.Lock()
 
     def _warn_once(self, problem):
@@ -257,6 +260,22 @@ class EdenHermes:
                 self._clients.popitem(last=False)
         return c
 
+    def _place_later(self, session_id: Any, task_id: Any, injections: Any, drained: bool) -> None:
+        sid = self.session_key(session_id, task_id)
+        if sid is None:
+            return
+        with self._lock:
+            got, _ = self._placing.get(sid, ([], False))
+            self._placing[sid] = (got + list(injections or []), drained)
+            while len(self._placing) > MAX_SESSIONS:
+                self._placing.pop(next(iter(self._placing)))
+
+    def _take_placed(self, session_id: Any, task_id: Any = None, with_flag: bool = False) -> Any:
+        sid = self.session_key(session_id, task_id)
+        with self._lock:
+            got, drained = self._placing.pop(sid, ([], False)) if sid is not None else ([], False)
+        return (got, drained) if with_flag else got
+
     def checks(self, tool_name: Any) -> bool:
         if not _is_tool(tool_name) or _is_ask(tool_name):
             return False
@@ -279,8 +298,10 @@ class EdenHermes:
             c = self.client(session_id, task_id)
             if c is None:
                 return None
-            res = c.observe({"kind": "user_message", "text": user_message})
-            text = _joined(c.collect(res.get("injection") if isinstance(res, dict) else None))
+            res = c.observe_all({"kind": "user_message", "text": user_message})
+            # Packets a tool result's observe handed out that no ``transform_tool_result`` placed (a blocked or
+            # timed-out call fires neither hook) go first: the engine has marked them shown.
+            text = _joined(self._take_placed(session_id, task_id) + res["injections"])
             if not text and self.ask_hint and QUESTION.search(user_message):
                 return {"context": ASK_HINT}
             return {"context": text} if text else None
@@ -318,7 +339,12 @@ class EdenHermes:
             if c is None:
                 return None
             output = result if isinstance(result, str) else json.dumps(result, default=str)
-            c.observe({"kind": "tool_result", "tool": tool_name, "output": output})
+            # One round trip: the observe's packet (a late push check's queued packet is handed out here) and the
+            # queue, kept for this call's ``transform_tool_result``, which Hermes fires right after this hook. The
+            # engine marks them shown, so dropping them would lose them for the session (the lab placed them:
+            # ``observe-tool.ts``).
+            got = c.observe_all({"kind": "tool_result", "tool": tool_name, "output": output})["injections"]
+            self._place_later(session_id, task_id, got, drained=True)
         except Exception as e:  # noqa: BLE001
             _warn(f"post_tool_call: {e}")
         return None
@@ -334,7 +360,9 @@ class EdenHermes:
             c = self.client(session_id, task_id)
             if c is None:
                 return None
-            text = _joined(c.pending())
+            stashed, drained = self._take_placed(session_id, task_id, with_flag=True)
+            # ``post_tool_call`` drained the queue a moment ago; Eden's own tool (not reported) still asks.
+            text = _joined(stashed + ([] if drained else c.pending()))
             return f"{result}\n\n{text}" if text else None
         except Exception as e:  # noqa: BLE001
             _warn(f"transform_tool_result: {e}")
@@ -353,6 +381,7 @@ class EdenHermes:
                 return None
             with self._lock:
                 cached = self._clients.pop(sid, None)
+                self._placing.pop(sid, None)
             if cached is not None:
                 cached[0].observe({"kind": "session_end"})
         except Exception as e:  # noqa: BLE001

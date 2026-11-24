@@ -284,7 +284,10 @@ export function createLocalSurface<V = string>(opts: LocalSurfaceOptions): Local
       let last: Injection | null = null;
       for (const ev of events) {
         const { injection } = await s.eden.observe(ev as never, waits ? {} : { waitMs: 0 });
-        if (injection) last = injection;
+        if (!injection) continue;
+        // Every observe's injection is marked shown by the engine: an earlier one is queued, never dropped.
+        if (last) s.queued.push(last);
+        last = injection;
       }
       return last;
     });

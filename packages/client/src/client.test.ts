@@ -779,3 +779,31 @@ test("a waitMs that is not a finite non-negative number still sends the event (c
   expect(errors).toEqual([]);
   expect(urls.map((u) => new URL(u).search)).toEqual(["?waitMs=5000", "", "", "?waitMs=5000", ""]);
 });
+
+describe("observeAll (one round trip)", () => {
+  test("asks the server to drain and returns the injection then the queue, with no pending call", async () => {
+    const urls: string[] = [];
+    const fake = (async (url: string) => {
+      urls.push(url);
+      return Response.json({ injection: inj("now"), pending: true, injections: [inj("queued")] });
+    }) as unknown as typeof fetch;
+    const eden = new EdenClient({ userId: "u", sessionId: "s", fetch: fake });
+    const got = await eden.observeAll({ kind: "tool_result", tool: "t", output: "o" });
+    expect(got).toEqual({ injections: [inj("now"), inj("queued")], pending: true });
+    expect(urls.map((u) => new URL(u).pathname + new URL(u).search)).toEqual(["/v1/events?drain=1"]);
+  });
+
+  test("an older server that ignores drain: the queue comes from /v1/pending, as collect did", async () => {
+    const paths: string[] = [];
+    const fake = (async (url: string) => {
+      paths.push(new URL(url).pathname);
+      return new URL(url).pathname === "/v1/pending"
+        ? Response.json({ injections: [inj("queued")] })
+        : Response.json({ injection: inj("now"), pending: false });
+    }) as unknown as typeof fetch;
+    const eden = new EdenClient({ userId: "u", sessionId: "s", fetch: fake });
+    const got = await eden.observeAll({ kind: "user_message", text: "hi" }, { waitMs: 0 });
+    expect(got.injections).toEqual([inj("now"), inj("queued")]);
+    expect(paths).toEqual(["/v1/events", "/v1/pending"]);
+  });
+});

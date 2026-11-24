@@ -18,7 +18,7 @@
  * http://127.0.0.1:8790. Eden's own background roles run on the same kind of endpoint with
  * EDEN_MODEL_BASE_URL + EDEN_MODEL on the server side (D2109).
  */
-import { ASK_CONTEXT_DESCRIPTION, EdenClient, guardTools, withContext } from "@eden/client";
+import { ASK_CONTEXT_DESCRIPTION, EdenClient, guardTools, withContext, type Injection } from "@eden/client";
 
 // No key against the dev server; EDEN_API_KEY against one with EDEN_API_KEYS set. Eden fails open, so a wrong key
 // shows up only through onError.
@@ -125,8 +125,12 @@ const parsedWaitMs = rawWaitMs === undefined || rawWaitMs.trim() === "" ? NaN : 
 const waitMs = Number.isFinite(parsedWaitMs) ? Math.max(0, parsedWaitMs) : undefined;
 const { injection } = await eden.observe({ kind: "user_message", text: userText }, { waitMs });
 
+// Every packet an observe hands out is marked shown by Eden, so each one is placed before the next model call.
+const carried: Injection[] = injection ? [injection] : [];
 for (let step = 0; step < 5; step++) {
-  const reply = await chat(withContext(messages, await eden.collect(step === 0 ? injection : null)));
+  // The returned list is kept as the transcript, so a packet stays in place on later calls (D336).
+  messages = withContext(messages, [...carried.splice(0), ...(await eden.pending())]);
+  const reply = await chat(messages);
   messages.push(reply);
   if (!reply.tool_calls?.length) {
     console.log(reply.content);
@@ -135,12 +139,14 @@ for (let step = 0; step < 5; step++) {
   }
   for (const call of reply.tool_calls) {
     const input = JSON.parse(call.function.arguments) as Record<string, unknown>;
-    await eden.observe({ kind: "tool_call", tool: call.function.name, input });
+    const called = await eden.observe({ kind: "tool_call", tool: call.function.name, input });
+    if (called.injection) carried.push(called.injection);
     let content: string;
     if (call.function.name === "move_event") content = await actions.move_event(input as { event: string; to: string });
     else content = (await eden.ask(String(input.question ?? "")))?.answer ?? "No context available.";
     messages.push({ role: "tool", tool_call_id: call.id, content });
-    await eden.observe({ kind: "tool_result", tool: call.function.name, output: content });
+    const read = await eden.observe({ kind: "tool_result", tool: call.function.name, output: content });
+    if (read.injection) carried.push(read.injection);
   }
 }
 await eden.observe({ kind: "session_end" });

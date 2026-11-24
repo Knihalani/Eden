@@ -5,7 +5,7 @@ import json
 import threading
 import time
 import unittest
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 
 import asyncio
 
@@ -556,6 +556,89 @@ class EnvDefaults(unittest.TestCase):
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = v
+
+
+class KeepAlive(unittest.TestCase):
+    """The pooled keep-alive path: a hosted server is reached once per call, not once per call plus a handshake."""
+
+    def serve(self, close_after=None):
+        conns = []
+        state = {"served": 0}
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def setup(self):
+                conns.append(self.client_address)
+                super().setup()
+
+            def do_POST(self):  # noqa: N802
+                self.rfile.read(int(self.headers["content-length"]))
+                state["served"] += 1
+                if self.path.startswith("/v1/whoami"):
+                    data, status = b'{"error": "nope"}', 401
+                elif self.path.startswith("/v1/events"):
+                    data, status = json.dumps({"injection": INJ, "pending": False, "injections": []}).encode(), 200
+                else:
+                    data, status = b'{"injections": []}', 200
+                self.send_response(status)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                # ``close_after``: the server ends the connection once idle (a keep-alive timeout).
+                if close_after is not None and state["served"] % close_after == 0:
+                    self.close_connection = True
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_port}", conns
+
+    def test_calls_share_one_connection_across_clients(self):
+        url, conns = self.serve()
+        a, errors = client(url)
+        b, _ = client(url)
+        for _ in range(3):
+            self.assertEqual(a.observe_all({"kind": "tool_result", "tool": "t", "output": "o"})["injections"], [INJ])
+            self.assertEqual(b.pending(), [])
+        self.assertEqual((len(conns), errors), (1, []))
+
+    def test_a_connection_the_server_closed_is_replaced_without_a_failure(self):
+        url, conns = self.serve(close_after=1)
+        c, errors = client(url)
+        for _ in range(4):
+            self.assertEqual(c.pending(), [])
+        self.assertEqual(errors, [])
+        self.assertEqual(len(conns), 4)
+
+    def test_a_dead_connection_taken_as_live_is_retried_once_fresh(self):
+        # The race the idle check cannot see: the server closes as the connection is taken. The request never
+        # reached it, so it goes once more on a new connection, and the call does not fail open.
+        import eden_client
+        url, conns = self.serve(close_after=1)
+        c, errors = client(url)
+        self.assertEqual(c.pending(), [])
+        real = eden_client._closed_by_peer
+        eden_client._closed_by_peer = lambda conn: False
+        try:
+            time.sleep(0.05)
+            self.assertEqual(c.pending(), [])
+        finally:
+            eden_client._closed_by_peer = real
+        self.assertEqual((errors, len(conns)), ([], 2))
+
+    def test_an_error_status_keeps_its_reason(self):
+        url, _ = self.serve()
+        c, errors = client(url)
+        self.assertEqual(c.health(), {"ok": False, "error": "eden /v1/whoami: 401 nope"})
+        # The connection that answered 401 is not reused half-read: the next call still succeeds.
+        self.assertEqual(c.pending(), [])
+        self.assertEqual(len(errors), 1)
 
 
 if __name__ == "__main__":

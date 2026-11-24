@@ -29,7 +29,8 @@ class FakeClient:
     def observe(self, event, wait_ms=None):
         self._maybe_fail()
         self.events.append((event, wait_ms))
-        packet = PACKET if event.get("kind") == "user_message" else None
+        packet = PACKET if event.get("kind") == "user_message" else (
+            getattr(self, "tool_packet", None) if event.get("kind") == "tool_result" else None)
         return {"injection": packet, "pending": False}
 
     def collect(self, injection):
@@ -177,6 +178,18 @@ class Gptme(unittest.TestCase):
         self.assertEqual(p.tool_confirm(tool_use), held)
         self.assertIsNone(p.tool_confirm(tool_use))
         self.assertTrue(any(e["kind"] == "tool_result" and e["output"] == held for e, _ in c.events))
+
+    def test_a_tool_results_packet_waits_for_the_next_generation(self):
+        # The engine marks an observe's packet shown (a late push check's packet is handed out on a tool
+        # result): dropping it lost it for the session.
+        p = plugin()
+        logdir = "/tmp/logs/1"
+        p.generation([Msg("user", "hi")], logdir)
+        c = FakeClient.made[0]
+        c.tool_packet = {"id": "late", "text": "<context>late check</context>"}
+        p.tool_post(ToolUse("shell"), "output", logdir)
+        c.tool_packet = None
+        self.assertIn("<context>late check</context>", p.generation([Msg("user", "hi")], logdir))
 
     def test_fail_open(self):
         p = plugin()

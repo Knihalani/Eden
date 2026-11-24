@@ -19,14 +19,19 @@ from __future__ import annotations
 import asyncio
 import functools
 import hashlib
+import http.client
 import inspect
 import json
 import math
 import os
 import re
+import select
+import ssl
 import sys
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Callable, Dict, List, Optional
 
@@ -159,6 +164,63 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 _OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+class _Pool:
+    """Idle keep-alive connections per (scheme, host, port), shared by every client of the process: an agent makes
+    one client per session, and a fresh TCP (and TLS) handshake per call costs one to two round trips to a hosted
+    server on each turn and tool step. A connection is used by one call at a time (taken out, put back)."""
+
+    IDLE_PER_HOST = 4
+
+    def __init__(self) -> None:
+        self._idle: Dict[Any, List[Any]] = {}
+        self._lock = threading.Lock()
+
+    def take(self, key: Any) -> Any:
+        with self._lock:
+            idle = self._idle.get(key)
+            while idle:
+                conn = idle.pop()
+                if not _closed_by_peer(conn):
+                    return conn
+                conn.close()
+        return None
+
+    def give(self, key: Any, conn: Any) -> None:
+        with self._lock:
+            idle = self._idle.setdefault(key, [])
+            if len(idle) < self.IDLE_PER_HOST:
+                idle.append(conn)
+                return
+        conn.close()
+
+
+def _closed_by_peer(conn: Any) -> bool:
+    """An idle connection the server has closed (its idle timeout) reads as ready: EOF, or bytes it never asked for."""
+    sock = getattr(conn, "sock", None)
+    if sock is None:
+        return True
+    try:
+        return bool(select.select([sock], [], [], 0)[0])
+    except (OSError, ValueError):
+        return True
+
+
+_POOL = _Pool()
+#: A reused connection that fails before any answer (the server closed it as it was taken): the server never saw the
+#: request, so it goes once more on a fresh connection.
+_STALE = (http.client.RemoteDisconnected, http.client.BadStatusLine, ConnectionResetError, BrokenPipeError,
+          ConnectionAbortedError)
+
+
+class _Status(Exception):
+    """A non-2xx answer on the keep-alive path (``urllib.error.HTTPError``'s part in ``_post``)."""
+
+    def __init__(self, code: int, body: bytes) -> None:
+        super().__init__(code)
+        self.code = code
+        self.body = body
 
 
 def _is_id(v: Any) -> bool:
@@ -360,6 +422,7 @@ class EdenClient:
         self._signal_advice_seen: set = set()
         self._opener = (urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
                         if bypass_proxies else _OPENER)
+        self._direct = _direct_route(self._base, bypass_proxies)
         bad = [f for f, v in (("tenantId", tenant_id), ("userId", user_id), ("sessionId", session_id))
                if (f != "tenantId" or v) and not _is_id(v)]
         # Every call would be refused (400): said once, up front, without the ids (they may be personal data).
@@ -398,17 +461,22 @@ class EdenClient:
         try:
             # Inside the try: a body that cannot be serialised (a datetime in a tool's input) is no context.
             data = json.dumps(body).encode()
-            req = urllib.request.Request(self._base + path, data=data, method="POST", headers=headers)
             timeout = self._timeout if timeout_s is None else timeout_s
             deadline = time.monotonic() + timeout
-            with self._opener.open(req, timeout=timeout) as res:
-                answer = json.loads(_read_by(res, deadline).decode())
+            if self._direct is not None:
+                answer = json.loads(_send(self._direct, path, data, headers, timeout, deadline).decode())
+            else:
+                req = urllib.request.Request(self._base + path, data=data, method="POST", headers=headers)
+                with self._opener.open(req, timeout=timeout) as res:
+                    answer = json.loads(_read_by(res, deadline).decode())
             if valid is not None and not valid(answer):
                 name = route[len("/v1/"):]
                 raise EdenError(f"eden {route}: not {'an' if name[:1] in 'aeiou' else 'a'} {name} answer")
             return answer
         except urllib.error.HTTPError as e:
             err: Exception = EdenError(f"eden {route}: {e.code}{_server_error(e)}")
+        except _Status as e:
+            err = EdenError(f"eden {route}: {e.code}{_error_text(e.body)}")
         # An answer that arrived but could not be read is not "cannot reach" (D365).
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             err = EdenError(f"eden {route}: an unreadable answer ({type(e).__name__})")
@@ -425,6 +493,21 @@ class EdenClient:
 
     def observe(self, event: Dict[str, Any], wait_ms: Optional[float] = None) -> Dict[str, Any]:
         """Reports an event; ``{"injection": ... or None, "pending": bool}``. A sent user message waits by default."""
+        res = self._event(event, wait_ms, False)
+        return {"injection": (res or {}).get("injection"), "pending": (res or {}).get("pending") is True}
+
+    def observe_all(self, event: Dict[str, Any], wait_ms: Optional[float] = None) -> Dict[str, Any]:
+        """``observe`` and ``collect`` in one round trip (``observeAll``): ``{"injections": [...], "pending": bool}``,
+        the event's injection then everything queued for the session. Every item returned is marked shown, so an
+        integration uses this only where it shows all it gets. A server without ``?drain=1`` answers without the
+        queue, and ``pending()`` fetches it as before."""
+        res = self._event(event, wait_ms, True)
+        first = [res["injection"]] if isinstance(res, dict) and _is_injection(res.get("injection")) else []
+        queued = res.get("injections") if isinstance(res, dict) else None
+        rest = [i for i in queued if _is_injection(i)] if isinstance(queued, list) else self.pending()
+        return {"injections": first + rest, "pending": isinstance(res, dict) and res.get("pending") is True}
+
+    def _event(self, event: Any, wait_ms: Optional[float], drain: bool) -> Any:
         # Not a dict (a caller's slip): sent as an empty event, which the server refuses and this reports, never raises.
         if not isinstance(event, dict):
             event = {}
@@ -435,14 +518,15 @@ class EdenClient:
         except TypeError:
             wait = 0
         body = {**self._who(), "at": int(time.time() * 1000), **event}
-        query = "&".join(([f"waitMs={wait}"] if wait else []) + (["shadow=1"] if self._shadow else []))
-        res = self._post(
+        query = "&".join(([f"waitMs={wait}"] if wait else []) + (["shadow=1"] if self._shadow else [])
+                         + (["drain=1"] if drain else []))
+        return self._post(
             f"/v1/events?{query}" if query else "/v1/events",
             body,
             self._timeout + wait / 1000,
-            lambda v: isinstance(v, dict) and (v.get("injection") is None or _is_injection(v.get("injection"))),
+            lambda v: isinstance(v, dict) and (v.get("injection") is None or _is_injection(v.get("injection")))
+            and (v.get("injections") is None or isinstance(v.get("injections"), list)),
         )
-        return {"injection": (res or {}).get("injection"), "pending": (res or {}).get("pending") is True}
 
     def pending(self) -> List[Dict[str, Any]]:
         """Injections queued by slower lookups since the last call (drains the queue)."""
@@ -575,6 +659,83 @@ def _read_by(res: Any, deadline: float) -> bytes:
 def _count(v: Any) -> bool:
     """A count a server may send: a finite number, not a bool (``json.loads`` accepts ``Infinity`` and ``NaN``)."""
     return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _direct_route(base: str, bypass_proxies: bool) -> Optional[tuple]:
+    """(scheme, host, port, path prefix) for the keep-alive path; None where urllib keeps the call: a proxy that
+    applies to the host (urllib's own reading of the environment), credentials in the URL, another scheme."""
+    try:
+        u = urllib.parse.urlsplit(base)
+        if u.scheme not in ("http", "https") or not u.hostname or u.username or u.password:
+            return None
+        if not bypass_proxies and u.scheme in urllib.request.getproxies() \
+                and not urllib.request.proxy_bypass(u.hostname):
+            return None
+        return (u.scheme, u.hostname, u.port, u.path.rstrip("/"))
+    except (ValueError, OSError):
+        return None
+
+
+_TLS: List[Any] = []
+#: What urllib sends: a server or gateway that reads the user agent sees the same client on either path.
+_AGENT = f"Python-urllib/{sys.version_info[0]}.{sys.version_info[1]}"
+
+
+def _send(route: tuple, path: str, data: bytes, headers: Dict[str, str], timeout: float, deadline: float) -> bytes:
+    """POSTs on a pooled keep-alive connection (``_Pool``); the body, or ``_Status`` for a non-2xx (a 3xx too:
+    Eden never redirects). The same timeouts as the urllib path: connect and each read, the body by ``deadline``."""
+    scheme, host, port, prefix = route
+    key = (scheme, host, port)
+    for attempt in (0, 1):
+        conn = _POOL.take(key) if attempt == 0 else None
+        reused = conn is not None
+        if conn is None:
+            if scheme == "https":
+                if not _TLS:
+                    _TLS.append(ssl.create_default_context())
+                conn = http.client.HTTPSConnection(host, port, timeout=timeout, context=_TLS[0])
+            else:
+                conn = http.client.HTTPConnection(host, port, timeout=timeout)
+        else:
+            conn.timeout = timeout
+            conn.sock.settimeout(timeout)
+        try:
+            conn.request("POST", prefix + path, body=data, headers={**headers, "user-agent": _AGENT})
+            res = conn.getresponse()
+        except _STALE:
+            conn.close()
+            if reused:
+                continue
+            raise
+        except BaseException:
+            conn.close()
+            raise
+        try:
+            if not 200 <= res.status < 300:
+                body = res.read(_ERROR_BODY_BYTES + 1)
+                conn.close()
+                raise _Status(res.status, body)
+            body = _read_by(res, deadline)
+        except BaseException:
+            conn.close()
+            raise
+        if res.will_close:
+            conn.close()
+        else:
+            _POOL.give(key, conn)
+        return body
+    raise ConnectionError("no connection")  # unreachable: the fresh attempt returns or raises
+
+
+def _error_text(text: bytes) -> str:
+    """The server's ``{error}`` text from an error body, bounded, with a leading space; "" when there is none."""
+    try:
+        if len(text) > _ERROR_BODY_BYTES:
+            return ""
+        error = json.loads(text.decode()).get("error")
+        return f" {error[:_ERROR_TEXT_CHARS]}" if isinstance(error, str) else ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _server_error(e: urllib.error.HTTPError) -> str:

@@ -475,15 +475,20 @@ export function createProxy(options: ProxyOptions): (req: Request) => Promise<Re
     };
     const work = (async () => {
       const tool = new Map(tools);
-      for (const [i, m] of fresh.entries()) {
-        for (const ev of eventsOf(m, tool)) {
-          // Only the latest user message waits for its lookup; the others are reported without a wait.
-          const waiting = ev.kind === "user_message" && i === lastUser;
-          const { injection } = await eden.observe(ev, waiting ? {} : { waitMs: 0 });
+      // Only the latest user message waits for its lookup; the others are reported without a wait.
+      const evs = fresh.flatMap((m, i) =>
+        eventsOf(m, tool).map((ev) => ({ ev, waiting: ev.kind === "user_message" && i === lastUser })),
+      );
+      for (const [k, { ev, waiting }] of evs.entries()) {
+        const wait = waiting ? {} : { waitMs: 0 };
+        // The last event drains the queue in its own reply: one round trip fewer than observe then `pending`.
+        if (k === evs.length - 1) keep((await eden.observeAll(ev, wait)).injections);
+        else {
+          const { injection } = await eden.observe(ev, wait);
           if (injection) keep([injection]);
         }
       }
-      keep(await eden.pending());
+      if (evs.length === 0) keep(await eden.pending());
     })().catch(report);
     // One deadline for all of Eden's work in this request: past it the request goes upstream with what is in hand,
     // and what lands later stays for the turn's next model call (D14: a slow Eden never holds the agent long).

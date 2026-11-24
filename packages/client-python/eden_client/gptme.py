@@ -265,14 +265,7 @@ class EdenGptme(EdenHermes):
             c = self.client(sid)
             if c is None:
                 return None
-            res = c.observe({"kind": "tool_call", "tool": tool_name, "input": tool_input}, wait_ms=0)
-            # The observe may hand out a packet: it is already dequeued server-side, so stash its
-            # texts for the next ``generation`` yield — discarding it loses the context for good.
-            if isinstance(res, dict) and res.get("injection"):
-                for item in c.collect(res["injection"]):
-                    text = item.get("text") if isinstance(item, dict) else None
-                    if isinstance(text, str) and text.strip() and text not in self._delivered.get(sid, []):
-                        self._delivered.setdefault(sid, []).append(text)
+            self._keep(sid, c, c.observe({"kind": "tool_call", "tool": tool_name, "input": tool_input}, wait_ms=0))
             if not self.checks(tool_name):
                 return None
             res = c.check(tool_name, tool_input)
@@ -280,12 +273,22 @@ class EdenGptme(EdenHermes):
             if not isinstance(finding, dict) or not isinstance(finding.get("text"), str):
                 return None
             held = held_result(tool_name, finding)
-            c.observe({"kind": "tool_result", "tool": tool_name, "output": held}, wait_ms=0)
+            self._keep(sid, c, c.observe({"kind": "tool_result", "tool": tool_name, "output": held}, wait_ms=0))
             self._held[id(tool_use)] = held
             return held
         except Exception as e:  # noqa: BLE001
             _warn(f"tool_pre: {e}")
             return None
+
+    def _keep(self, sid: str, c: Any, res: Any) -> None:
+        """An observe may hand out a packet: it is already dequeued and marked shown server-side, so its texts
+        (and the queue behind it) wait for the next ``generation`` yield — discarding it loses the context for
+        good. A tool result's observe hands out a late push check's queued packet this way."""
+        if isinstance(res, dict) and res.get("injection"):
+            for item in c.collect(res["injection"]):
+                text = item.get("text") if isinstance(item, dict) else None
+                if isinstance(text, str) and text.strip() and text not in self._delivered.get(sid, []):
+                    self._delivered.setdefault(sid, []).append(text)
 
     def tool_confirm(self, tool_use: Any) -> Optional[str]:
         """``TOOL_CONFIRM``: the held result for this call's stashed finding (else ``None``)."""
@@ -301,11 +304,12 @@ class EdenGptme(EdenHermes):
         try:
             if not self._in_scope() or not _is_tool(tool_name) or _is_ask(tool_name):
                 return None
-            c = self.client(self._session_id(session_id))
+            sid = self._session_id(session_id)
+            c = self.client(sid)
             if c is None:
                 return None
             text = output if isinstance(output, str) else (_message_text(output) or json.dumps(output, default=str))
-            c.observe({"kind": "tool_result", "tool": tool_name, "output": text}, wait_ms=0)
+            self._keep(sid, c, c.observe({"kind": "tool_result", "tool": tool_name, "output": text}, wait_ms=0))
         except Exception as e:  # noqa: BLE001
             _warn(f"tool_post: {e}")
         return None

@@ -307,19 +307,51 @@ export class EdenClient {
    * it a sent `user_message` (not a draft) uses `defaultWaitMs` (an explicit 0 sends none).
    */
   async observe(event: EventInput, options: { waitMs?: number } = {}): Promise<ObserveResult> {
+    const res = await this.sendEvent(event, options.waitMs, false);
+    return { injection: res?.injection ?? null, pending: res?.pending === true };
+  }
+
+  /**
+   * `observe` and `collect` in one round trip: the event's injection and everything queued for the session, in the
+   * order to show them. For an integration that shows all it is given (a hook that returns context, a tool result it
+   * appends to): every item returned is marked shown, so show them all. A server without `?drain=1` (older) answers
+   * without the queue, and `pending()` fetches it as before.
+   */
+  async observeAll(
+    event: EventInput,
+    options: { waitMs?: number } = {},
+  ): Promise<{ injections: Injection[]; pending: boolean }> {
+    const res = await this.sendEvent(event, options.waitMs, true);
+    const first = res?.injection ? [res.injection] : [];
+    const queued = Array.isArray(res?.injections) ? res.injections.filter(isInjection) : await this.pending();
+    return { injections: [...first, ...queued], pending: res?.pending === true };
+  }
+
+  private sendEvent(
+    event: EventInput,
+    waitAsked: number | undefined,
+    drain: boolean,
+  ): Promise<(ObserveResult & { injections?: unknown[] }) | null> {
     const sent = event.kind === "user_message" && !event.draft;
-    const asked = options.waitMs ?? (sent ? (this.options.defaultWaitMs ?? DEFAULT_WAIT_MS) : 0);
+    const asked = waitAsked ?? (sent ? (this.options.defaultWaitMs ?? DEFAULT_WAIT_MS) : 0);
     // Clamped to the server's own range: an Infinity, a negative or a NaN would otherwise make the request's timeout
     // invalid, so every observe would fail before it was sent. NaN > 0 is false, so it waits 0 like a negative.
     const waitMs = asked > 0 ? Math.min(MAX_WAIT_MS, asked) : 0;
-    const query = [...(waitMs ? [`waitMs=${waitMs}`] : []), ...(this.options.shadow ? ["shadow=1"] : [])];
+    const query = [
+      ...(waitMs ? [`waitMs=${waitMs}`] : []),
+      ...(this.options.shadow ? ["shadow=1"] : []),
+      ...(drain ? ["drain=1"] : []),
+    ];
     const wait = query.length ? `?${query.join("&")}` : "";
     const timeout = (this.options.timeoutMs ?? 800) + waitMs;
     const body = { ...this.who, at: Date.now(), ...event };
-    const res = await this.post<ObserveResult>(`/v1/events${wait}`, body, timeout, undefined, (v) => {
-      return isRecord(v) && (v.injection === null || v.injection === undefined || isInjection(v.injection));
+    return this.post<ObserveResult & { injections?: unknown[] }>(`/v1/events${wait}`, body, timeout, undefined, (v) => {
+      return (
+        isRecord(v) &&
+        (v.injection === null || v.injection === undefined || isInjection(v.injection)) &&
+        (v.injections === undefined || Array.isArray(v.injections))
+      );
     });
-    return { injection: res?.injection ?? null, pending: res?.pending === true };
   }
 
   /** Injections queued by slower lookups since the last call. */

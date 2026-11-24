@@ -49,6 +49,26 @@ describe("HTTP API", () => {
     expect(body.injection?.citations[0]?.itemId).toBe("crm:d1");
   });
 
+  test("drain=1: the reply carries the queue /v1/pending would return, which is then empty", async () => {
+    const s = { ...who, userId: "u-drain", sessionId: "drain" };
+    // No wait: the lookup queues its packet behind the reply.
+    await post("/v1/events", { ...s, kind: "user_message", text: "Globex renewal with Dana Lee" });
+    await Bun.sleep(300);
+    const body = (await (
+      await post("/v1/events?drain=1", { ...s, kind: "tool_result", tool: "t", output: "o" })
+    ).json()) as {
+      injection: { citations: { itemId: string }[] } | null;
+      injections: { citations: { itemId: string }[] }[];
+    };
+    const ids = [body.injection, ...body.injections].flatMap((i) => i?.citations.map((c) => c.itemId) ?? []);
+    expect(ids).toContain("crm:d1");
+    expect(await (await post("/v1/pending", s)).json()).toEqual({ injections: [] });
+    // Without drain the reply is unchanged.
+    expect(
+      await (await post("/v1/events", { ...s, kind: "tool_result", tool: "t", output: "o" })).json(),
+    ).not.toHaveProperty("injections");
+  });
+
   test("check: a tool call is checked (proceed: the default's party check has nothing to hold); else a 400", async () => {
     const res = await post("/v1/check", { ...who, kind: "tool_call", tool: "send_payment", input: { amount: "10" } });
     expect(res.status).toBe(200);
