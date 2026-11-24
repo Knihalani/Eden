@@ -108,12 +108,15 @@ export class LocalModel implements Model {
     };
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.options.apiKey) headers.authorization = `Bearer ${this.options.apiKey}`;
+    // `timeout: false`: Bun's fetch otherwise gives up on a reply after 360 s of silence (Bun 1.4.4, measured,
+    // D2120) — a non-streamed card batch on a CPU box is silent that long — so `signal` is the only deadline.
     return (this.options.fetch ?? fetch)(this.url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
       signal,
-    });
+      timeout: false,
+    } as RequestInit);
   }
 
   private async read(res: Response, t0: number): Promise<ChatResponse> {

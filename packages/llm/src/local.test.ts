@@ -38,6 +38,17 @@ const ok = (text = "hello") => ({
 });
 
 describe("LocalModel", () => {
+  test("Bun's own fetch timeout is off: the call's signal is its only deadline (D2120)", async () => {
+    let init: RequestInit = {};
+    const { fetch } = fakeFetch((_b, i) => {
+      init = i;
+      return ok();
+    });
+    await new LocalModel({ baseUrl: "http://localhost:11434/v1", model: "m", fetch }).chat(REQ);
+    expect((init as { timeout?: unknown }).timeout).toBe(false);
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
   test("sends only the OpenAI-compatible fields a local server takes, with no bearer by default", async () => {
     const { calls, fetch } = fakeFetch(() => ok());
     const model = new LocalModel({ baseUrl: "http://localhost:11434/v1/", model: "qwen3:8b", fetch, freeCalls: true });

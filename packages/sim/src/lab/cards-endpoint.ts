@@ -70,7 +70,9 @@ export class EndpointModel implements Model {
       },
       body: JSON.stringify(body),
       signal,
-    });
+      // Bun's fetch otherwise drops a reply silent for 360 s (D2120): `timeoutMs` is the only deadline.
+      timeout: false,
+    } as RequestInit);
     // The status and the head of the body only: the request (and its headers) never go into an error.
     if (!res.ok) throw new Error(`cards endpoint ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = (await res.json()) as CompletionResponse;

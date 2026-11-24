@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2120 | 2026-11-24 | `LocalModel` turns off Bun's own fetch timeout: the call's signal is its only deadline. | adopted |
 | D2119 | 2026-11-24 | On an `EDEN_MODEL_BASE_URL` endpoint the card roles wait 15 minutes by default, not 120 s. | adopted |
 | D2118 | 2026-11-24 | The lab runs Hermes A/Bs on a self-hosted model; first result: a no-key Eden helps a 4B agent only where its packet holds the fact. | adopted |
 | D2117 | 2026-11-24 | The Hermes plugin warms up after registration. | adopted |
