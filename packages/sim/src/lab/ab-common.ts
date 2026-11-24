@@ -51,6 +51,12 @@ export interface ChatOptions {
   fetch?: typeof fetch;
   /** LAB ONLY: say explicitly that endpoints may log the prompt (free models need it). */
   allowLogging?: boolean;
+  /**
+   * A chat-completions base URL other than OpenRouter's — a local endpoint (Ollama
+   * `http://localhost:11434/v1`, LM Studio) for runs on local models (A8). With it the key may be
+   * empty: no Authorization header is sent then.
+   */
+  baseUrl?: string;
 }
 
 /** OpenRouter's refusal of `response_format` (a model or endpoint without JSON mode): the call is sent without it. */
@@ -111,9 +117,12 @@ export async function chat(
   const paced = options.fetch !== undefined;
   const send = options.fetch ?? fetch;
   for (let attempt = 0; ; attempt++) {
-    const res = await send("https://openrouter.ai/api/v1/chat/completions", {
+    const res = await send(`${options.baseUrl ?? "https://openrouter.ai/api/v1"}/chat/completions`, {
       method: "POST",
-      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      headers: {
+        ...(key ? { authorization: `Bearer ${key}` } : {}),
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         model,
         messages,
