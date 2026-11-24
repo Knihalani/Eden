@@ -59,9 +59,6 @@ export interface ChatOptions {
   baseUrl?: string;
 }
 
-/** OpenRouter's refusal of `response_format` (a model or endpoint without JSON mode): the call is sent without it. */
-const NO_JSON_MODE = /response_format|json[_ ]?(mode|object|schema)|structured output/i;
-
 /**
  * A dead key fails every call the same way, and a topped-up account only recovers between runs: 401/402/403
  * `AUTH_DEAD_STREAK` calls in a row mark the run dead. `billingDead` lets a caller stop scheduling work instead of
@@ -162,8 +159,10 @@ export async function chat(
       if (attempt >= 3) throw new Error(`no choice: ${body.error?.message ?? "empty"}`);
     } else {
       const text = await res.text();
-      // A model with no JSON mode: ask again without it; the grader's reply is read leniently (`parseGrade`).
-      if (json && res.status === 400 && NO_JSON_MODE.test(text)) {
+      // A model with no JSON mode: ask again without it; the grader's reply is read leniently
+      // (`parseGrade`). Any 400 with JSON mode on earns the retry — strict local servers refuse
+      // `response_format` with a generic body that no regex names (LocalModel does the same).
+      if (json && res.status === 400) {
         json = false;
         continue;
       }
