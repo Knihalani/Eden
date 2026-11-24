@@ -334,9 +334,17 @@ const earlier = MERGE
   : [];
 const results: RunResult[] = [...earlier];
 const byId = new Map(worlds.flatMap((w) => w.tasks).map((t) => [t.id, t]));
+// World streams run under a bounded pool: a local endpoint serializes requests (one CPU), so 48
+// concurrent streams only queue behind the chat timeout without going any faster. A real local
+// agent is a handful of requests at once anyway — `--concurrency` sets the pool's width.
+const CONCURRENCY = Math.max(1, Number(opt("concurrency", "8")));
 try {
-  const streams = worlds.flatMap((w) => CONDITIONS.map((c) => runWorld(w.world, w.seed, w.tasks, c)));
-  for (const r of await Promise.all(streams)) results.push(...r);
+  const pending = worlds.flatMap((w) => CONDITIONS.map((c) => () => runWorld(w.world, w.seed, w.tasks, c)));
+  await Promise.all(
+    Array.from({ length: CONCURRENCY }, async () => {
+      for (let run = pending.shift(); run; run = pending.shift()) results.push(...(await run()));
+    }),
+  );
 } catch (e) {
   console.error(`stopped: ${e instanceof Error ? e.message : e}`);
 }
