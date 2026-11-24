@@ -68,6 +68,16 @@ const DRY = args.includes("--dry");
 // is named. (SEC: key never leaves its own provider.)
 const BASE_URL = process.env.EDEN_MODEL_BASE_URL;
 const KEY = BASE_URL ? process.env.EDEN_MODEL_API_KEY : process.env.OPENROUTER_API_KEY;
+// The grader is measurement infrastructure, not the system under test — it may run on a stronger
+// endpoint than the agent (a 1.5B grading itself marks unverifiable facts as stated; the heldout
+// qwen run graded ~everything true, lexical agreement 0.36). EDEN_GRADER_BASE_URL overrides the
+// grader's endpoint; unset, it follows the agent's. Its key follows the same never-leak rule: an
+// OpenRouter key is used only when the grader's endpoint is OpenRouter (or unset — the default).
+const GRADER_BASE_URL = process.env.EDEN_GRADER_BASE_URL ?? BASE_URL;
+const GRADER_KEY =
+  process.env.EDEN_GRADER_API_KEY ??
+  (GRADER_BASE_URL === BASE_URL ? KEY : undefined) ??
+  (!GRADER_BASE_URL || new URL(GRADER_BASE_URL).host === "openrouter.ai" ? process.env.OPENROUTER_API_KEY : undefined);
 if (!BASE_URL && !KEY && !DRY) throw new Error("needs EDEN_MODEL_BASE_URL or OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41,42,43").split(",").map(Number);
 const MAX_TASKS = Number(opt("tasks", "30"));
@@ -291,7 +301,7 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
 
 /** The grader's verdict (ab-common.ts): which needed facts the answer states. */
 const grade = async (task: Task, answer: string) =>
-  (await gradeVia(KEY ?? "", meter, GRADER, task, answer, { baseUrl: BASE_URL })).facts;
+  (await gradeVia(GRADER_KEY ?? "", meter, GRADER, task, answer, { baseUrl: GRADER_BASE_URL })).facts;
 
 // Hidden-context suites run each world twice: with the hidden item planted, and with its decoy (`--variants`).
 const VARIANTS = opt("variants", "hidden").split(",") as ("hidden" | "control")[];
