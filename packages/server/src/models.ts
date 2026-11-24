@@ -29,8 +29,9 @@
  *                                OPENROUTER_API_KEY, startup stops — which provider is ambiguous.
  * EDEN_MODEL_API_KEY             the endpoint's bearer, only when it wants one (llama.cpp `--api-key`,
  *                                vLLM's); Ollama and LM Studio need none, and none is sent.
- * EDEN_MODEL_TIMEOUT_MS          the roles' own call deadline on that endpoint, default 120,000: local
- *                                inference on a small box is far slower than a hosted route.
+ * EDEN_MODEL_TIMEOUT_MS          the roles' own call deadline on that endpoint; unset, the reader's is
+ *                                120,000 and the card roles' 900,000 (background work: a dropped batch
+ *                                stays uncovered, and a small box takes minutes per batch, D2119).
  * EDEN_MODEL_ROLES               the roles the model serves, comma-separated: `reader`, `cards`,
  *                                `cardsRetry`; unset is all three. Off roles get no model and their
  *                                paths run exactly as with no model at all — the per-role switch for
@@ -152,11 +153,16 @@ export function modelRolesFromEnv(
       rateHold: new RateHold(),
       freeCalls: free,
     };
+    // The card roles run in the background, so only this deadline bounds them, and a batch that misses it is
+    // dropped uncovered, never resent. On a CPU box a 4B model's ten-item batch takes about two minutes alone and
+    // several with the enricher's lanes queued behind it (D2119): the reader's 120 s would lose most cards, so
+    // the card roles wait longer unless the operator set a deadline.
+    const cardOptions: LocalModelOptions = { ...options, timeoutMs: options.timeoutMs ?? LOCAL_CARDS_TIMEOUT_MS };
     return allowRoles(
       {
         reader: makeLocal(options),
-        cards: makeLocal(options),
-        cardsRetry: makeLocal(options),
+        cards: makeLocal(cardOptions),
+        cardsRetry: makeLocal(cardOptions),
         // A loopback endpoint bills nothing, so an unset tenant spend cap is lifted for it: a 0 there
         // would refuse free calls (the per-session and per-user estimates stay, tiny and unsettled at
         // $0 — D2109). A configured cap keeps binding: a loopback gateway can front a paid provider.
@@ -192,6 +198,12 @@ export function modelRolesFromEnv(
     env.EDEN_MODEL_ROLES,
   );
 }
+
+/**
+ * The card roles' call deadline on an EDEN_MODEL_BASE_URL endpoint when EDEN_MODEL_TIMEOUT_MS is unset (D2119):
+ * background work, so a slow local model gets the time a batch takes there rather than dropping it.
+ */
+export const LOCAL_CARDS_TIMEOUT_MS = 900_000;
 
 const ROLE_NAMES = ["reader", "cards", "cardsRetry"] as const;
 type RoleName = (typeof ROLE_NAMES)[number];

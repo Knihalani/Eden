@@ -850,8 +850,10 @@ the poll, the slow-path queue, vocabulary release). Run it as shipped:
   ([PRIVACY.md](PRIVACY.md)).
 - **With `EDEN_MODEL_BASE_URL` + `EDEN_MODEL` set**, the same roles run on any OpenAI-compatible endpoint instead
   — Ollama (`http://localhost:11434/v1`), LM Studio (`http://localhost:1234/v1`), vLLM, llama.cpp, or a hosted
-  gateway (D2109). `EDEN_MODEL_API_KEY` and `EDEN_MODEL_TIMEOUT_MS` (default 120 s) are optional; a loopback
-  endpoint needs no key and bills $0. Setting this and `OPENROUTER_API_KEY` together stops startup: choose one.
+  gateway (D2109). `EDEN_MODEL_API_KEY` and `EDEN_MODEL_TIMEOUT_MS` (default 120 s for the reader, 15 min for the
+  background card roles, D2119) are optional; a loopback endpoint needs no key and bills $0. On CPU, give the
+  server several slots (llama.cpp `--parallel 4`): the card enricher sends up to four batches at once, and batched
+  decoding costs little more than one. Setting this and `OPENROUTER_API_KEY` together stops startup: choose one.
 - **Without a key**, the same default runs its no-model path: nothing to change. The push's candidates make no model
   call and run there too (D276): a request that acts or opens like an instruction gets up to five items to check, at $0.
 - Pass the client's default wait (3,000 ms on a sent user message, `DEFAULT_WAIT_MS`); see the waitMs section above.

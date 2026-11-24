@@ -9,7 +9,13 @@ import { SourceMap } from "@eden/graph";
 import { buildPartner, openSourceMap } from "./build";
 import { stdioSourceMapPath } from "./config";
 import { engineConfig, parseEngineConfig } from "./engine-config";
-import { DEFAULT_USD_PER_TENANT_DAY, loopbackModelBase, modelRolesFromEnv, NO_MODELS } from "./models";
+import {
+  DEFAULT_USD_PER_TENANT_DAY,
+  LOCAL_CARDS_TIMEOUT_MS,
+  loopbackModelBase,
+  modelRolesFromEnv,
+  NO_MODELS,
+} from "./models";
 
 const dir = mkdtempSync(join(edenHome(), "engine-config-"));
 const file = (name: string, body: string): string => {
@@ -258,6 +264,10 @@ describe("EDEN_ENGINE_CONFIG (D103)", () => {
     );
     expect(seen[0]!.freeCalls).toBe(false);
     expect(remote.usdPerTenantDay).toBe(4);
+    // No EDEN_MODEL_TIMEOUT_MS: the reader keeps LocalModel's own 120 s, the background card roles wait
+    // LOCAL_CARDS_TIMEOUT_MS — a batch past its deadline is dropped uncovered (D2119).
+    expect(seen.map((o) => o.timeoutMs)).toEqual([undefined, LOCAL_CARDS_TIMEOUT_MS, LOCAL_CARDS_TIMEOUT_MS]);
+    expect(seen[1]!.rateHold).toBe(seen[0]!.rateHold);
     // Loopback with a cap the operator set: it binds, for a gateway that fronts a paid provider.
     const gated = modelRolesFromEnv(
       { EDEN_MODEL_BASE_URL: "http://localhost:11434/v1", EDEN_MODEL: "m", EDEN_MODEL_USD_PER_TENANT_DAY: "0.5" },
