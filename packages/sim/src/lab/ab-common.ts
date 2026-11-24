@@ -116,8 +116,14 @@ export async function chat(
   meter.before();
   const paced = options.fetch !== undefined;
   const send = options.fetch ?? fetch;
+  // `<base>/chat/completions` on the path, keeping any query a gateway's base URL carries — the
+  // same join LocalModel does; string-appending routes `…/v1?key=k/chat/completions` wrongly.
+  const target = new URL(options.baseUrl ?? "https://openrouter.ai/api/v1");
+  target.pathname = target.pathname.replace(/\/+$/, "") + "/chat/completions";
+  const url = target.toString();
+  const local = options.baseUrl !== undefined;
   for (let attempt = 0; ; attempt++) {
-    const res = await send(`${options.baseUrl ?? "https://openrouter.ai/api/v1"}/chat/completions`, {
+    const res = await send(url, {
       method: "POST",
       headers: {
         ...(key ? { authorization: `Bearer ${key}` } : {}),
