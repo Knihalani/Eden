@@ -1,12 +1,16 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { localBoundary, localConfig } from "./local";
 
 const token = "a".repeat(43);
 test("local configuration scrubs capabilities and consumes the token", () => {
-  const env = { EDEN_LOCAL: "1", EDEN_LOCAL_TOKEN: token, EDEN_HOME: "/unused", OPENROUTER_API_KEY: "fake" };
+  // A home no process can create, even as root (a directory under a plain file): its state stays off. "/unused"
+  // only failed for non-root users — as root the daemon made it and wrote a key there.
+  const file = join(mkdtempSync(join(tmpdir(), "eden-home-file-")), "f");
+  writeFileSync(file, "");
+  const env = { EDEN_LOCAL: "1", EDEN_LOCAL_TOKEN: token, EDEN_HOME: join(file, "home"), OPENROUTER_API_KEY: "fake" };
   const log = console.log;
   const info = console.info;
   try {
