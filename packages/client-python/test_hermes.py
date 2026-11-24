@@ -67,7 +67,7 @@ class FakeClient:
         packet = PACKET if event.get("kind") == "user_message" and not self.no_packet else None
         return {"injection": packet, "pending": False}
 
-    def observe_all(self, event):
+    def observe_all(self, event, wait_ms=None):
         # As the real client against a server that drains: the observe's packet (``tool_packet`` on a tool
         # result: a late push check's queued packet handed out there) then the queue.
         self._maybe_fail()
@@ -111,8 +111,8 @@ def plugin(env=None):
 class Hermes(unittest.TestCase):
     def test_registers_the_hermes_eden_shape(self):
         _, ctx = plugin()
-        self.assertEqual(set(ctx.hooks), {"pre_llm_call", "pre_tool_call", "post_tool_call", "transform_tool_result",
-                                          "on_session_finalize", "on_session_reset"})
+        self.assertEqual(set(ctx.hooks), {"pre_llm_call", "post_llm_call", "pre_tool_call", "post_tool_call",
+                                          "transform_tool_result", "on_session_finalize", "on_session_reset"})
         # Hermes fires on_session_end after every turn: ending Eden's session there would drop its state each turn.
         self.assertNotIn("on_session_end", ctx.hooks)
         toolset, schema, _, description = ctx.tools[ASK_TOOL]
@@ -231,6 +231,17 @@ class Hermes(unittest.TestCase):
         out = ctx.hooks["pre_llm_call"](session_id="s", user_message="Move lunch with Priya")
         self.assertEqual(out, {"context": "<context>late check</context>\n\n" + PACKET["text"]})
         self.assertIsNone(ctx.hooks["transform_tool_result"](tool_name="t", result="r", session_id="s"))
+
+    def test_the_answer_is_reported_so_use_can_be_inferred(self):
+        # D2116: without the agent's own words Eden could only let each delivery expire "unused".
+        _, ctx = plugin()
+        ctx.hooks["pre_llm_call"](session_id="s", user_message="Move lunch with Priya")
+        c = FakeClient.made[0]
+        self.assertIsNone(ctx.hooks["post_llm_call"](session_id="s", assistant_response="Moved it to Friday.",
+                                                     user_message="Move lunch with Priya"))
+        self.assertEqual(c.events[-1], {"kind": "agent_message", "text": "Moved it to Friday."})
+        ctx.hooks["post_llm_call"](session_id="s", assistant_response="   ")
+        self.assertEqual(len(c.events), 2)
 
     def test_a_turn_is_one_round_trip(self):
         _, ctx = plugin()

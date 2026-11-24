@@ -2083,7 +2083,7 @@ export function rebuildVocab(s: Session, maxTerms: number): void {
 
 export const sessionKey = (e: Scope & { sessionId: string }) => `${scopeKey(e)}#${e.sessionId}`;
 
-function eventText(e: AgentEvent): string {
+export function eventText(e: AgentEvent): string {
   switch (e.kind) {
     case "user_message":
     case "agent_message":

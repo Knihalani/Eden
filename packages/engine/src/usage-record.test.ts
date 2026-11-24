@@ -16,7 +16,7 @@ const DOC = {
   title: "Globex renewal",
   text: "Dana Lee wants 12% off the Globex renewal, signed by 2026-11-20",
 };
-const setup = () => {
+const setup = (config: Partial<typeof CORE_CONFIG> = {}) => {
   const got: UsageRecord[] = [];
   const p = new ContextPartner({
     sources: async () => [new StaticSource("crm", "deals", [DOC])],
@@ -24,7 +24,7 @@ const setup = () => {
     cache: new ItemCache(),
     budget: new Budget(),
     model: null,
-    config: CORE_CONFIG,
+    config: { ...CORE_CONFIG, ...config },
     onUsage: (u) => got.push(u),
   });
   return { p, got };
@@ -58,6 +58,28 @@ describe("onUsage (D293)", () => {
     expect(got[0]!.injectionBytes).toBeGreaterThan(0);
     // No content in a record: only ids, a flag, a byte count and the way it was learned.
     expect(JSON.stringify(got)).not.toContain("Dana");
+  });
+
+  test("a checked call that acts on the injection credits it, with no observe of the call (D2116)", async () => {
+    const { p, got } = setup({ partyCheck: true });
+    const id = await delivered(p);
+    const call = ev({
+      kind: "tool_call",
+      tool: "send_email",
+      input: { body: "Dana Lee: 12% off, signed by 2026-11-20" },
+    });
+    expect((await p.checkAction(call)).verdict).toBe("proceed");
+    expect(got.map((g) => [g.injectionId, g.used, g.how])).toEqual([[id, true, "inferred"]]);
+    // Observing the same call afterwards does not credit it again.
+    await p.observe(call);
+    expect(got.length).toBe(1);
+  });
+
+  test("a checked call that does not act on it leaves it outstanding", async () => {
+    const { p, got } = setup({ partyCheck: true });
+    await delivered(p);
+    await p.checkAction(ev({ kind: "tool_call", tool: "read_file", input: { path: "notes.txt" } }));
+    expect(got).toEqual([]);
   });
 
   test("not used by session end; explicit feedback afterwards corrects it and is reported too", async () => {

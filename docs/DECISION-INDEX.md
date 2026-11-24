@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2116 | 2026-11-24 | A checked call credits a packet it acts on, and the Hermes plugin reports the agent's answer. | adopted |
 | D2115 | 2026-11-24 | The Python client keeps connections alive. | adopted |
 | D2114 | 2026-11-24 | `observeAll` / `observe_all`: an event and the session's queue in one round trip (`/v1/events?drain=1`). | adopted |
 | D2113 | 2026-11-24 | An observe's packet is always placed: the shipped Hermes and gptme plugins, the Claude Code family's held call (Gemini, Cursor, Qwen and… | adopted |

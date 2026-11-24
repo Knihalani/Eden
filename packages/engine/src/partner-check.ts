@@ -1,5 +1,6 @@
 import { distinctiveTokens, showsUse } from "./usage";
-import { termIds } from "./text";
+import { distinctTermIds, head, termIds } from "./text";
+import { sanitizeForStore } from "@eden/redact";
 import {} from "./settle";
 import { renderAnswer, renderPacket, shownText } from "./render";
 import { mentionsOf } from "./partner-core";
@@ -30,6 +31,7 @@ import {
   MAX_UNVERIFIABLE_USERS,
   UPDATED,
   copiesOf,
+  eventText,
   renderedCount,
   sessionKey,
   timesOf,
@@ -167,9 +169,22 @@ export abstract class PartnerCheck extends PartnerDelivery {
     });
     if (!this.config.partyCheck || event.kind !== "tool_call") return proceed("off");
     this.seen(event); // A live party check is a sighting too: the user's agent is working (D2005).
+    const live = this.sessions.get(sessionKey(event));
+    // D2116: a checked call is the agent acting, so it credits a packet the call uses as an observed `tool_call`
+    // does. Integrations that check acting calls without reporting them (`guardTools`, the Hermes plugin) otherwise
+    // let every delivery expire "unused", and routing learns its sources do not help. No turn moves: an
+    // integration that also observes the call credits each delivery once.
+    if (live && live.outstanding.size > 0) {
+      try {
+        const text = sanitizeForStore(head(eventText(event), this.config.maxEventChars));
+        if (text) this.checkUsage(live, event, distinctTermIds(text, live.vocab));
+      } catch {
+        // Learning is best effort; the check itself goes on.
+      }
+    }
     // A session Eden handed no identifier has nothing to hold, and none is opened for a call in a session Eden never
     // saw.
-    if (!this.sessions.get(sessionKey(event))?.packetParties?.size) return proceed("clear");
+    if (!live?.packetParties?.size) return proceed("clear");
     try {
       const s = this.session(event);
       // The user's own words only: an arriving message (`external:`) can be the attacker's mail naming the address.

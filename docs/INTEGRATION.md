@@ -698,6 +698,9 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
   create, update, add, respond, deploy: `send_email`, `sendEmail`, `create_event`, `mcp_gmail_send_message`, not
   `list_messages` or `read_file`). A tool that acts under another name is not checked: name your acting tools with
   `EDEN_CHECK_TOOLS=send_email,book_room` (exactly those), or `*` (every tool but Eden's own); empty checks none.
+- **`post_llm_call`**: the turn's answer is reported as the agent's message, so Eden can tell whether its packet was
+  used (D2116); without the agent's own words every delivery expired "unused" and routing learned the sources that
+  delivered do not help. A checked call (`pre_tool_call`) credits a packet it acts on too.
 - **`post_tool_call`, `transform_tool_result`**: each tool result is reported with `observe_all`, and what it returns
   (the observe's own packet and the queue) is appended to that call's result by `transform_tool_result`, which Hermes
   fires right after; anything a blocked or timed-out call left unplaced goes with the next turn's packet (D2113). One

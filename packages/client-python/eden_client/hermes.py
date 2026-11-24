@@ -32,7 +32,9 @@ What it registers (hook names and contracts as Hermes defines them at the lab's 
   A question-shaped message that got no packet gets ``ASK_HINT`` instead (D1985): under deferred tools the
   agent rarely discovers ``ask_context`` on its own (the v0.3.0 broad benchmark read 17% correct on
   non-injected turns against 85% injected), so a one-line nudge names it. ``EDEN_ASK_HINT=0`` turns it off.
-- ``pre_tool_call``: a checked tool's call goes to ``check``; a finding blocks the call and its ``held_result``
+- ``post_llm_call``: the turn's answer is reported as the agent's message (``assistant_response``), so Eden can
+  infer whether a packet was used (D2116); anything it hands out goes with the next turn's packet.
+- ``pre_tool_call``: a checked tool's call goes to ``check`` (which also credits a packet the call acts on); a finding blocks the call and its ``held_result``
   becomes the tool's result (``{"action": "block", "message": ...}``). Calling again with the same arguments proceeds.
 - ``post_tool_call`` / ``transform_tool_result``: each tool result is reported, and packets Eden queued since are
   appended to it, so context found mid-turn reaches the agent before its next model call.
@@ -309,6 +311,25 @@ class EdenHermes:
             _warn(f"pre_llm_call: {e}")
             return None
 
+    def post_llm_call(self, session_id: Any = None, assistant_response: Any = None, task_id: Any = None,
+                      **_: Any) -> None:
+        """The turn's answer, reported as the agent's message (D2116): Eden infers from the agent's words (and its
+        checked calls) whether it used a packet. Without it every delivery expired unused, and routing learned the
+        sources that delivered do not help. What the observe hands out rides the next turn."""
+        try:
+            if not self._in_scope():
+                return None
+            if not isinstance(assistant_response, str) or not assistant_response.strip():
+                return None
+            c = self.client(session_id, task_id)
+            if c is None:
+                return None
+            got = c.observe_all({"kind": "agent_message", "text": assistant_response}, wait_ms=0)["injections"]
+            self._place_later(session_id, task_id, got, drained=False)
+        except Exception as e:  # noqa: BLE001
+            _warn(f"post_llm_call: {e}")
+        return None
+
     def pre_tool_call(self, tool_name: Any = None, args: Any = None, session_id: Any = None, task_id: Any = None,
                       **_: Any) -> Optional[Dict[str, str]]:
         try:
@@ -436,6 +457,7 @@ class EdenHermes:
             if callable(getattr(ctx, "on_unload", None)):
                 ctx.on_unload(self.local.close)
         ctx.register_hook("pre_llm_call", self.pre_llm_call)
+        ctx.register_hook("post_llm_call", self.post_llm_call)
         ctx.register_hook("pre_tool_call", self.pre_tool_call)
         ctx.register_hook("post_tool_call", self.post_tool_call)
         ctx.register_hook("transform_tool_result", self.transform_tool_result)
