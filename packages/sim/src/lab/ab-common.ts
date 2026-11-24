@@ -136,7 +136,8 @@ export async function chat(
         ...(json ? { response_format: { type: "json_object" } } : {}),
         temperature: 0,
         max_tokens: 2_000,
-        usage: { include: true },
+        // `usage.include` is an OpenRouter extension — a strict local server rejects the field.
+        ...(local ? {} : { usage: { include: true } }),
         ...(options.allowLogging ? { provider: { data_collection: "allow", zdr: false } } : {}),
       }),
       signal: AbortSignal.timeout(90_000),
