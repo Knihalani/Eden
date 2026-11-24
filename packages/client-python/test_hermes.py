@@ -101,7 +101,8 @@ class FakeClient:
 
 def plugin(env=None):
     FakeClient.made = []
-    p = EdenHermes(env={"EDEN_USER_ID": "alice+work@x.com", "EDEN_URL": "http://eden:8790", **(env or {})},
+    p = EdenHermes(env={"EDEN_USER_ID": "alice+work@x.com", "EDEN_URL": "http://eden:8790", "EDEN_WARM": "0",
+                        **(env or {})},
                    client_factory=FakeClient)
     ctx = Ctx()
     p.register(ctx)
@@ -242,6 +243,19 @@ class Hermes(unittest.TestCase):
         self.assertEqual(c.events[-1], {"kind": "agent_message", "text": "Moved it to Friday."})
         ctx.hooks["post_llm_call"](session_id="s", assistant_response="   ")
         self.assertEqual(len(c.events), 2)
+
+    def test_registration_warms_up_the_user_with_no_session(self):
+        # The first turn should not pay the server's start, the user's thaw or the backfill's kick-off.
+        p, _ = plugin({"EDEN_WARM": "1"})
+        for _ in range(200):
+            if FakeClient.made and FakeClient.made[0].polls:
+                break
+            time.sleep(0.01)
+        c = FakeClient.made[0]
+        self.assertEqual((c.kw["session_id"], c.polls, c.events), ("eden-warm-up", 1, []))
+        # The warm-up's client is not a session's: the first turn makes its own.
+        p.pre_llm_call(session_id="s", user_message="hi")
+        self.assertEqual(FakeClient.made[1].kw["session_id"], "s")
 
     def test_a_turn_is_one_round_trip(self):
         _, ctx = plugin()

@@ -69,6 +69,8 @@ from .local import LocalEden
 ASK_TOOL = "ask_context"
 #: The Hermes toolset the ask tool is registered in; give the agent this one in place of the source toolsets.
 TOOLSET = "eden"
+#: The session id the registration's warm-up sights the user with (no session is opened for it).
+WARM_SESSION = "eden-warm-up"
 #: Hermes sessions with a live client; the least recent is dropped past this.
 MAX_SESSIONS = 256
 #: The default ``EDEN_CHECK_TOOLS``: a tool whose name carries one of these verbs as a word acts on someone's behalf.
@@ -201,6 +203,8 @@ class EdenHermes:
         tools = env.get("EDEN_CHECK_TOOLS")
         # ``EDEN_ASK_HINT``: the question-turn nudge; only "0" turns it off.
         self.ask_hint = (env.get("EDEN_ASK_HINT") or "").strip() != "0"
+        # ``EDEN_WARM``: start the local server and sight the user at registration; only "0" turns it off.
+        self.warm = (env.get("EDEN_WARM") or "").strip() != "0"
         # None: the acting-verb default; "*": every tool; otherwise exactly the names listed (empty: none).
         self.check_mode = "acting" if tools is None else "all" if tools.strip() == "*" else "list"
         self.check_tools = {t.strip() for t in (tools or "").split(",") if t.strip()}
@@ -277,6 +281,23 @@ class EdenHermes:
         with self._lock:
             got, drained = self._placing.pop(sid, ([], False)) if sid is not None else ([], False)
         return (got, drained) if with_flag else got
+
+    def _warm_up(self) -> None:
+        """While Hermes starts and the user types: the local server is started, and the user is sighted
+        (``/v1/pending`` on a session that does not exist: it thaws the user's saved state and kicks their sources'
+        backfill, D2005, and opens no session) — so the first turn pays none of it. Fails open, silently."""
+        try:
+            if not self._in_scope() or not self.user:
+                return
+            endpoint = self.local.endpoint() if self.local else (self.base_url, self.api_key, 0)
+            if endpoint is None:
+                return
+            base_url, token, _ = endpoint
+            options = {"bypass_proxies": True} if self.local else {}
+            self._factory(user_id=self.user, session_id=WARM_SESSION, api_key=token, tenant_id=self.tenant,
+                          base_url=base_url, on_error=None, **options).pending()
+        except Exception:  # noqa: BLE001
+            pass
 
     def checks(self, tool_name: Any) -> bool:
         if not _is_tool(tool_name) or _is_ask(tool_name):
@@ -456,6 +477,8 @@ class EdenHermes:
             atexit.register(self.local.close)
             if callable(getattr(ctx, "on_unload", None)):
                 ctx.on_unload(self.local.close)
+        if self.warm:
+            threading.Thread(target=self._warm_up, name="eden-warm-up", daemon=True).start()
         ctx.register_hook("pre_llm_call", self.pre_llm_call)
         ctx.register_hook("post_llm_call", self.post_llm_call)
         ctx.register_hook("pre_tool_call", self.pre_tool_call)
