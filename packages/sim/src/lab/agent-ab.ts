@@ -32,7 +32,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { ContextPartner, ItemCache } from "@eden/engine";
 import { SourceMap } from "@eden/graph";
-import { Budget, OpenRouterModel } from "@eden/llm";
+import { Budget, LocalModel, OpenRouterModel } from "@eden/llm";
 import type { AgentEvent, Injection } from "@eden/protocol";
 import { QueryPlanner } from "@eden/sources";
 import { REALISTIC, simSources, type SimSource } from "../sources";
@@ -63,8 +63,12 @@ const opt = (name: string, fallback: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : fallback;
 };
 const DRY = args.includes("--dry");
-const KEY = process.env.OPENROUTER_API_KEY;
-if (!KEY && !DRY) throw new Error("needs OPENROUTER_API_KEY");
+// A local endpoint (A8): EDEN_MODEL_BASE_URL names it; EDEN_MODEL_API_KEY only when it wants a bearer.
+// With a base URL the OpenRouter key must not fall through — it would be sent to whatever server
+// is named. (SEC: key never leaves its own provider.)
+const BASE_URL = process.env.EDEN_MODEL_BASE_URL;
+const KEY = BASE_URL ? process.env.EDEN_MODEL_API_KEY : process.env.OPENROUTER_API_KEY;
+if (!BASE_URL && !KEY && !DRY) throw new Error("needs EDEN_MODEL_BASE_URL or OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41,42,43").split(",").map(Number);
 const MAX_TASKS = Number(opt("tasks", "30"));
 const OFFWORLD = Number(opt("offworld", "5"));
@@ -93,7 +97,7 @@ const meter: Meter = {
   },
 };
 const chat = (model: string, messages: Msg[], tools?: unknown[], json = false) =>
-  chatVia(KEY!, meter, model, messages, tools, json);
+  chatVia(KEY ?? "", meter, model, messages, tools, json, { baseUrl: BASE_URL });
 
 const searchTools = (sources: SimSource[]) =>
   sources.map((s) => ({
@@ -164,8 +168,13 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
         sourceMap: new SourceMap(":memory:", { seed }),
         cache: new ItemCache(),
         budget: new Budget(),
-        // The product's routing: zero-retention endpoints only (OpenRouterModel's default).
-        model: judge ? new OpenRouterModel({ apiKey: KEY!, model: MODEL }) : null,
+        // The product's routing: zero-retention endpoints only (OpenRouterModel's default); a local
+        // endpoint gets the lab's keyless client instead (A8).
+        model: judge
+          ? BASE_URL
+            ? new LocalModel({ baseUrl: BASE_URL, model: MODEL, apiKey: KEY })
+            : new OpenRouterModel({ apiKey: KEY!, model: MODEL })
+          : null,
         planner: new QueryPlanner({ seed }),
         now: () => clock,
         config: variant ?? {},
@@ -281,7 +290,8 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
 }
 
 /** The grader's verdict (ab-common.ts): which needed facts the answer states. */
-const grade = async (task: Task, answer: string) => (await gradeVia(KEY!, meter, GRADER, task, answer)).facts;
+const grade = async (task: Task, answer: string) =>
+  (await gradeVia(KEY ?? "", meter, GRADER, task, answer, { baseUrl: BASE_URL })).facts;
 
 // Hidden-context suites run each world twice: with the hidden item planted, and with its decoy (`--variants`).
 const VARIANTS = opt("variants", "hidden").split(",") as ("hidden" | "control")[];

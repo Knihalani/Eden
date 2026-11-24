@@ -51,10 +51,13 @@ export interface ChatOptions {
   fetch?: typeof fetch;
   /** LAB ONLY: say explicitly that endpoints may log the prompt (free models need it). */
   allowLogging?: boolean;
+  /**
+   * A chat-completions base URL other than OpenRouter's — a local endpoint (Ollama
+   * `http://localhost:11434/v1`, LM Studio) for runs on local models (A8). With it the key may be
+   * empty: no Authorization header is sent then.
+   */
+  baseUrl?: string;
 }
-
-/** OpenRouter's refusal of `response_format` (a model or endpoint without JSON mode): the call is sent without it. */
-const NO_JSON_MODE = /response_format|json[_ ]?(mode|object|schema)|structured output/i;
 
 /**
  * A dead key fails every call the same way, and a topped-up account only recovers between runs: 401/402/403
@@ -110,10 +113,19 @@ export async function chat(
   meter.before();
   const paced = options.fetch !== undefined;
   const send = options.fetch ?? fetch;
+  // `<base>/chat/completions` on the path, keeping any query a gateway's base URL carries — the
+  // same join LocalModel does; string-appending routes `…/v1?key=k/chat/completions` wrongly.
+  const target = new URL(options.baseUrl ?? "https://openrouter.ai/api/v1");
+  target.pathname = target.pathname.replace(/\/+$/, "") + "/chat/completions";
+  const url = target.toString();
+  const local = options.baseUrl !== undefined;
   for (let attempt = 0; ; attempt++) {
-    const res = await send("https://openrouter.ai/api/v1/chat/completions", {
+    const res = await send(url, {
       method: "POST",
-      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      headers: {
+        ...(key ? { authorization: `Bearer ${key}` } : {}),
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         model,
         messages,
@@ -121,7 +133,8 @@ export async function chat(
         ...(json ? { response_format: { type: "json_object" } } : {}),
         temperature: 0,
         max_tokens: 2_000,
-        usage: { include: true },
+        // `usage.include` is an OpenRouter extension — a strict local server rejects the field.
+        ...(local ? {} : { usage: { include: true } }),
         ...(options.allowLogging ? { provider: { data_collection: "allow", zdr: false } } : {}),
       }),
       signal: AbortSignal.timeout(90_000),
@@ -146,8 +159,10 @@ export async function chat(
       if (attempt >= 3) throw new Error(`no choice: ${body.error?.message ?? "empty"}`);
     } else {
       const text = await res.text();
-      // A model with no JSON mode: ask again without it; the grader's reply is read leniently (`parseGrade`).
-      if (json && res.status === 400 && NO_JSON_MODE.test(text)) {
+      // A model with no JSON mode: ask again without it; the grader's reply is read leniently
+      // (`parseGrade`). Any 400 with JSON mode on earns the retry — strict local servers refuse
+      // `response_format` with a generic body that no regex names (LocalModel does the same).
+      if (json && res.status === 400) {
         json = false;
         continue;
       }
