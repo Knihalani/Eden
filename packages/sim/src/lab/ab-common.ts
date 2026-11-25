@@ -516,6 +516,8 @@ export interface RunResult {
   lateText?: string;
   error?: string;
   facts?: Record<string, boolean>;
+  /** The model that graded this answer — a `--merge` of runs under different graders keeps each verdict's provenance. */
+  grader?: string;
   leaked?: boolean;
   /** `--act` (act.ts): each action tool call, its check's verdict and whether it executed, in order. */
   actions?: ActionRecord[];

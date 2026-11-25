@@ -375,6 +375,8 @@ await Promise.all(
     for (let r = queue.shift(); r; r = queue.shift()) {
       try {
         r.facts = await grade(byId.get(r.task)!, r.answer);
+        // A merged file can hold verdicts from different graders; each carries its own.
+        r.grader = GRADER;
       } catch (e) {
         ungraded++;
         if (e instanceof OverBudget) queue.length = 0;
