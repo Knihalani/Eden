@@ -68,7 +68,48 @@ const DRY = args.includes("--dry");
 // is named. (SEC: key never leaves its own provider.)
 const BASE_URL = process.env.EDEN_MODEL_BASE_URL;
 const KEY = BASE_URL ? process.env.EDEN_MODEL_API_KEY : process.env.OPENROUTER_API_KEY;
+// The grader is measurement infrastructure, not the system under test — it may run on a stronger
+// endpoint than the agent (a 1.5B grading itself marks unverifiable facts as stated; the heldout
+// qwen run graded ~everything true, lexical agreement 0.36). EDEN_GRADER_BASE_URL overrides the
+// grader's endpoint; unset, it follows the agent's. Its key follows the same never-leak rule: an
+// OpenRouter key is used only when the grader's endpoint is OpenRouter (or unset — the default).
+const GRADER_BASE_URL = process.env.EDEN_GRADER_BASE_URL ?? BASE_URL;
+// The OpenRouter key never rides plaintext: only an https openrouter.ai (or the unset default, which
+// is exactly that) counts as OpenRouter — `http://openrouter.ai` is a misconfiguration, not a destination.
+const isOpenRouter = (url: string | undefined) => {
+  if (!url) return true;
+  try {
+    const u = new URL(url);
+    return u.hostname === "openrouter.ai" && u.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+const GRADER_KEY =
+  process.env.EDEN_GRADER_API_KEY ??
+  (GRADER_BASE_URL === BASE_URL ? KEY : undefined) ??
+  (isOpenRouter(GRADER_BASE_URL) ? process.env.OPENROUTER_API_KEY : undefined);
 if (!BASE_URL && !KEY && !DRY) throw new Error("needs EDEN_MODEL_BASE_URL or OPENROUTER_API_KEY");
+// A malformed endpoint URL fails in chat hours into the run — after generation, when every grading
+// call dies at once. Refuse it here.
+for (const [name, url] of [
+  ["EDEN_MODEL_BASE_URL", BASE_URL],
+  ["EDEN_GRADER_BASE_URL", GRADER_BASE_URL],
+] as const) {
+  if (url) {
+    try {
+      const u = new URL(url);
+      if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("scheme");
+    } catch {
+      // A rejected endpoint can carry a gateway key in its userinfo or query — never echo those.
+      // What does not even carry a scheme is echoed not at all: it may be the key itself, pasted.
+      const safe = /^[a-z]+:\/\//i.test(url)
+        ? url.replace(/^([a-z]+:\/\/)[^@/]*@/i, "$1…@").replace(/[?#].*$/, "")
+        : "(redacted)";
+      throw new Error(`${name} is not an http(s) URL: ${safe}`);
+    }
+  }
+}
 const SEEDS = opt("seeds", "41,42,43").split(",").map(Number);
 const MAX_TASKS = Number(opt("tasks", "30"));
 const OFFWORLD = Number(opt("offworld", "5"));
@@ -291,7 +332,7 @@ async function runWorld(world: World, seed: number, tasks: Task[], condition: st
 
 /** The grader's verdict (ab-common.ts): which needed facts the answer states. */
 const grade = async (task: Task, answer: string) =>
-  (await gradeVia(KEY ?? "", meter, GRADER, task, answer, { baseUrl: BASE_URL })).facts;
+  (await gradeVia(GRADER_KEY ?? "", meter, GRADER, task, answer, { baseUrl: GRADER_BASE_URL })).facts;
 
 // Hidden-context suites run each world twice: with the hidden item planted, and with its decoy (`--variants`).
 const VARIANTS = opt("variants", "hidden").split(",") as ("hidden" | "control")[];
@@ -324,9 +365,30 @@ const earlier = MERGE
   : [];
 const results: RunResult[] = [...earlier];
 const byId = new Map(worlds.flatMap((w) => w.tasks).map((t) => [t.id, t]));
+// World streams run under a bounded pool: a local endpoint serializes requests (one CPU), so 48
+// concurrent streams only queue behind the chat timeout without going any faster. A real local
+// agent is a handful of requests at once anyway — `--concurrency` sets the pool's width.
+const CONCURRENCY = Number(opt("concurrency", "8"));
+// A flag swallowed as the value (`--concurrency --out x`) is NaN — say so rather than running zero
+// workers and writing an empty file.
+if (!Number.isFinite(CONCURRENCY) || CONCURRENCY < 1) throw new Error("--concurrency needs a positive number");
+let skipped = 0;
 try {
-  const streams = worlds.flatMap((w) => CONDITIONS.map((c) => runWorld(w.world, w.seed, w.tasks, c)));
-  for (const r of await Promise.all(streams)) results.push(...r);
+  const pending = worlds.flatMap((w) => CONDITIONS.map((c) => () => runWorld(w.world, w.seed, w.tasks, c)));
+  await Promise.all(
+    Array.from({ length: CONCURRENCY }, async () => {
+      for (let run = pending.shift(); run; run = pending.shift()) {
+        // A stream that starts past the budget would fire its judge before the agent's first
+        // budget check (the judge rides Eden's internal budget, not the agent's meter).
+        if (spent >= BUDGET) {
+          skipped += 1 + pending.length;
+          pending.length = 0;
+          break;
+        }
+        results.push(...(await run()));
+      }
+    }),
+  );
 } catch (e) {
   console.error(`stopped: ${e instanceof Error ? e.message : e}`);
 }
@@ -338,6 +400,8 @@ await Promise.all(
     for (let r = queue.shift(); r; r = queue.shift()) {
       try {
         r.facts = await grade(byId.get(r.task)!, r.answer);
+        // A merged file can hold verdicts from different graders; each carries its own.
+        r.grader = GRADER;
       } catch (e) {
         ungraded++;
         if (e instanceof OverBudget) queue.length = 0;
@@ -350,4 +414,10 @@ writeFileSync(
   OUT,
   JSON.stringify({ model: MODEL, grader: GRADER, seeds: SEEDS, suites: SUITE_LIST, spent, tasks, results }, null, 2),
 );
-console.error(`spent $${spent.toFixed(4)}; ${results.length} runs, ${ungraded} left ungraded → ${OUT}`);
+console.error(
+  `spent $${spent.toFixed(4)}; ${results.length} runs, ${ungraded} left ungraded` +
+    // A stream the budget skipped leaves no rows: its condition arm would vanish from the report
+    // rather than read as missing — say how much of the matrix never ran.
+    (skipped ? `, ${skipped} streams skipped at the budget` : "") +
+    ` → ${OUT}`,
+);

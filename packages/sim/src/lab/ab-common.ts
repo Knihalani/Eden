@@ -137,7 +137,9 @@ export async function chat(
         ...(local ? {} : { usage: { include: true } }),
         ...(options.allowLogging ? { provider: { data_collection: "allow", zdr: false } } : {}),
       }),
-      signal: AbortSignal.timeout(90_000),
+      // A local endpoint serializes requests (one CPU), so a queued call can wait minutes — the
+      // timeout is the caller's patience, not the network's health. EDEN_CHAT_TIMEOUT_MS raises it.
+      signal: AbortSignal.timeout(Number(process.env.EDEN_CHAT_TIMEOUT_MS ?? 90_000)),
     }).catch((e: unknown) => {
       // The pacer's cap is final: it is not a network failure to retry.
       if (e instanceof Error && e.name === "RequestCapReached") throw e;
@@ -514,6 +516,8 @@ export interface RunResult {
   lateText?: string;
   error?: string;
   facts?: Record<string, boolean>;
+  /** The model that graded this answer — a `--merge` of runs under different graders keeps each verdict's provenance. */
+  grader?: string;
   leaked?: boolean;
   /** `--act` (act.ts): each action tool call, its check's verdict and whether it executed, in order. */
   actions?: ActionRecord[];
