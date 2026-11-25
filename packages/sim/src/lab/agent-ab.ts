@@ -101,7 +101,12 @@ for (const [name, url] of [
       const u = new URL(url);
       if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("scheme");
     } catch {
-      throw new Error(`${name} is not an http(s) URL: ${url}`);
+      // A rejected endpoint can carry a gateway key in its userinfo or query — never echo those.
+      // What does not even carry a scheme is echoed not at all: it may be the key itself, pasted.
+      const safe = /^[a-z]+:\/\//i.test(url)
+        ? url.replace(/^([a-z]+:\/\/)[^@/]*@/i, "$1…@").replace(/[?#].*$/, "")
+        : "(redacted)";
+      throw new Error(`${name} is not an http(s) URL: ${safe}`);
     }
   }
 }
