@@ -208,8 +208,9 @@ class EdenHermes:
         tools = env.get("EDEN_CHECK_TOOLS")
         # ``EDEN_ASK_HINT``: the question-turn nudge; only "0" turns it off.
         self.ask_hint = (env.get("EDEN_ASK_HINT") or "").strip() != "0"
-        # ``EDEN_GUIDE``: "1" adds ``EDEN_CONTEXT_GUIDE`` as a system prompt section (D2126); off by default.
-        self.guide = (env.get("EDEN_GUIDE") or "").strip() == "1"
+        # ``EDEN_GUIDE``: ``EDEN_CONTEXT_GUIDE`` as a system prompt section (D2126, on by default since D2130); "0" turns
+        # it off.
+        self.guide = (env.get("EDEN_GUIDE") or "").strip() != "0"
         # ``EDEN_WARM``: seconds after registration to start the local server and sight the user (default
         # ``WARM_DELAY_S``); "0" turns it off. Not at once: a Hermes command that never chats exits first.
         try:
@@ -509,9 +510,10 @@ class EdenHermes:
         ctx.register_hook("on_session_reset", self.end_session)
         ctx.register_tool(name=ASK_TOOL, toolset=TOOLSET, schema=ASK_SCHEMA, handler=self.ask_context,
                           description=ASK_CONTEXT_DESCRIPTION)
-        # ``EDEN_GUIDE=1`` (D2104's trial, D2126): one line of guidance on Eden's context blocks in every new session's
-        # system prompt, frozen per session by Hermes (prompt caching keeps working). A Hermes without system prompt
-        # sections (before register_system_prompt_section) gets the plugin without it.
+        # The context guide (D2104, D2126, on by default since D2130; ``EDEN_GUIDE=0`` turns it off): one line on Eden's
+        # context blocks in every new session's system prompt, frozen per session by Hermes (prompt caching keeps
+        # working). A Hermes without system prompt sections (before register_system_prompt_section) gets the plugin
+        # without it.
         if self.guide and callable(getattr(ctx, "register_system_prompt_section", None)):
             try:
                 ctx.register_system_prompt_section(GUIDE_SECTION, EDEN_CONTEXT_GUIDE)

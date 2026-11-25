@@ -692,10 +692,10 @@ The plugin (`eden_client.hermes`) registers, through Hermes' own plugin surfaces
   D385), so the plugin never re-sends earlier packets. A question-shaped message that got no packet gets a one-line
   nudge naming `ask_context` instead (D1985): under deferred tools the agent rarely discovers it on its own.
   `EDEN_ASK_HINT=0` turns the nudge off.
-- **System prompt guide (opt-in)**: `EDEN_GUIDE=1` adds `EDEN_CONTEXT_GUIDE` (one line: context blocks are excerpts
-  already retrieved; say what each changes before acting; ask when unsure) as a Hermes system prompt section, frozen
-  per session (D2126). On a local 4B agent it cut tool calls and about 12 s a task with no loss (D2123); off by default
-  until its trial (D2104) decides.
+- **System prompt guide**: `EDEN_CONTEXT_GUIDE` (one line: context blocks are excerpts already retrieved; say what
+  each changes before acting; ask when unsure) as a Hermes system prompt section, frozen per session (D2126; on by
+  default since D2130, `EDEN_GUIDE=0` turns it off). With the default's ask nudge it cut a local 4B agent's tool calls
+  from ~2.3 to ~0.5 a task and about 30 s a task, raising more hidden facts (D2127, D2129).
 - **`pre_tool_call`**: an acting tool's call goes to `check` first; a finding blocks the call and becomes its result
   (calling again proceeds). By default the acting tools are those whose name carries an acting verb as a word,
   camelCase split (send, reply, forward, share, invite, book, schedule, pay, transfer, grant, post, purchase, order,

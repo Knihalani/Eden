@@ -51,7 +51,7 @@ describe("hermes-ab conditions", () => {
   });
 
   test("+pushUnsureAskNudge enables only the unchecked ask-nudge trial", () => {
-    expect(DEFAULT_CONFIG.pushUnsureAskNudge).toBe(false);
+    expect(DEFAULT_CONFIG.pushUnsureAskNudge).toBe(true);
     expect(parseHermesCondition("hermes+eden+pushUnsureAskNudge", { config: ALL, defaults }).config).toEqual({
       ...ALL,
       pushUnsureAskNudge: true,

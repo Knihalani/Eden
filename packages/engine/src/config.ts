@@ -835,7 +835,10 @@ export interface EngineConfig {
   pushCheckedFacts: boolean;
   /** Trial: remind the agent that packet excerpts are already retrieved, without claiming search coverage. */
   packetCoversLine: boolean;
-  /** Trial: unchecked candidates invite a short request-specific ask before acting. */
+  /**
+   * Unchecked candidates invite a short request-specific ask before acting (D2103; in the default since D2130: on a
+   * weak agent it cut tool calls by two thirds and ~30 s a task with no loss, D2124, D2127, D2129).
+   */
   pushUnsureAskNudge: boolean;
   /** The characters of each item's most relevant parts the check reads (200, D501; at most `READER_ITEM_CHARS`). */
   pushCheckItemChars: number;
@@ -1139,7 +1142,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   pushCheckedWhy: false,
   pushCheckedFacts: false,
   packetCoversLine: false,
-  pushUnsureAskNudge: false,
+  pushUnsureAskNudge: true,
   pushCheckItemChars: 200,
   pushCheckItems: 15,
   packetHeedsCheck: true,

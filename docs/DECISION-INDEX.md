@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2130 | 2026-11-25 | Adopted: `pushUnsureAskNudge` joins the default, and the Hermes plugin carries the context guide by default. | adopted |
 | D2129 | 2026-11-25 | Finding: D2127 replicates on seed 42 in one paired run: `edenGuide` + `pushUnsureAskNudge` raise more hidden facts in a third less time. | finding |
 | D2128 | 2026-11-25 | Rejected (measured, lab only): a worked example before the card batch for a small local model. | rejected |
 | D2127 | 2026-11-25 | Finding: Eden lifts a weak local agent's hidden facts by +0.40 on train, and `edenGuide` + `pushUnsureAskNudge` together make that lift… | finding |
@@ -42,8 +43,8 @@ Statuses are read from the text by heuristics, so read the row before relying on
 | D2107 | 2026-11-22 | Trial `pushCheckedFacts` (default off): checked packets state faithful source facts, not just excerpts. | adopted |
 | D2106 | 2026-11-22 | Adopt `pushConstraintStemSeats` and `pushPartyOrgLink` as default on, superseding the default-off trials D2100/D2101. | adopted |
 | D2105 | 2026-11-22 | The push check requests reasoning off; exclude only hid reasoning that shared the 620-token cap, and 78–82% of recorded replies truncated… | adopted |
-| D2104 | 2026-11-22 | Trial `edenGuide` (harness-only, opt-in): append one integrator guide line to Hermes/Pi agent system prompts. | trial |
-| D2103 | 2026-11-22 | Trial `pushUnsureAskNudge` (default off): unchecked candidate packets invite a short request-specific `ask_context` question before acting. | trial |
+| D2104 | 2026-11-22 | Trial `edenGuide` (harness-only, opt-in): append one integrator guide line to Hermes/Pi agent system prompts. | adopted |
+| D2103 | 2026-11-22 | Trial `pushUnsureAskNudge` (default off): unchecked candidate packets invite a short request-specific `ask_context` question before acting. | adopted (by D2130) |
 | D2102 | 2026-11-22 | Trial `packetCoversLine` (default off): packets remind the agent that their excerpts are already retrieved, and to search sources only for… | trial |
 | D2101 | 2026-11-22 | Trial `pushPartyOrgLink` (default off): bounded, provenance-backed person→organisation lookup seats at most two org-scoped constraints for… | trial |
 | D2100 | 2026-11-22 | Trial `pushConstraintStemSeats` (default off): at most two stem-only constraint candidates seat for the push check, never unchecked… | trial |

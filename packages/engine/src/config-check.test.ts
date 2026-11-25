@@ -27,15 +27,18 @@ describe("checkEngineConfig (audit 2026-11-03b, devloop-lab-accepts-typos-silent
     ).toThrow(/pushCheck/);
   });
 
-  test("unchecked ask nudge needs candidates, not a checker", () => {
+  test("unchecked ask nudge needs candidates, not a checker; in the default since D2130", () => {
+    expect(DEFAULT_CONFIG.pushUnsureAskNudge).toBe(true);
     const on = { pushUnsureAskNudge: true, pushCheck: false };
     expect(checkEngineConfig(on, { deps: ALL_DEPS })).toEqual(on);
+    // At its default the nudge is inert under a parent turned off, as every default-on child is (minus-<part>).
     for (const parent of ["readerPush", "askReader", "pushCandidates"]) {
       const off = parent === "pushCandidates" ? 0 : false;
-      expect(() => checkEngineConfig({ ...on, [parent]: off }, { deps: ALL_DEPS })).toThrow(new RegExp(parent));
+      expect(checkEngineConfig({ ...on, [parent]: off }, { deps: ALL_DEPS })).toEqual({ ...on, [parent]: off });
     }
-    const off = { readerPush: false, pushUnsureAskNudge: false };
-    expect(checkEngineConfig(off)).toEqual(off);
+    // Turning it off is valid; off under a parent that is off too says nothing, and is refused like any such child.
+    expect(checkEngineConfig({ pushUnsureAskNudge: false })).toEqual({ pushUnsureAskNudge: false });
+    expect(() => checkEngineConfig({ readerPush: false, pushUnsureAskNudge: false })).toThrow(/readerPush/);
   });
 
   test("check-only seats default on, retain their checker dependency and can be disabled", () => {

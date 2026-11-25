@@ -123,15 +123,16 @@ class Hermes(unittest.TestCase):
         self.assertEqual(schema["description"], ASK_CONTEXT_DESCRIPTION)
         self.assertEqual(description, ASK_CONTEXT_DESCRIPTION)
 
-    def test_guide_section_is_opt_in(self):
-        # D2126: EDEN_GUIDE=1 puts EDEN_CONTEXT_GUIDE in the session's system prompt; unset, no section at all.
+    def test_guide_section_is_on_by_default(self):
+        # D2126, D2130: EDEN_CONTEXT_GUIDE goes in the session's system prompt by default; EDEN_GUIDE=0, no section.
         sections = {}
 
         class SectionCtx(Ctx):
             def register_system_prompt_section(self, id, content, **_):
                 sections[id] = content
 
-        for env, want in (({}, {}), ({"EDEN_GUIDE": "1"}, {GUIDE_SECTION: EDEN_CONTEXT_GUIDE})):
+        for env, want in (({"EDEN_GUIDE": "0"}, {}), ({}, {GUIDE_SECTION: EDEN_CONTEXT_GUIDE}),
+                          ({"EDEN_GUIDE": "1"}, {GUIDE_SECTION: EDEN_CONTEXT_GUIDE})):
             sections.clear()
             EdenHermes(env={"EDEN_USER_ID": "u", "EDEN_URL": "http://eden:8790", "EDEN_WARM": "0", **env},
                        client_factory=FakeClient).register(SectionCtx())

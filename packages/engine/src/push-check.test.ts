@@ -284,8 +284,8 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
     }
   });
 
-  test("unsure ask nudge is off by default and only invites asks for absent, failed or late checks", async () => {
-    expect(DEFAULT_CONFIG.pushUnsureAskNudge).toBe(false);
+  test("unsure ask nudge is on by default (D2130) and only invites asks for absent, failed or late checks", async () => {
+    expect(DEFAULT_CONFIG.pushUnsureAskNudge).toBe(true);
     for (const kind of ["absent", "failed", "late", "checked"] as const) {
       const packet = async (flag?: boolean) => {
         const finished = Promise.withResolvers<void>();
@@ -328,9 +328,9 @@ describe("pushCheck (I3, D500): one model call picks the push's candidates", () 
       const before = await packet();
       const off = await packet(false);
       const on = await packet(true);
-      expect(off.text).toBe(before.text);
+      expect(on.text).toBe(before.text);
       expect(off.text).not.toContain("Eden: unsure these apply");
-      expect(on.citations).toEqual(before.citations);
+      expect(on.citations).toEqual(off.citations);
       if (kind === "checked") {
         expect(on.text).toBe(before.text);
         expect(on.text).toContain(CHECKED_LEAD);
