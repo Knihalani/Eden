@@ -357,6 +357,9 @@ try {
   await Promise.all(
     Array.from({ length: CONCURRENCY }, async () => {
       for (let run = pending.shift(); run; run = pending.shift()) {
+        // A stream that starts past the budget would fire its judge before the agent's first
+        // budget check (the judge rides Eden's internal budget, not the agent's meter).
+        if (spent >= BUDGET) break;
         results.push(...(await run()));
       }
     }),
