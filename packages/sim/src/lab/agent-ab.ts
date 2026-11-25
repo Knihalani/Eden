@@ -74,10 +74,21 @@ const KEY = BASE_URL ? process.env.EDEN_MODEL_API_KEY : process.env.OPENROUTER_A
 // grader's endpoint; unset, it follows the agent's. Its key follows the same never-leak rule: an
 // OpenRouter key is used only when the grader's endpoint is OpenRouter (or unset — the default).
 const GRADER_BASE_URL = process.env.EDEN_GRADER_BASE_URL ?? BASE_URL;
+// The OpenRouter key never rides plaintext: only an https openrouter.ai (or the unset default, which
+// is exactly that) counts as OpenRouter — `http://openrouter.ai` is a misconfiguration, not a destination.
+const isOpenRouter = (url: string | undefined) => {
+  if (!url) return true;
+  try {
+    const u = new URL(url);
+    return u.hostname === "openrouter.ai" && u.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
 const GRADER_KEY =
   process.env.EDEN_GRADER_API_KEY ??
   (GRADER_BASE_URL === BASE_URL ? KEY : undefined) ??
-  (!GRADER_BASE_URL || new URL(GRADER_BASE_URL).host === "openrouter.ai" ? process.env.OPENROUTER_API_KEY : undefined);
+  (isOpenRouter(GRADER_BASE_URL) ? process.env.OPENROUTER_API_KEY : undefined);
 if (!BASE_URL && !KEY && !DRY) throw new Error("needs EDEN_MODEL_BASE_URL or OPENROUTER_API_KEY");
 const SEEDS = opt("seeds", "41,42,43").split(",").map(Number);
 const MAX_TASKS = Number(opt("tasks", "30"));
