@@ -37,6 +37,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 __all__ = [
     "ASK_CONTEXT_DESCRIPTION",
+    "EDEN_CONTEXT_GUIDE",
     "DEFAULT_WAIT_MS",
     "MAX_PUSHED_ITEMS",
     "EdenClient",
@@ -60,7 +61,14 @@ MAX_PUSHED_ITEMS = 100
 ASK_CONTEXT_DESCRIPTION = (
     "Ask the user's context partner a question. It searches the user's connected sources (mail, calendar, "
     "documents, CRM and more) and answers with citations. Use it when you need a fact about the user, their "
-    "people, projects or history that is not in the conversation."
+    "people, projects or history that is not in the conversation. Pass `item` with an item id from an earlier "
+    "answer's Sources list to read that item's parts in full."
+)
+#: Opt-in guidance for the agent's system prompt (``EDEN_CONTEXT_GUIDE`` in @eden/protocol, D2104); Eden never
+#: injects it itself. An integration that owns the system prompt (the Hermes plugin's ``EDEN_GUIDE``) can add it.
+EDEN_CONTEXT_GUIDE = (
+    "Eden context blocks are excerpts already retrieved for this request. Say what each changes before acting; "
+    "call ask_context when unsure."
 )
 
 _ID = re.compile(r"^[A-Za-z0-9._:@-]{1,128}$")
