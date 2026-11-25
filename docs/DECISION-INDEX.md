@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2124 | 2026-11-25 | Finding (trial D2103 evidence): `pushUnsureAskNudge` on a weak local agent halves its tool calls and leaves raised facts flat. | finding |
 | D2123 | 2026-11-25 | Finding (trial D2104 evidence): `edenGuide` on a weak local agent leans positive on every axis, decisive on none but time. | finding |
 | D2122 | 2026-11-25 | Finding: a fully local Eden's cards (Qwen3-4B on CPU) do not move delivery on heldout19. | finding |
 | D2121 | 2026-11-24 | Rejected (measured): an "entry per item" card prompt for small local models. | rejected |
