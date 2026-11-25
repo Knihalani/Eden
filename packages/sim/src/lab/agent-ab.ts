@@ -348,12 +348,17 @@ const byId = new Map(worlds.flatMap((w) => w.tasks).map((t) => [t.id, t]));
 // World streams run under a bounded pool: a local endpoint serializes requests (one CPU), so 48
 // concurrent streams only queue behind the chat timeout without going any faster. A real local
 // agent is a handful of requests at once anyway — `--concurrency` sets the pool's width.
-const CONCURRENCY = Math.max(1, Number(opt("concurrency", "8")));
+const CONCURRENCY = Number(opt("concurrency", "8"));
+// A flag swallowed as the value (`--concurrency --out x`) is NaN — say so rather than running zero
+// workers and writing an empty file.
+if (!Number.isFinite(CONCURRENCY) || CONCURRENCY < 1) throw new Error("--concurrency needs a positive number");
 try {
   const pending = worlds.flatMap((w) => CONDITIONS.map((c) => () => runWorld(w.world, w.seed, w.tasks, c)));
   await Promise.all(
     Array.from({ length: CONCURRENCY }, async () => {
-      for (let run = pending.shift(); run; run = pending.shift()) results.push(...(await run()));
+      for (let run = pending.shift(); run; run = pending.shift()) {
+        results.push(...(await run()));
+      }
     }),
   );
 } catch (e) {
