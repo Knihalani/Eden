@@ -90,6 +90,21 @@ const GRADER_KEY =
   (GRADER_BASE_URL === BASE_URL ? KEY : undefined) ??
   (isOpenRouter(GRADER_BASE_URL) ? process.env.OPENROUTER_API_KEY : undefined);
 if (!BASE_URL && !KEY && !DRY) throw new Error("needs EDEN_MODEL_BASE_URL or OPENROUTER_API_KEY");
+// A malformed endpoint URL fails in chat hours into the run — after generation, when every grading
+// call dies at once. Refuse it here.
+for (const [name, url] of [
+  ["EDEN_MODEL_BASE_URL", BASE_URL],
+  ["EDEN_GRADER_BASE_URL", GRADER_BASE_URL],
+] as const) {
+  if (url) {
+    try {
+      const u = new URL(url);
+      if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("scheme");
+    } catch {
+      throw new Error(`${name} is not an http(s) URL: ${url}`);
+    }
+  }
+}
 const SEEDS = opt("seeds", "41,42,43").split(",").map(Number);
 const MAX_TASKS = Number(opt("tasks", "30"));
 const OFFWORLD = Number(opt("offworld", "5"));
@@ -389,4 +404,6 @@ writeFileSync(
   OUT,
   JSON.stringify({ model: MODEL, grader: GRADER, seeds: SEEDS, suites: SUITE_LIST, spent, tasks, results }, null, 2),
 );
-console.error(`spent $${spent.toFixed(4)}; ${results.length} runs, ${ungraded} left ungraded → ${OUT}`);
+console.error(
+  `spent $${spent.toFixed(4)}; ${results.length} runs, ${ungraded} left ungraded → ${OUT}`,
+);
