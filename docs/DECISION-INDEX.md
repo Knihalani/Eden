@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2131 | 2026-11-25 | Finding: D2130's default confirmed on held-out data — the first held-out agent lift clear of zero. | finding |
 | D2130 | 2026-11-25 | Adopted: `pushUnsureAskNudge` joins the default, and the Hermes plugin carries the context guide by default. | adopted |
 | D2129 | 2026-11-25 | Finding: D2127 replicates on seed 42 in one paired run: `edenGuide` + `pushUnsureAskNudge` raise more hidden facts in a third less time. | finding |
 | D2128 | 2026-11-25 | Rejected (measured, lab only): a worked example before the card batch for a small local model. | rejected |
