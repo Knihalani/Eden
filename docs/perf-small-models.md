@@ -72,7 +72,9 @@ What that means for a deployment on a box like this:
   shipped prompt finds 42% of the constraint cards at 48% precision on randomly mixed batches of ten
   (train2/train5, 80 items), and 22% at 33% precision in the enricher's own queue order, where like items
   sit together. A prompt asking for an entry per item made it worse (12.5% recall) and was not adopted.
-  Expect a small local model's cards to cover well under half of what a hosted model's do.
+  Expect a small local model's cards to cover well under half of what a hosted model's do; end to end on
+  heldout19 seed 41 they moved push delivery from 14/40 to 13/40 and `ask_context` surfacing from 19/40 to
+  21/40 (D2122) — within noise, for about 2.5 hours of CPU backfill.
 - **Request-path roles on CPU.** The push check waits 1.5 s for its answer; a check prompt of a couple of
   thousand tokens is ~20 s of prefill here, so every check would land late (D2082 still serves it later)
   while taking the CPU the agent's own model needs. On a CPU-only box, start with `EDEN_MODEL_ROLES=cards`:
