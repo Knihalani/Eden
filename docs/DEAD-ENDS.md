@@ -124,6 +124,7 @@ come from a keyword map, so an idea can sit under a neighbouring topic: search t
 
 | # | What was tried | Why it ended |
 |---|---|---|
+| D2128 | Rejected (measured, lab only): a worked example before the card batch for a small local model. | measured, lab only |
 | D2121 | Rejected (measured): an "entry per item" card prompt for small local models. | measured |
 | D90 | The active-constraints digest, `constraintDigest` (needs `cards`; `digest.ts`, `ContextPartner.digest`, `POST /v1/digest`, client… | killed by D112: no measurement favoured them on |
 | D170 | Trial `intentConstraintOnly`: with `intent` on, an item the card prefilter rejects is not sent to the card model for its requests alone | killed by D177: hidden -1.30 points (95% CI -4.17..+1.56) |

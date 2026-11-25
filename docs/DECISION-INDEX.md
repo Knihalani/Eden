@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2128 | 2026-11-25 | Rejected (measured, lab only): a worked example before the card batch for a small local model. | rejected |
 | D2127 | 2026-11-25 | Finding: Eden lifts a weak local agent's hidden facts by +0.40 on train, and `edenGuide` + `pushUnsureAskNudge` together make that lift… | finding |
 | D2126 | 2026-11-25 | The Hermes plugin can carry the context guide itself (`EDEN_GUIDE=1`), and the Python client's agent-facing texts match @eden/protocol. | adopted |
 | D2125 | 2026-11-25 | Finding (trial D2102 evidence, against): `packetCoversLine` makes a weak local agent search more, not less. | finding |
