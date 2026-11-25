@@ -17,6 +17,7 @@ Statuses are read from the text by heuristics, so read the row before relying on
 
 | # | Date | Decision | Status |
 |---|---|---|---|
+| D2129 | 2026-11-25 | Finding: D2127 replicates on seed 42 in one paired run: `edenGuide` + `pushUnsureAskNudge` raise more hidden facts in a third less time. | finding |
 | D2128 | 2026-11-25 | Rejected (measured, lab only): a worked example before the card batch for a small local model. | rejected |
 | D2127 | 2026-11-25 | Finding: Eden lifts a weak local agent's hidden facts by +0.40 on train, and `edenGuide` + `pushUnsureAskNudge` together make that lift… | finding |
 | D2126 | 2026-11-25 | The Hermes plugin can carry the context guide itself (`EDEN_GUIDE=1`), and the Python client's agent-facing texts match @eden/protocol. | adopted |
