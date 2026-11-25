@@ -367,6 +367,7 @@ const CONCURRENCY = Number(opt("concurrency", "8"));
 // A flag swallowed as the value (`--concurrency --out x`) is NaN — say so rather than running zero
 // workers and writing an empty file.
 if (!Number.isFinite(CONCURRENCY) || CONCURRENCY < 1) throw new Error("--concurrency needs a positive number");
+let skipped = 0;
 try {
   const pending = worlds.flatMap((w) => CONDITIONS.map((c) => () => runWorld(w.world, w.seed, w.tasks, c)));
   await Promise.all(
@@ -374,7 +375,11 @@ try {
       for (let run = pending.shift(); run; run = pending.shift()) {
         // A stream that starts past the budget would fire its judge before the agent's first
         // budget check (the judge rides Eden's internal budget, not the agent's meter).
-        if (spent >= BUDGET) break;
+        if (spent >= BUDGET) {
+          skipped += 1 + pending.length;
+          pending.length = 0;
+          break;
+        }
         results.push(...(await run()));
       }
     }),
@@ -405,5 +410,9 @@ writeFileSync(
   JSON.stringify({ model: MODEL, grader: GRADER, seeds: SEEDS, suites: SUITE_LIST, spent, tasks, results }, null, 2),
 );
 console.error(
-  `spent $${spent.toFixed(4)}; ${results.length} runs, ${ungraded} left ungraded → ${OUT}`,
+  `spent $${spent.toFixed(4)}; ${results.length} runs, ${ungraded} left ungraded` +
+    // A stream the budget skipped leaves no rows: its condition arm would vanish from the report
+    // rather than read as missing — say how much of the matrix never ran.
+    (skipped ? `, ${skipped} streams skipped at the budget` : "") +
+    ` → ${OUT}`,
 );
