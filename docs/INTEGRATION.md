@@ -731,6 +731,9 @@ packet injection, `ask_context`, the party check, an installer that drops the pl
 beside the agent's home. An agent whose own model is local (Ollama, LM Studio, vLLM, llama.cpp, any
 OpenAI-compatible endpoint) can put Eden's background model roles on the same endpoint: `EDEN_MODEL_BASE_URL`
 plus `EDEN_MODEL` reach the sidecar's env and are used instead of OpenRouter (D2109); nothing else is needed.
+On a CPU-only box, read [perf-small-models.md](perf-small-models.md) first: give the server several slots, start
+with `EDEN_MODEL_ROLES=cards` (a request-path check on CPU lands late and takes the agent's CPU), and expect a
+small model's cards to cover well under half of a hosted model's (D2121).
 
 | Agent                                                         | Package                       | Surface                                                                                   | Deny seam                        | Install                                                                    |
 | ------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
